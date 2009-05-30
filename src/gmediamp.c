@@ -22,41 +22,49 @@
 #include <gtk/gtk.h>
 
 #include "side-pane.h"
+#include "gmediadb.h"
 
 static GtkWidget *window;
 static GtkWidget *sidepane;
 
+static GMediaDB *mediadb;
+
 void
 on_destroy (GtkWidget *widget, gpointer user_data)
 {
-	gtk_main_quit ();
+    gtk_main_quit ();
 }
 
 int
 main (int argc, char *argv[])
 {
-	gtk_init (&argc, &argv);
-	
-	window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-	sidepane = side_pane_new ();
-	
-	GtkWidget *view = gtk_label_new ("Frame 1");
-	side_pane_add (SIDE_PANE (sidepane), view, "Frame1");
-
-	view = gtk_label_new ("Frame 2");
-	side_pane_add (SIDE_PANE (sidepane), view, "Frame2");
-
-	view = gtk_label_new ("Frame 3");
-	side_pane_add (SIDE_PANE (sidepane), view, "Frame3");
-	
-	gtk_container_add (GTK_CONTAINER (window), sidepane);
-	
-	gtk_widget_show_all (window);
-
-	g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
-	
-	gtk_main ();
-
-	return 0;
+    gtk_init (&argc, &argv);
+    
+    mediadb = gmediadb_new ();
+    
+    window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+    sidepane = side_pane_new ();
+    
+    GtkWidget *view = gtk_label_new ("Frame 1");
+    side_pane_add (SIDE_PANE (sidepane), view, "Frame1");
+    
+    view = gtk_label_new ("Frame 2");
+    side_pane_add (SIDE_PANE (sidepane), view, "Frame2");
+    
+    view = gtk_label_new ("Frame 3");
+    side_pane_add (SIDE_PANE (sidepane), view, "Frame3");
+    
+    gtk_container_add (GTK_CONTAINER (window), sidepane);
+    
+    gtk_widget_show_all (window);
+    
+    g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
+    
+    gtk_main ();
+    
+    g_object_unref (G_OBJECT (mediadb));
+    mediadb = NULL;
+    
+    return 0;
 }
 
