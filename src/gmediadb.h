@@ -49,11 +49,11 @@ struct _GMediaDBClass {
 
 GMediaDB *gmediadb_new ();
 GType gmediadb_get_type (void);
-GPtrArray *gmediadb_get_entries (GMediaDB *self, gchar *ids[], gchar *tags[]);
+GPtrArray *gmediadb_get_entries (GMediaDB *self, guint ids[], gchar *tags[]);
 GPtrArray *gmediadb_get_all_entries (GMediaDB *self, gchar *tags[]);
 void gmediadb_import_path (GMediaDB *self, gchar *path);
 
 G_END_DECLS
 
-#endif // End __GMEDIADB_H__
+#endif /* __GMEDIADB_H__ */
 

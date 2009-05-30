@@ -35,6 +35,12 @@ on_destroy (GtkWidget *widget, gpointer user_data)
     gtk_main_quit ();
 }
 
+void
+on_add (GObject *obj, guint id, gpointer user_data)
+{
+    g_print ("Added: %d\n", id);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -59,6 +65,9 @@ main (int argc, char *argv[])
     gtk_widget_show_all (window);
     
     g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
+    g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
+    
+    gmediadb_import_path (mediadb, "/home/bmravec/Desktop/NM");
     
     gtk_main ();
     

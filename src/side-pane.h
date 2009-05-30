@@ -35,13 +35,15 @@ G_BEGIN_DECLS
 
 typedef struct _SidePane SidePane;
 typedef struct _SidePaneClass SidePaneClass;
+typedef struct _SidePanePrivate SidePanePrivate;
 
 struct _SidePane {
-	GtkHPaned parent;
+    GtkHPaned parent;
+    SidePanePrivate *priv;
 };
 
 struct _SidePaneClass {
-	GtkHPanedClass parent_class;
+    GtkHPanedClass parent_class;
 };
 
 GtkWidget *side_pane_new ();
