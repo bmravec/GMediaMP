@@ -71,6 +71,27 @@ main (int argc, char *argv[])
     g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
     g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
     
+    gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
+    GPtrArray *entries = gmediadb_get_all_entries (mediadb, tags);
+    
+    Entry e;
+    int i;
+    for (i = 0; i < entries->len; i++) {
+        gchar **entry = g_ptr_array_index (entries, i);
+        
+        e.id = atoi (entry[0]);
+        e.artist = entry[1];
+        e.album = entry[2];
+        e.title = entry[3];
+        e.duration = atoi (entry[4]);
+        e.track = atoi (entry[5]);
+        e.location = entry[6];
+        
+        browser_add_entry (BROWSER (browser), &e);
+    }
+    
+    g_ptr_array_free (entries, TRUE);
+    
     gtk_main ();
     
     g_object_unref (G_OBJECT (mediadb));

@@ -26,6 +26,7 @@ typedef struct _Entry Entry;
 struct _Entry {
     guint track;
     guint id;
+    guint duration;
     
     gchar *artist;
     gchar *album;

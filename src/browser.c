@@ -56,6 +56,7 @@ artist_select (GtkWidget *widget,
 {
     g_print ("Artist Select: (%s)\n", artist);
     album_set_filter (ALBUM (self->priv->album), artist);
+    title_set_filter (TITLE (self->priv->title), artist, "");
 }
 
 void
@@ -72,6 +73,7 @@ album_select (GtkWidget *widget,
               Browser *self)
 {
     g_print ("Album Select: (%s)\n", album);
+    title_set_filter (TITLE (self->priv->title), NULL, album);
 }
 
 void
@@ -131,16 +133,6 @@ browser_init (Browser *self)
         G_CALLBACK (album_replace), self);
     g_signal_connect (G_OBJECT (self->priv->album), "select",
         G_CALLBACK (album_select), self);
-    
-    artist_add_entry (ARTIST (self->priv->artist), "Atreyu");
-    artist_add_entry (ARTIST (self->priv->artist), "Atreyu");
-    artist_add_entry (ARTIST (self->priv->artist), "Avenged Sevenfold");
-    artist_add_entry (ARTIST (self->priv->artist), "Element Eighty");
-    
-    album_add_entry (ALBUM (self->priv->album), "The Curse", "Atreyu");
-    album_add_entry (ALBUM (self->priv->album), "Lead Sails Paper Anchor", "Atreyu");
-    album_add_entry (ALBUM (self->priv->album), "Beast and the Harlot", "Avenged Sevenfold");
-    album_add_entry (ALBUM (self->priv->album), "Mercuric", "Element Eighty");
 }
 
 GtkWidget*
@@ -152,6 +144,8 @@ browser_new ()
 void
 browser_add_entry (Browser *self, Entry *entry)
 {
-    
+    artist_add_entry (ARTIST (self->priv->artist), entry->artist);
+    album_add_entry (ALBUM (self->priv->album), entry->album, entry->artist);
+    title_add_entry (TITLE (self->priv->title), entry);
 }
 

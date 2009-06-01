@@ -38,8 +38,8 @@ static guint signal_replace;
 
 static void
 album_cursor_changed (Album *self,
-                   GtkTreeView *treeview,
-                   gpointer user_data)
+                      GtkTreeView *treeview,
+                      gpointer user_data)
 {
     GtkTreePath *path;
     
@@ -53,10 +53,10 @@ album_cursor_changed (Album *self,
         GtkTreeIter iter;
         gchar *alb;
         
-        gtk_tree_model_get_iter (GTK_TREE_MODEL (self->priv->store),
+        gtk_tree_model_get_iter (self->priv->filter,
             &iter, path);
         
-        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store),
+        gtk_tree_model_get (self->priv->filter,
             &iter, 0, &alb, -1);
         
         g_signal_emit (G_OBJECT (self), signal_select, 0, alb);
@@ -69,9 +69,9 @@ album_cursor_changed (Album *self,
 
 static void
 album_row_activated (Album *self,
-                  GtkTreePath *path,
-                  GtkTreeViewColumn *column,
-                  gpointer user_data)
+                     GtkTreePath *path,
+                     GtkTreeViewColumn *column,
+                     gpointer user_data)
 {
     GtkTreeIter iter;
     gchar *alb;
@@ -80,10 +80,10 @@ album_row_activated (Album *self,
     if (!g_strcmp0 (path_str, "0")) {
         g_signal_emit (G_OBJECT (self), signal_replace, 0, "");
     } else {
-        gtk_tree_model_get_iter (GTK_TREE_MODEL (self->priv->store),
+        gtk_tree_model_get_iter (self->priv->filter,
             &iter, path);
         
-        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store),
+        gtk_tree_model_get (self->priv->filter,
             &iter, 0, &alb, -1);
         
         g_signal_emit (G_OBJECT (self), signal_replace, 0, alb);

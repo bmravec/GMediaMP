@@ -24,6 +24,8 @@
 
 #include <gtk/gtktreeview.h>
 
+#include "entry.h"
+
 #define TITLE_TYPE (title_get_type ())
 #define TITLE(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), TITLE_TYPE, Title))
 #define TITLE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), TITLE_TYPE, TitleClass))
@@ -51,6 +53,7 @@ GtkWidget *title_new ();
 GType title_get_type (void);
 
 void title_add_entry (Title *self, Entry *entry);
+void title_set_filter (Title *self, gchar *artist, gchar *album);
 
 G_END_DECLS
 

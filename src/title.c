@@ -56,13 +56,15 @@ title_init (Title *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), TITLE_TYPE, TitlePrivate);
     
-    self->priv->store = gtk_list_store_new (6,
-        G_TYPE_INT,     // Track
-        G_TYPE_STRING,  // Title
-        G_TYPE_STRING,  // Artist
-        G_TYPE_STRING,  // Album
-        G_TYPE_INT,     // Duration
-        G_TYPE_BOOLEAN);// Visible
+    self->priv->store = gtk_list_store_new (8,
+        G_TYPE_INT,     // 0 Track
+        G_TYPE_STRING,  // 1 Title
+        G_TYPE_STRING,  // 2 Artist
+        G_TYPE_STRING,  // 3 Album
+        G_TYPE_INT,     // 4 Duration
+        G_TYPE_BOOLEAN, // 5 Visible
+        G_TYPE_INT,     // 6 ID
+        G_TYPE_STRING); // 7 Location
     
     self->priv->filter = gtk_tree_model_filter_new (GTK_TREE_MODEL (self->priv->store), NULL);
     gtk_tree_model_filter_set_visible_column (GTK_TREE_MODEL_FILTER (self->priv->filter), 5);
@@ -94,6 +96,9 @@ title_init (Title *self)
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Time", renderer, "text", 4, NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
+    self->priv->s_artist = g_strdup ("");
+    self->priv->s_album = g_strdup ("");
 }
 
 GtkWidget*
@@ -105,6 +110,72 @@ title_new ()
 void
 title_add_entry (Title *self, Entry *entry)
 {
+    GtkTreeIter iter;
+    gboolean visible = FALSE;
     
+    if ((!g_strcmp0 (self->priv->s_artist, "") ||
+         !g_strcmp0 (self->priv->s_artist, entry->artist)) &&
+        (!g_strcmp0 (self->priv->s_album, "") ||
+         !g_strcmp0 (self->priv->s_album, entry->album))) {
+        visible = TRUE;
+    }
+
+    gtk_list_store_append (self->priv->store, &iter);
+    
+    gtk_list_store_set (self->priv->store, &iter,
+        0, entry->track,
+        1, entry->title,
+        2, entry->artist,
+        3, entry->album,
+        4, entry->duration,
+        5, visible,
+        6, entry->id,
+        7, entry->location, -1);
+}
+
+void
+title_set_filter (Title *self, gchar *artist, gchar *album)
+{
+    if (artist) {
+        if (self->priv->s_artist) {
+            g_free (self->priv->s_artist);
+        }
+        
+        self->priv->s_artist = g_strdup (artist);
+    }
+    
+    if (album) {
+        if (self->priv->s_album) {
+            g_free (self->priv->s_album);
+        }
+        
+        self->priv->s_album = g_strdup (album);
+    }
+    
+    GtkTreeIter iter;
+    gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter);
+    
+    if (!g_strcmp0 (self->priv->s_artist, "") && !g_strcmp0 (self->priv->s_album, "")) {
+        do {
+            gtk_list_store_set (self->priv->store, &iter, 5, TRUE, -1);
+        } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
+    } else {
+        do {
+            gboolean visible = FALSE;
+            gchar *art, *alb;
+            
+            gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter,
+                2, &art, 3, &alb, -1);
+            
+            if ((!g_strcmp0 (self->priv->s_artist, "") ||
+                 !g_strcmp0 (self->priv->s_artist, art)) &&
+                (!g_strcmp0 (self->priv->s_album, "") ||
+                 !g_strcmp0 (self->priv->s_album, alb))) {
+                visible = TRUE;
+            }
+            
+            gtk_list_store_set (self->priv->store, &iter, 5, visible, -1);
+        } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
+    }
 }
 
