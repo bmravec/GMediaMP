@@ -50,15 +50,36 @@ add_scroll_bars (GtkWidget *widget)
 }
 
 void
-on_select (GtkWidget *widget, gchar *name, gpointer user_data)
+artist_select (GtkWidget *widget,
+               gchar *artist,
+               Browser *self)
 {
-    g_print ("On Select: %s\n", name);
+    g_print ("Artist Select: (%s)\n", artist);
+    album_set_filter (ALBUM (self->priv->album), artist);
 }
 
 void
-on_replace (GtkWidget *widget, gchar *name, gpointer user_data)
+artist_replace (GtkWidget *widget,
+                gchar *artist,
+                Browser *self)
 {
-    g_print ("On replace: %s\n", name);
+    g_print ("Artist replace: (%s)\n", artist);
+}
+
+void
+album_select (GtkWidget *widget,
+              gchar *album,
+              Browser *self)
+{
+    g_print ("Album Select: (%s)\n", album);
+}
+
+void
+album_replace (GtkWidget *widget,
+               gchar *album,
+               Browser *self)
+{
+    g_print ("Album replace: (%s)\n", album);
 }
 
 static void
@@ -102,18 +123,24 @@ browser_init (Browser *self)
     self->priv->sel_album = g_strdup ("");
     
     g_signal_connect (G_OBJECT (self->priv->artist), "replace",
-        G_CALLBACK (on_replace), NULL);
-    
+        G_CALLBACK (artist_replace), self);
     g_signal_connect (G_OBJECT (self->priv->artist), "select",
-        G_CALLBACK (on_select), NULL);
+        G_CALLBACK (artist_select), self);
     
-    artist_add_entry (ARTIST (self->priv->artist), "First");
-    artist_add_entry (ARTIST (self->priv->artist), "Second");
-    artist_add_entry (ARTIST (self->priv->artist), "First");
-    artist_add_entry (ARTIST (self->priv->artist), "Fourth");
-    artist_add_entry (ARTIST (self->priv->artist), "First");
-    artist_add_entry (ARTIST (self->priv->artist), "Third");
-    artist_add_entry (ARTIST (self->priv->artist), "Second");
+    g_signal_connect (G_OBJECT (self->priv->album), "replace",
+        G_CALLBACK (album_replace), self);
+    g_signal_connect (G_OBJECT (self->priv->album), "select",
+        G_CALLBACK (album_select), self);
+    
+    artist_add_entry (ARTIST (self->priv->artist), "Atreyu");
+    artist_add_entry (ARTIST (self->priv->artist), "Atreyu");
+    artist_add_entry (ARTIST (self->priv->artist), "Avenged Sevenfold");
+    artist_add_entry (ARTIST (self->priv->artist), "Element Eighty");
+    
+    album_add_entry (ALBUM (self->priv->album), "The Curse", "Atreyu");
+    album_add_entry (ALBUM (self->priv->album), "Lead Sails Paper Anchor", "Atreyu");
+    album_add_entry (ALBUM (self->priv->album), "Beast and the Harlot", "Avenged Sevenfold");
+    album_add_entry (ALBUM (self->priv->album), "Mercuric", "Element Eighty");
 }
 
 GtkWidget*

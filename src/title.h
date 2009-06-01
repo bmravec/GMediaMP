@@ -50,6 +50,8 @@ struct _TitleClass {
 GtkWidget *title_new ();
 GType title_get_type (void);
 
+void title_add_entry (Title *self, Entry *entry);
+
 G_END_DECLS
 
 #endif /* __TITLE_H__ */

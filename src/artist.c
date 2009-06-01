@@ -34,8 +34,8 @@ struct _ArtistPrivate {
 static guint signal_select;
 static guint signal_replace;
 
-void
-on_cursor_changed (Artist *self,
+static void
+artist_cursor_changed (Artist *self,
                    GtkTreeView *treeview,
                    gpointer user_data)
 {
@@ -65,8 +65,8 @@ on_cursor_changed (Artist *self,
     gtk_tree_path_free (path);
 }
 
-void
-on_row_activated (Artist *self,
+static void
+artist_row_activated (Artist *self,
                   GtkTreePath *path,
                   GtkTreeViewColumn *column,
                   gpointer user_data)
@@ -89,7 +89,6 @@ on_row_activated (Artist *self,
     }
     
     g_free (path_str);
-//    gtk_tree_path_free (path);
 }
 
 static void
@@ -125,10 +124,10 @@ artist_init (Artist *self)
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), ARTIST_TYPE, ArtistPrivate);
     
     g_signal_connect (G_OBJECT (self), "cursor-changed",
-        G_CALLBACK (on_cursor_changed), NULL);
+        G_CALLBACK (artist_cursor_changed), NULL);
     
     g_signal_connect (G_OBJECT (self), "row-activated",
-        G_CALLBACK (on_row_activated), NULL);
+        G_CALLBACK (artist_row_activated), NULL);
     
     self->priv->store = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_INT);
     gtk_tree_view_set_model (GTK_TREE_VIEW (self), GTK_TREE_MODEL (self->priv->store));
@@ -138,6 +137,7 @@ artist_init (Artist *self)
     
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Artist", renderer, "text", 0, NULL);
+    gtk_tree_view_column_set_expand (column, TRUE);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
     
     renderer = gtk_cell_renderer_text_new ();

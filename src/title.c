@@ -26,7 +26,10 @@
 G_DEFINE_TYPE(Title, title, GTK_TYPE_TREE_VIEW)
 
 struct _TitlePrivate {
-    gint i;
+    GtkListStore *store;
+    GtkTreeModel *filter;
+    
+    gchar *s_artist, *s_album;
 };
 
 static void
@@ -53,12 +56,55 @@ title_init (Title *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), TITLE_TYPE, TitlePrivate);
     
+    self->priv->store = gtk_list_store_new (6,
+        G_TYPE_INT,     // Track
+        G_TYPE_STRING,  // Title
+        G_TYPE_STRING,  // Artist
+        G_TYPE_STRING,  // Album
+        G_TYPE_INT,     // Duration
+        G_TYPE_BOOLEAN);// Visible
     
+    self->priv->filter = gtk_tree_model_filter_new (GTK_TREE_MODEL (self->priv->store), NULL);
+    gtk_tree_model_filter_set_visible_column (GTK_TREE_MODEL_FILTER (self->priv->filter), 5);
+    
+    gtk_tree_view_set_model (GTK_TREE_VIEW (self), self->priv->filter);
+    
+    GtkCellRenderer *renderer;
+    GtkTreeViewColumn *column;
+    
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Track", renderer, "text", 0, NULL);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Title", renderer, "text", 1, NULL);
+    gtk_tree_view_column_set_expand (column, TRUE);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Artist", renderer, "text", 2, NULL);
+    gtk_tree_view_column_set_expand (column, TRUE);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Album", renderer, "text", 3, NULL);
+    gtk_tree_view_column_set_expand (column, TRUE);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Time", renderer, "text", 4, NULL);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
 }
 
 GtkWidget*
 title_new ()
 {
     return g_object_new (TITLE_TYPE, NULL);
+}
+
+void
+title_add_entry (Title *self, Entry *entry)
+{
+    
 }
 
