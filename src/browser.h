@@ -22,7 +22,9 @@
 #ifndef __BROWSER_H__
 #define __BROWSER_H__
 
-#include <glib-object.h>
+#include <gtk/gtkvpaned.h>
+
+#include "entry.h"
 
 #define BROWSER_TYPE (browser_get_type ())
 #define BROWSER(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), BROWSER_TYPE, Browser))
@@ -38,17 +40,19 @@ typedef struct _BrowserClass BrowserClass;
 typedef struct _BrowserPrivate BrowserPrivate;
 
 struct _Browser {
-    GObject parent;
+    GtkVPaned parent;
     
     BrowserPrivate *priv;
 };
 
 struct _BrowserClass {
-    GObjectClass parent;
+    GtkVPanedClass parent;
 };
 
-Browser *browser_new ();
+GtkWidget *browser_new ();
 GType browser_get_type (void);
+
+void browser_add_entry (Browser *self, Entry *entry);
 
 G_END_DECLS
 

@@ -1,5 +1,5 @@
 /*
- *      title.c
+ *      entry.h
  *      
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
  *      
@@ -19,46 +19,19 @@
  *      MA 02110-1301, USA.
  */
 
-#include <gtk/gtk.h>
+#ifndef __ENTRY_H__
+#define __ENTRY_H__
 
-#include "title.h"
-
-G_DEFINE_TYPE(Title, title, GTK_TYPE_TREE_VIEW)
-
-struct _TitlePrivate {
-    gint i;
+typedef struct _Entry Entry;
+struct _Entry {
+    guint track;
+    guint id;
+    
+    gchar *artist;
+    gchar *album;
+    gchar *title;
+    gchar *location;
 };
 
-static void
-title_finalize (GObject *object)
-{
-    Title *self = TITLE (object);
-    
-    G_OBJECT_CLASS (title_parent_class)->finalize (object);
-}
-
-static void
-title_class_init (TitleClass *klass)
-{
-    GObjectClass *object_class;
-    object_class = G_OBJECT_CLASS (klass);
-    
-    g_type_class_add_private ((gpointer) klass, sizeof (TitlePrivate));
-    
-    object_class->finalize = title_finalize;
-}
-
-static void
-title_init (Title *self)
-{
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), TITLE_TYPE, TitlePrivate);
-    
-    
-}
-
-GtkWidget*
-title_new ()
-{
-    return g_object_new (TITLE_TYPE, NULL);
-}
+#endif /* __TITLE_H__ */
 

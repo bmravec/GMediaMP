@@ -22,7 +22,7 @@
 #ifndef __ALBUM_H__
 #define __ALBUM_H__
 
-#include <glib-object.h>
+#include <gtk/gtktreeview.h>
 
 #define ALBUM_TYPE (album_get_type ())
 #define ALBUM(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), ALBUM_TYPE, Album))
@@ -38,16 +38,16 @@ typedef struct _AlbumClass AlbumClass;
 typedef struct _AlbumPrivate AlbumPrivate;
 
 struct _Album {
-    GObject parent;
+    GtkTreeView parent;
     
     AlbumPrivate *priv;
 };
 
 struct _AlbumClass {
-    GObjectClass parent;
+    GtkTreeViewClass parent;
 };
 
-Album *album_new ();
+GtkWidget *album_new ();
 GType album_get_type (void);
 
 G_END_DECLS

@@ -71,7 +71,7 @@ side_pane_init (SidePane *self)
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
 
-    priv->notebook = gtk_notebook_new ();
+    self->priv->notebook = gtk_notebook_new ();
     gtk_notebook_set_show_tabs (GTK_NOTEBOOK(self->priv->notebook), FALSE);
     gtk_paned_add2 (GTK_PANED (self), self->priv->notebook);
         

@@ -22,7 +22,7 @@
 #ifndef __TITLE_H__
 #define __TITLE_H__
 
-#include <glib-object.h>
+#include <gtk/gtktreeview.h>
 
 #define TITLE_TYPE (title_get_type ())
 #define TITLE(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), TITLE_TYPE, Title))
@@ -38,16 +38,16 @@ typedef struct _TitleClass TitleClass;
 typedef struct _TitlePrivate TitlePrivate;
 
 struct _Title {
-    GObject parent;
+    GtkTreeView parent;
     
     TitlePrivate *priv;
 };
 
 struct _TitleClass {
-    GObjectClass parent;
+    GtkTreeViewClass parent;
 };
 
-Title *title_new ();
+GtkWidget *title_new ();
 GType title_get_type (void);
 
 G_END_DECLS

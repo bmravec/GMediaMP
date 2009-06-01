@@ -22,7 +22,7 @@
 #ifndef __ARTIST_H__
 #define __ARTIST_H__
 
-#include <glib-object.h>
+#include <gtk/gtktreeview.h>
 
 #define ARTIST_TYPE (artist_get_type ())
 #define ARTIST(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), ARTIST_TYPE, Artist))
@@ -38,17 +38,18 @@ typedef struct _ArtistClass ArtistClass;
 typedef struct _ArtistPrivate ArtistPrivate;
 
 struct _Artist {
-    GObject parent;
+    GtkTreeView parent;
     
     ArtistPrivate *priv;
 };
 
 struct _ArtistClass {
-    GObjectClass parent;
+    GtkTreeViewClass parent;
 };
 
-Artist *artist_new ();
+GtkWidget *artist_new ();
 GType artist_get_type (void);
+void artist_add_entry (Artist *self, gchar *entry);
 
 G_END_DECLS
 

@@ -23,10 +23,11 @@
 
 #include "side-pane.h"
 #include "gmediadb.h"
+#include "browser.h"
 
 static GtkWidget *window;
 static GtkWidget *sidepane;
-
+static GtkWidget *browser;
 static GMediaDB *mediadb;
 
 void
@@ -51,6 +52,9 @@ main (int argc, char *argv[])
     window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     sidepane = side_pane_new ();
     
+    browser = browser_new ();
+    side_pane_add (SIDE_PANE (sidepane), browser, "Browser");
+    
     GtkWidget *view = gtk_label_new ("Frame 1");
     side_pane_add (SIDE_PANE (sidepane), view, "Frame1");
     
@@ -66,8 +70,6 @@ main (int argc, char *argv[])
     
     g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
     g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
-    
-    gmediadb_import_path (mediadb, "/home/bmravec/Desktop/NM");
     
     gtk_main ();
     

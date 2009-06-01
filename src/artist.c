@@ -19,13 +19,78 @@
  *      MA 02110-1301, USA.
  */
 
+#include <gtk/gtk.h>
+
 #include "artist.h"
 
-G_DEFINE_TYPE(Artist, artist, G_TYPE_OBJECT)
+G_DEFINE_TYPE(Artist, artist, GTK_TYPE_TREE_VIEW)
 
 struct _ArtistPrivate {
-    gint i;
+    GtkListStore *store;
+    
+    guint num_of_artists;
 };
+
+static guint signal_select;
+static guint signal_replace;
+
+void
+on_cursor_changed (Artist *self,
+                   GtkTreeView *treeview,
+                   gpointer user_data)
+{
+    GtkTreePath *path;
+    
+    gtk_tree_view_get_cursor (GTK_TREE_VIEW (self), &path, NULL);
+    
+    gchar *path_str = gtk_tree_path_to_string (path);
+    
+    if (!g_strcmp0 (path_str, "0")) {
+        g_signal_emit (G_OBJECT (self), signal_select, 0, "");
+    } else {
+        GtkTreeIter iter;
+        gchar *art;
+        
+        gtk_tree_model_get_iter (GTK_TREE_MODEL (self->priv->store),
+            &iter, path);
+        
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store),
+            &iter, 0, &art, -1);
+        
+        g_signal_emit (G_OBJECT (self), signal_select, 0, art);
+        g_free (art);
+    }
+    
+    g_free (path_str);
+    gtk_tree_path_free (path);
+}
+
+void
+on_row_activated (Artist *self,
+                  GtkTreePath *path,
+                  GtkTreeViewColumn *column,
+                  gpointer user_data)
+{
+    GtkTreeIter iter;
+    gchar *art;
+    gchar *path_str = gtk_tree_path_to_string (path);
+    
+    if (!g_strcmp0 (path_str, "0")) {
+        g_signal_emit (G_OBJECT (self), signal_replace, 0, "");
+    } else {
+        gtk_tree_model_get_iter (GTK_TREE_MODEL (self->priv->store),
+            &iter, path);
+        
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store),
+            &iter, 0, &art, -1);
+        
+        g_signal_emit (G_OBJECT (self), signal_replace, 0, art);
+        g_free (art);
+    }
+    
+    g_free (path_str);
+//    gtk_tree_path_free (path);
+}
 
 static void
 artist_finalize (GObject *object)
@@ -44,6 +109,14 @@ artist_class_init (ArtistClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (ArtistPrivate));
     
     object_class->finalize = artist_finalize;
+
+    signal_select = g_signal_new ("select", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__STRING,
+        G_TYPE_NONE, 1, G_TYPE_STRING);
+    
+    signal_replace = g_signal_new ("replace", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__STRING,
+        G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 static void
@@ -51,12 +124,92 @@ artist_init (Artist *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), ARTIST_TYPE, ArtistPrivate);
     
+    g_signal_connect (G_OBJECT (self), "cursor-changed",
+        G_CALLBACK (on_cursor_changed), NULL);
     
+    g_signal_connect (G_OBJECT (self), "row-activated",
+        G_CALLBACK (on_row_activated), NULL);
+    
+    self->priv->store = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_INT);
+    gtk_tree_view_set_model (GTK_TREE_VIEW (self), GTK_TREE_MODEL (self->priv->store));
+    
+    GtkCellRenderer *renderer;
+    GtkTreeViewColumn *column;
+    
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Artist", renderer, "text", 0, NULL);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("#", renderer, "text", 1, NULL);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
+    gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->store),
+        NULL, 0, 0, "All 0 Artists", 1, 0, -1);
+    
+    self->priv->num_of_artists = 0;
 }
 
-Artist*
+GtkWidget*
 artist_new ()
 {
     return g_object_new (ARTIST_TYPE, NULL);
+}
+
+void
+artist_set_data (Artist *self,
+                 GtkTreeIter *iter,
+                 gchar *entry,
+                 gboolean isnew)
+{
+    GtkTreeIter first;
+    gint cnt;
+    gchar *new_str;
+    
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), iter, 1, &cnt, -1);
+    gtk_list_store_set (self->priv->store, iter, 0, entry, 1, cnt + 1, -1);
+    
+    gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &first);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &first, 1, &cnt, -1);
+    
+    if (isnew) {
+        new_str = g_strdup_printf ("All %d Artists", ++self->priv->num_of_artists);
+        gtk_list_store_set (self->priv->store, &first, 0, new_str, 1, cnt + 1, -1);
+    } else {
+        gtk_list_store_set (self->priv->store, &first, 1, cnt + 1, -1);
+    }
+}
+
+void
+artist_add_entry (Artist *self, gchar *entry)
+{
+    GtkTreeIter iter, new_iter;
+    gchar *str;
+    
+    gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter);
+    
+    if (!gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter)) {
+        gtk_list_store_append (self->priv->store, &iter);
+        artist_set_data (self, &iter, entry, TRUE);
+        return;
+    }
+    
+    do {
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &str, -1);
+        
+        gint res = g_strcmp0 (entry, str);
+        if (!res) {
+            gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, -1);
+            artist_set_data (self, &iter, entry, FALSE);
+            return;
+        } else if (res < 0) {
+            gtk_list_store_insert_before (self->priv->store, &new_iter, &iter);
+            artist_set_data (self, &new_iter, entry, TRUE);
+            return;
+        }
+    } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
+    
+    gtk_list_store_append (self->priv->store, &iter);
+    artist_set_data (self, &iter, entry, TRUE);
 }
 
