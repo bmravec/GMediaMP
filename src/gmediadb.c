@@ -110,16 +110,16 @@ gmediadb_new ()
 }
 
 GPtrArray*
-gmediadb_get_entries (GMediaDB *self, guint ids[], gchar *tags[])
+gmediadb_get_entries (GMediaDB *self, GArray *ids, gchar *tags[])
 {
-    GPtrArray **entries;
+    GPtrArray *entries;
     GError *error = NULL;
     
     g_print ("gmediadb_get_entries\n");
     
     if (!dbus_g_proxy_call (self->priv->proxy, "get_entries", &error,
         DBUS_TYPE_G_UINT_ARRAY, ids, G_TYPE_STRV, tags, G_TYPE_INVALID,
-        dbus_g_type_get_collection ("GPtrArray", G_TYPE_STRV), entries,
+        dbus_g_type_get_collection ("GPtrArray", G_TYPE_STRV), &entries,
         G_TYPE_INVALID)) {
         if (error->domain == DBUS_GERROR &&
             error->code == DBUS_GERROR_REMOTE_EXCEPTION) {
@@ -133,7 +133,7 @@ gmediadb_get_entries (GMediaDB *self, guint ids[], gchar *tags[])
         return NULL;
     }
     
-    return *entries;
+    return entries;
 }
 
 GPtrArray*

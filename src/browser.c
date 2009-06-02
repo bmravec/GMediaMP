@@ -84,6 +84,15 @@ album_replace (GtkWidget *widget,
     g_print ("Album replace: (%s)\n", album);
 }
 
+void
+title_replace (GtkWidget *widget,
+               Entry *entry,
+               Browser *self)
+{
+    g_print ("Title replace: (%d,%s,%s,%s)\n",
+        entry->id, entry->title, entry->artist, entry->album);
+}
+
 static void
 browser_finalize (GObject *object)
 {
@@ -124,15 +133,18 @@ browser_init (Browser *self)
     self->priv->sel_artist = g_strdup ("");
     self->priv->sel_album = g_strdup ("");
     
-    g_signal_connect (G_OBJECT (self->priv->artist), "replace",
+    g_signal_connect (G_OBJECT (self->priv->artist), "entry-replace",
         G_CALLBACK (artist_replace), self);
     g_signal_connect (G_OBJECT (self->priv->artist), "select",
         G_CALLBACK (artist_select), self);
     
-    g_signal_connect (G_OBJECT (self->priv->album), "replace",
+    g_signal_connect (G_OBJECT (self->priv->album), "entry-replace",
         G_CALLBACK (album_replace), self);
     g_signal_connect (G_OBJECT (self->priv->album), "select",
         G_CALLBACK (album_select), self);
+    
+    g_signal_connect (G_OBJECT (self->priv->title), "entry-replace",
+        G_CALLBACK (title_replace), self);
 }
 
 GtkWidget*
@@ -144,6 +156,7 @@ browser_new ()
 void
 browser_add_entry (Browser *self, Entry *entry)
 {
+    g_print ("Browser add (%d)\n", entry->id);
     artist_add_entry (ARTIST (self->priv->artist), entry->artist);
     album_add_entry (ALBUM (self->priv->album), entry->album, entry->artist);
     title_add_entry (TITLE (self->priv->title), entry);

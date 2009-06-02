@@ -49,7 +49,9 @@ struct _ArtistClass {
 
 GtkWidget *artist_new ();
 GType artist_get_type (void);
+
 void artist_add_entry (Artist *self, gchar *entry);
+void artist_remove_entry (Artist *self, gchar *entry);
 
 G_END_DECLS
 

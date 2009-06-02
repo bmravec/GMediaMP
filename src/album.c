@@ -115,7 +115,7 @@ album_class_init (AlbumClass *klass)
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__STRING,
         G_TYPE_NONE, 1, G_TYPE_STRING);
     
-    signal_replace = g_signal_new ("replace", G_TYPE_FROM_CLASS (klass),
+    signal_replace = g_signal_new ("entry-replace", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__STRING,
         G_TYPE_NONE, 1, G_TYPE_STRING);
 }
@@ -143,6 +143,7 @@ album_init (Album *self)
     GtkTreeViewColumn *column;
     
     renderer = gtk_cell_renderer_text_new ();
+    g_object_set (G_OBJECT (renderer), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
     column = gtk_tree_view_column_new_with_attributes ("Album", renderer, "text", 0, NULL);
     gtk_tree_view_column_set_expand (column, TRUE);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
@@ -238,7 +239,7 @@ void
 album_remove_entry (Album *self,
                     gchar *album)
 {
-
+    
 }
 
 void

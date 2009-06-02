@@ -32,6 +32,9 @@ struct _TitlePrivate {
     gchar *s_artist, *s_album;
 };
 
+static guint signal_add;
+static guint signal_replace;
+
 static void
 title_finalize (GObject *object)
 {
@@ -49,6 +52,37 @@ title_class_init (TitleClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (TitlePrivate));
     
     object_class->finalize = title_finalize;
+    
+    signal_replace = g_signal_new ("entry-replace", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+        G_TYPE_NONE, 1, G_TYPE_POINTER);
+    
+    signal_add = g_signal_new ("entry-add", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+        G_TYPE_NONE, 1, G_TYPE_POINTER);
+}
+
+void
+title_row_activated (Title *self,
+                     GtkTreePath *path,
+                     GtkTreeViewColumn *column,
+                     gpointer user_data)
+{
+    GtkTreeIter iter;
+    Entry entry;
+    
+    gtk_tree_model_get_iter (GTK_TREE_MODEL (self->priv->filter), &iter, path);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->filter), &iter,
+        0, &entry.track,
+        1, &entry.title,
+        2, &entry.artist,
+        3, &entry.album,
+        4, &entry.duration,
+        6, &entry.id,
+        7, &entry.location,
+        -1);
+    
+    g_signal_emit (G_OBJECT (self), signal_replace, 0, &entry);
 }
 
 static void
@@ -79,16 +113,19 @@ title_init (Title *self)
     gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
     
     renderer = gtk_cell_renderer_text_new ();
+    g_object_set (G_OBJECT (renderer), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
     column = gtk_tree_view_column_new_with_attributes ("Title", renderer, "text", 1, NULL);
     gtk_tree_view_column_set_expand (column, TRUE);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
     
     renderer = gtk_cell_renderer_text_new ();
+    g_object_set (G_OBJECT (renderer), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
     column = gtk_tree_view_column_new_with_attributes ("Artist", renderer, "text", 2, NULL);
     gtk_tree_view_column_set_expand (column, TRUE);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
     
     renderer = gtk_cell_renderer_text_new ();
+    g_object_set (G_OBJECT (renderer), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
     column = gtk_tree_view_column_new_with_attributes ("Album", renderer, "text", 3, NULL);
     gtk_tree_view_column_set_expand (column, TRUE);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
@@ -99,6 +136,9 @@ title_init (Title *self)
     
     self->priv->s_artist = g_strdup ("");
     self->priv->s_album = g_strdup ("");
+    
+    g_signal_connect (G_OBJECT (self), "row-activated",
+        G_CALLBACK (title_row_activated), NULL);
 }
 
 GtkWidget*
