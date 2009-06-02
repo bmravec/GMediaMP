@@ -51,6 +51,8 @@ GtkWidget *album_new ();
 GType album_get_type (void);
 
 void album_add_entry (Album *self, gchar *album, gchar *artist);
+void album_remove_entry (Album *self, gchar *album);
+
 void album_set_filter (Album *self, gchar *s_artist);
 
 G_END_DECLS

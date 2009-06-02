@@ -221,7 +221,6 @@ album_add_entry (Album *self,
         
         gint res = g_strcmp0 (album, str);
         if (!res) {
-            gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, -1);
             album_set_data (self, &iter, album, artist, FALSE);
             return;
         } else if (res < 0) {
@@ -233,6 +232,13 @@ album_add_entry (Album *self,
     
     gtk_list_store_append (self->priv->store, &iter);
     album_set_data (self, &iter, album, artist, TRUE);
+}
+
+void
+album_remove_entry (Album *self,
+                    gchar *album)
+{
+
 }
 
 void
