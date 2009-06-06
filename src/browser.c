@@ -38,6 +38,9 @@ struct _BrowserPrivate {
     gchar *sel_album;
 };
 
+static guint signal_add;
+static guint signal_replace;
+
 GtkWidget*
 add_scroll_bars (GtkWidget *widget)
 {
@@ -91,6 +94,8 @@ title_replace (GtkWidget *widget,
 {
     g_print ("Title replace: (%d,%s,%s,%s)\n",
         entry->id, entry->title, entry->artist, entry->album);
+    
+    g_signal_emit (G_OBJECT (self), signal_replace, 0, entry);
 }
 
 static void
@@ -110,6 +115,14 @@ browser_class_init (BrowserClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (BrowserPrivate));
     
     object_class->finalize = browser_finalize;
+    
+    signal_add = g_signal_new ("entry-add", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+        G_TYPE_NONE, 1, G_TYPE_POINTER);
+    
+    signal_replace = g_signal_new ("entry-replace", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+        G_TYPE_NONE, 1, G_TYPE_POINTER);
 }
 
 static void
@@ -156,7 +169,6 @@ browser_new ()
 void
 browser_add_entry (Browser *self, Entry *entry)
 {
-    g_print ("Browser add (%d)\n", entry->id);
     artist_add_entry (ARTIST (self->priv->artist), entry->artist);
     album_add_entry (ALBUM (self->priv->album), entry->album, entry->artist);
     title_add_entry (TITLE (self->priv->title), entry);

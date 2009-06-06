@@ -17,6 +17,7 @@ gmediamp_SOURCES = \
     artist.c artist.h \
     browser.c browser.h \
     title.c title.h \
+    player.c player.h \
     entry.h gmediamp.c
 
 BUILT_SOURCES = \
