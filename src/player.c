@@ -37,6 +37,27 @@ guint signal_tag;
 guint signal_state;
 guint signal_ratio;
 
+static gdouble prev_ratio;
+
+static gboolean
+position_update (Player *self)
+{
+    guint len = player_get_length (self);
+    guint pos = player_get_position (self);
+    gdouble new_ratio = (gdouble) pos / (gdouble) len;
+    
+    if (prev_ratio != new_ratio) {
+        prev_ratio = new_ratio;
+        g_signal_emit (self, signal_ratio, 0, prev_ratio);
+    }
+    
+    if (self->priv->state != PLAYER_STATE_PLAYING) {
+        return FALSE;
+    }
+    
+    return TRUE;
+}
+
 static void
 player_set_state (Player *self, guint state)
 {
@@ -188,6 +209,8 @@ player_play (Player *self)
     if (self->priv->pipeline) {
         gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
         player_set_state (self, PLAYER_STATE_PLAYING);
+        
+        g_timeout_add (1000, (GSourceFunc)position_update, self);
     }
 }
 
@@ -206,6 +229,32 @@ player_stop (Player *self)
     if (self->priv->pipeline) {
         gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
         player_set_state (self, PLAYER_STATE_STOPPED);
+    }
+}
+
+guint
+player_get_length (Player *self)
+{
+    if (self->priv->pipeline) {
+        GstFormat fmt = GST_FORMAT_TIME;
+        gint64 len;
+        gst_element_query_duration (self->priv->pipeline, &fmt, &len);
+        return GST_TIME_AS_SECONDS (len);
+    } else {
+        return 100;
+    }
+}
+
+guint
+player_get_position (Player *self)
+{
+    if (self->priv->pipeline) {
+        GstFormat fmt = GST_FORMAT_TIME;
+        gint64 pos;
+        gst_element_query_position (self->priv->pipeline, &fmt, &pos);
+        return GST_TIME_AS_SECONDS (pos);
+    } else {
+        return 0;
     }
 }
 

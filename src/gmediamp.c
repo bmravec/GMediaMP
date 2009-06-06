@@ -41,9 +41,6 @@ static GtkWidget *pause_image;
 static GMediaDB *mediadb;
 static Player *player;
 
-static gchar *tdg =
-    "file:///media/BRETT'S IPO/Music/Three Days Grace/One-X/On My Own.ogg";
-
 void
 on_destroy (GtkWidget *widget, gpointer user_data)
 {
@@ -132,6 +129,7 @@ on_state_changed (GObject *obj, guint state, gpointer user_data)
             g_print ("State: Stopped\n");
             break;
         default:
+            gtk_button_set_image (GTK_BUTTON (play_button), play_image);
             g_print ("State: Invalid\n");
     }
 }
@@ -139,7 +137,31 @@ on_state_changed (GObject *obj, guint state, gpointer user_data)
 void
 on_ratio_changed (GObject *obj, gdouble ratio, gpointer user_data)
 {
-    g_print ("Ratio: %f\n", ratio);
+    gtk_range_set_value (GTK_RANGE (pos_scale), 100 * ratio);
+}
+
+void
+on_play_button (GtkWidget *widget, gpointer user_data)
+{
+    g_print ("Play Button Pressed\n");
+}
+
+void
+on_stop_button (GtkWidget *widget, gpointer user_data)
+{
+    g_print ("Stop Button Pressed\n");
+}
+
+void
+on_next_button (GtkWidget *widget, gpointer user_data)
+{
+    g_print ("Next Button Pressed\n");
+}
+
+void
+on_prev_button (GtkWidget *widget, gpointer user_data)
+{
+    g_print ("Previous Button Pressed\n");
 }
 
 int
@@ -211,6 +233,15 @@ main (int argc, char *argv[])
     g_signal_connect (G_OBJECT (player), "ratio-changed",
         G_CALLBACK (on_ratio_changed), NULL);
     
+    g_signal_connect (G_OBJECT (play_button), "clicked",
+        G_CALLBACK (on_play_button), NULL);
+    g_signal_connect (G_OBJECT (stop_button), "clicked",
+        G_CALLBACK (on_stop_button), NULL);
+    g_signal_connect (G_OBJECT (next_button), "clicked",
+        G_CALLBACK (on_next_button), NULL);
+    g_signal_connect (G_OBJECT (prev_button), "clicked",
+        G_CALLBACK (on_prev_button), NULL);
+    
     gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
     GPtrArray *entries = gmediadb_get_all_entries (mediadb, tags);
     
@@ -237,8 +268,6 @@ main (int argc, char *argv[])
     g_object_unref (G_OBJECT (mediadb));
     g_object_unref (G_OBJECT (play_image));
     g_object_unref (G_OBJECT (pause_image));
-    
-    mediadb = NULL;
     
     return 0;
 }

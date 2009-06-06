@@ -62,6 +62,9 @@ void player_play (Player *self);
 void player_pause (Player *self);
 void player_stop (Player *self);
 
+guint player_get_length (Player *self);
+guint player_get_position (Player *self);
+
 G_END_DECLS
 
 #endif /* __PLAYER_H__ */
