@@ -221,6 +221,7 @@ album_add_entry (Album *self,
         gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &str, -1);
         
         gint res = g_strcmp0 (album, str);
+        g_free (str);
         if (!res) {
             album_set_data (self, &iter, album, artist, FALSE);
             return;

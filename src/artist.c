@@ -199,6 +199,7 @@ artist_add_entry (Artist *self, gchar *entry)
         gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &str, -1);
         
         gint res = g_strcmp0 (entry, str);
+        g_free (str);
         if (!res) {
             artist_set_data (self, &iter, entry, FALSE);
             return;

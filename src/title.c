@@ -182,11 +182,13 @@ title_compare_entries (Title *self,
     
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), iter, 2, &str, -1);
     res = g_strcmp0 (entry->artist, str);
+    g_free (str);
     if (res != 0)
         return res;
     
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), iter, 3, &str, -1);
     res = g_strcmp0 (entry->album, str);
+    g_free (str);
     if (res != 0)
         return res;
     
@@ -196,6 +198,7 @@ title_compare_entries (Title *self,
     
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), iter, 1, &str, -1);
     res = g_strcmp0 (entry->title, str);
+    g_free (str);
     if (res != 0)
         return res;
 }
