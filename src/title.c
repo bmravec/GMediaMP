@@ -254,30 +254,63 @@ title_add_entry (Title *self, Entry *entry)
 {
     GtkTreeIter iter, new_iter;
     Entry *e;
+    gint l = 0, m;
+    gint r = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (self->priv->store),
+                                               NULL);
     
-    if (!gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter)) {
+    if (r == 0) {
         gtk_list_store_append (self->priv->store, &iter);
         title_set_data (self, &iter, entry);
         return;
     }
     
-    do {
+    gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
+    if (title_compare_entries (entry, e) <= 0) {
+        gtk_list_store_insert (self->priv->store, &iter, 0);
+        title_set_data (self, &iter, entry);
+        return;
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, r - 1);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
+    if (title_compare_entries (entry, e) >= 0) {
+        gtk_list_store_append (self->priv->store, &iter);
+        title_set_data (self, &iter, entry);
+        return;
+    }
+    
+    while (l+1 != r) {
+        m = (l + r) / 2;
+        
+        gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+            &iter, NULL, m);
         gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
         
         gint res = title_compare_entries (entry, e);
         if (!res) {
-            gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, -1);
-            title_set_data (self, &iter, entry);
-            return;
-        } else if (res < 0) {
             gtk_list_store_insert_before (self->priv->store, &new_iter, &iter);
             title_set_data (self, &new_iter, entry);
             return;
+        } else if (res < 0) {
+            r = m;
+        } else {
+            l = m;
         }
-    } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
+    }
     
-    gtk_list_store_append (self->priv->store, &iter);
-    title_set_data (self, &iter, entry);
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, m);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
+    
+    if (title_compare_entries (entry, e) > 0) {
+        gtk_list_store_insert (self->priv->store, &iter, m);
+        title_set_data (self, &iter, entry);
+    } else {
+        gtk_list_store_insert (self->priv->store, &iter, r);
+        title_set_data (self, &iter, entry);
+    }
 }
 
 void
