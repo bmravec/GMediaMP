@@ -245,20 +245,21 @@ main (int argc, char *argv[])
     gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
     GPtrArray *entries = gmediadb_get_all_entries (mediadb, tags);
     
-    Entry e;
+    Entry *e = NULL;
     int i;
     for (i = 0; i < entries->len; i++) {
+        e = g_new0 (Entry, 1);
         gchar **entry = g_ptr_array_index (entries, i);
         
-        e.id = atoi (entry[0]);
-        e.artist = entry[1];
-        e.album = entry[2];
-        e.title = entry[3];
-        e.duration = atoi (entry[4]);
-        e.track = atoi (entry[5]);
-        e.location = entry[6];
+        e->id = atoi (entry[0]);
+        e->artist = g_strdup (entry[1]);
+        e->album = g_strdup (entry[2]);
+        e->title = g_strdup (entry[3]);
+        e->duration = atoi (entry[4]);
+        e->track = atoi (entry[5]);
+        e->location = g_strdup (entry[6]);
         
-        browser_add_entry (BROWSER (browser), &e);
+        browser_add_entry (BROWSER (browser), e);
     }
     
     g_ptr_array_free (entries, TRUE);
