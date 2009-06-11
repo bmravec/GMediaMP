@@ -233,6 +233,12 @@ player_stop (Player *self)
 }
 
 guint
+player_get_state (Player *self)
+{
+    return self->priv->state;
+}
+
+guint
 player_get_length (Player *self)
 {
     if (self->priv->pipeline) {

@@ -61,6 +61,7 @@ void player_close (Player *self);
 void player_play (Player *self);
 void player_pause (Player *self);
 void player_stop (Player *self);
+guint player_get_state (Player *self);
 
 guint player_get_length (Player *self);
 guint player_get_position (Player *self);

@@ -63,21 +63,23 @@ on_add (GObject *obj, guint id, gpointer user_data)
         return;
     }
     
-    Entry e;
     guint i;
     for (i = 0; i < entries->len; i++) {
+        Entry *e = g_new0 (Entry, 1);
         gchar **entry = g_ptr_array_index (entries, i);
         
-        e.id = atoi (entry[0]);
-        e.artist = g_strdup (entry[1]);
-        e.album = g_strdup (entry[2]);
-        e.title = g_strdup (entry[3]);
-        e.duration = atoi (entry[4]);
-        e.track = atoi (entry[5]);
-        e.location = g_strdup (entry[6]);
+        e->id = atoi (entry[0]);
+        e->artist = g_strdup (entry[1]);
+        e->album = g_strdup (entry[2]);
+        e->title = g_strdup (entry[3]);
+        e->duration = atoi (entry[4]);
+        e->track = atoi (entry[5]);
+        e->location = g_strdup (entry[6]);
         
-        browser_add_entry (BROWSER (browser), &e);
+        browser_add_entry (BROWSER (browser), e);
     }
+    
+    gtk_widget_show_all (browser);
     
     g_ptr_array_free (entries, TRUE);
 }
@@ -87,6 +89,13 @@ on_add_entry (GObject *obj, Entry *entry, gpointer user_data)
 {
     player_load (player, entry->location);
     player_play (player);
+    
+    gchar *desc = g_strdup_printf ("%s by %s from %s",
+        entry->title, entry->artist, entry->album);
+    
+    gtk_label_set_text (GTK_LABEL (play_info), desc);
+    
+    g_free (desc);
 }
 
 void
@@ -94,6 +103,13 @@ on_replace_entry (GObject *obj, Entry *entry, gpointer user_data)
 {
     player_load (player, entry->location);
     player_play (player);
+    
+    gchar *desc = g_strdup_printf ("%s by %s from %s",
+        entry->title, entry->artist, entry->album);
+    
+    gtk_label_set_text (GTK_LABEL (play_info), desc);
+    
+    g_free (desc);
 }
 
 void
@@ -115,6 +131,7 @@ on_state_changed (GObject *obj, guint state, gpointer user_data)
         case PLAYER_STATE_NULL:
             gtk_button_set_image (GTK_BUTTON (play_button), play_image);
             g_print ("State: NULL\n");
+            gtk_label_set_text (GTK_LABEL (play_info), "Not Playing");
             break;
         case PLAYER_STATE_PLAYING:
             gtk_button_set_image (GTK_BUTTON (play_button), pause_image);
@@ -126,6 +143,7 @@ on_state_changed (GObject *obj, guint state, gpointer user_data)
             break;
         case PLAYER_STATE_STOPPED:
             gtk_button_set_image (GTK_BUTTON (play_button), play_image);
+            gtk_label_set_text (GTK_LABEL (play_info), "Not Playing");
             g_print ("State: Stopped\n");
             break;
         default:
@@ -144,12 +162,27 @@ void
 on_play_button (GtkWidget *widget, gpointer user_data)
 {
     g_print ("Play Button Pressed\n");
+    
+    switch (player_get_state (player)) {
+        case PLAYER_STATE_NULL:
+            break;
+        case PLAYER_STATE_PLAYING:
+            player_pause (player);
+            break;
+        case PLAYER_STATE_PAUSED:
+            player_play (player);
+            break;
+        case PLAYER_STATE_STOPPED:
+        default:
+            player_stop (player);
+    }
 }
 
 void
 on_stop_button (GtkWidget *widget, gpointer user_data)
 {
     g_print ("Stop Button Pressed\n");
+    player_stop (player);
 }
 
 void
