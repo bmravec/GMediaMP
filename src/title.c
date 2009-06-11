@@ -305,11 +305,11 @@ title_add_entry (Title *self, Entry *entry)
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
     
     if (title_compare_entries (entry, e) > 0) {
-        gtk_list_store_insert (self->priv->store, &iter, m);
-        title_set_data (self, &iter, entry);
+        gtk_list_store_insert_after (self->priv->store, &new_iter, &iter);
+        title_set_data (self, &new_iter, entry);
     } else {
-        gtk_list_store_insert (self->priv->store, &iter, r);
-        title_set_data (self, &iter, entry);
+        gtk_list_store_insert_before (self->priv->store, &new_iter, &iter);
+        title_set_data (self, &new_iter, entry);
     }
 }
 

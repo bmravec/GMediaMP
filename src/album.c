@@ -207,33 +207,81 @@ album_add_entry (Album *self,
                  gchar *artist)
 {
     GtkTreeIter iter, new_iter;
-    gchar *str;
+    gchar *s;
+    gint res;
+    gint l = 1, m;
+    gint r = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (self->priv->store),
+                                               NULL);
     
-    gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter);
-    
-    if (!gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter)) {
+    if (r == l) {
         gtk_list_store_append (self->priv->store, &iter);
         album_set_data (self, &iter, album, artist, TRUE);
         return;
     }
     
-    do {
-        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &str, -1);
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, l);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    res = g_strcmp0 (album, s);
+    g_free (s);
+    if (res < 0) {
+        gtk_list_store_insert (self->priv->store, &iter, l);
+        album_set_data (self, &iter, album, artist, TRUE);
+        return;
+    } else if (!res) {
+        album_set_data (self, &iter, album, artist, FALSE);
+        return;
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, r - 1);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    res = g_strcmp0 (album, s);
+    g_free (s);
+    if (res > 0) {
+        gtk_list_store_append (self->priv->store, &iter);
+        album_set_data (self, &iter, album, artist, TRUE);
+        return;
+    } else if (!res) {
+        album_set_data (self, &iter, album, artist, FALSE);
+        return;
+    }
+    
+    while (l+1 != r) {
+        m = (l + r) / 2;
         
-        gint res = g_strcmp0 (album, str);
-        g_free (str);
+        gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+            &iter, NULL, m);
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+        
+        res = g_strcmp0 (album, s);
+        g_free (s);
         if (!res) {
             album_set_data (self, &iter, album, artist, FALSE);
             return;
         } else if (res < 0) {
-            gtk_list_store_insert_before (self->priv->store, &new_iter, &iter);
-            album_set_data (self, &new_iter, album, artist, TRUE);
-            return;
+            r = m;
+        } else {
+            l = m;
         }
-    } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
+    }
     
-    gtk_list_store_append (self->priv->store, &iter);
-    album_set_data (self, &iter, album, artist, TRUE);
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, m);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    
+    res = g_strcmp0 (album, s);
+    g_free (s);
+    
+    if (res > 0) {
+        gtk_list_store_insert_after (self->priv->store, &new_iter, &iter);
+        album_set_data (self, &new_iter, album, artist, TRUE);
+    } else if (res < 0) {
+        gtk_list_store_insert_before (self->priv->store, &new_iter, &iter);
+        album_set_data (self, &new_iter, album, artist, TRUE);
+    } else {
+        album_set_data (self, &iter, album, artist, FALSE);
+    }
 }
 
 void
