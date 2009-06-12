@@ -47,7 +47,7 @@ track_column_func (GtkTreeViewColumn *column,
     gtk_tree_model_get (model, iter, 0, &entry, -1);
     
     g_object_set (G_OBJECT (cell), "text",
-        g_strdup_printf ("%d", entry->track), NULL);
+        g_strdup_printf ("%d", entry_get_track (entry)), NULL);
 }
 
 static void
@@ -61,7 +61,7 @@ title_column_func (GtkTreeViewColumn *column,
     
     gtk_tree_model_get (model, iter, 0, &entry, -1);
     
-    g_object_set (G_OBJECT (cell), "text", entry->title, NULL);
+    g_object_set (G_OBJECT (cell), "text", entry_get_title (entry), NULL);
 }
 
 static void
@@ -75,7 +75,7 @@ artist_column_func (GtkTreeViewColumn *column,
     
     gtk_tree_model_get (model, iter, 0, &entry, -1);
     
-    g_object_set (G_OBJECT (cell), "text", entry->artist, NULL);
+    g_object_set (G_OBJECT (cell), "text", entry_get_artist (entry), NULL);
 }
 
 static void
@@ -89,7 +89,7 @@ album_column_func (GtkTreeViewColumn *column,
     
     gtk_tree_model_get (model, iter, 0, &entry, -1);
     
-    g_object_set (G_OBJECT (cell), "text", entry->album, NULL);
+    g_object_set (G_OBJECT (cell), "text", entry_get_album (entry), NULL);
 }
 
 static void
@@ -99,7 +99,13 @@ duration_column_func (GtkTreeViewColumn *column,
                       GtkTreeIter *iter,
                       gpointer data)
 {
-    g_object_set (G_OBJECT (cell), "text", "0:00", NULL);
+//    g_object_set (G_OBJECT (cell), "text", "0:00", NULL);
+    Entry *entry;
+    
+    gtk_tree_model_get (model, iter, 0, &entry, -1);
+    
+    g_object_set (G_OBJECT (cell), "text",
+        g_strdup_printf ("%d", entry_get_duration (entry)), NULL);
 }
 
 static void
@@ -218,13 +224,15 @@ title_set_data (Title *self,
     gboolean visible = FALSE;
     
     if ((!g_strcmp0 (self->priv->s_artist, "") ||
-         !g_strcmp0 (self->priv->s_artist, entry->artist)) &&
+         !g_strcmp0 (self->priv->s_artist, entry_get_artist (entry))) &&
         (!g_strcmp0 (self->priv->s_album, "") ||
-         !g_strcmp0 (self->priv->s_album, entry->album))) {
+         !g_strcmp0 (self->priv->s_album, entry_get_album (entry)))) {
         visible = TRUE;
     }
     
     gtk_list_store_set (self->priv->store, iter, 0, entry, 1, visible, -1);
+    
+    g_object_ref (G_OBJECT (entry));
 }
 
 gint
@@ -233,20 +241,22 @@ title_compare_entries (Entry *entry,
 {
     gint res;
     
-    res = g_strcmp0 (entry->artist, e->artist);
+    res = g_strcmp0 (entry_get_artist (entry), entry_get_artist (e));
     if (res != 0)
         return res;
     
-    res = g_strcmp0 (entry->album, e->album);
+    res = g_strcmp0 (entry_get_album (entry), entry_get_album (e));
     if (res != 0)
         return res;
     
-    if (e->track != entry->track)
-        return entry->track - e->track;
+    if (entry_get_track (e) != entry_get_track (entry))
+        return entry_get_track (entry) - entry_get_track (e);
     
-    res = g_strcmp0 (entry->title, e->title);
+    res = g_strcmp0 (entry_get_title (entry), entry_get_title (e));
     if (res != 0)
         return res;
+    
+    return 0;
 }
 
 void
@@ -336,7 +346,8 @@ title_set_filter (Title *self, gchar *artist, gchar *album)
     GtkTreeIter iter;
     gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter);
     
-    if (!g_strcmp0 (self->priv->s_artist, "") && !g_strcmp0 (self->priv->s_album, "")) {
+    if (!g_strcmp0 (self->priv->s_artist, "") &&
+        !g_strcmp0 (self->priv->s_album, "")) {
         do {
             gtk_list_store_set (self->priv->store, &iter, 1, TRUE, -1);
         } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
@@ -348,9 +359,9 @@ title_set_filter (Title *self, gchar *artist, gchar *album)
                 0, &e, -1);
             
             if ((!g_strcmp0 (self->priv->s_artist, "") ||
-                 !g_strcmp0 (self->priv->s_artist, e->artist)) &&
+                 !g_strcmp0 (self->priv->s_artist, entry_get_artist (e))) &&
                 (!g_strcmp0 (self->priv->s_album, "") ||
-                 !g_strcmp0 (self->priv->s_album, e->album))) {
+                 !g_strcmp0 (self->priv->s_album, entry_get_album (e)))) {
                 visible = TRUE;
             }
             

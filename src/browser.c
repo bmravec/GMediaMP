@@ -92,9 +92,6 @@ title_replace (GtkWidget *widget,
                Entry *entry,
                Browser *self)
 {
-    g_print ("Title replace: (%d,%s,%s,%s)\n",
-        entry->id, entry->title, entry->artist, entry->album);
-    
     g_signal_emit (G_OBJECT (self), signal_replace, 0, entry);
 }
 
@@ -169,8 +166,11 @@ browser_new ()
 void
 browser_add_entry (Browser *self, Entry *entry)
 {
-    artist_add_entry (ARTIST (self->priv->artist), entry->artist);
-    album_add_entry (ALBUM (self->priv->album), entry->album, entry->artist);
+    artist_add_entry (ARTIST (self->priv->artist), entry_get_artist (entry));
+    
+    album_add_entry (ALBUM (self->priv->album),
+        entry_get_album (entry), entry_get_artist (entry));
+    
     title_add_entry (TITLE (self->priv->title), entry);
 }
 

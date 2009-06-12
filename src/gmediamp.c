@@ -65,18 +65,19 @@ on_add (GObject *obj, guint id, gpointer user_data)
     
     guint i;
     for (i = 0; i < entries->len; i++) {
-        Entry *e = g_new0 (Entry, 1);
         gchar **entry = g_ptr_array_index (entries, i);
         
-        e->id = atoi (entry[0]);
-        e->artist = g_strdup (entry[1]);
-        e->album = g_strdup (entry[2]);
-        e->title = g_strdup (entry[3]);
-        e->duration = atoi (entry[4]);
-        e->track = atoi (entry[5]);
-        e->location = g_strdup (entry[6]);
+        Entry *e = entry_new (atoi (entry[0]));
+        entry_set_artist (e, entry[1]);
+        entry_set_album (e, entry[2]);
+        entry_set_title (e, entry[3]);
+        entry_set_duration (e, atoi (entry[4]));
+        entry_set_track (e, atoi (entry[5]));
+        entry_set_location (e, entry[6]);
         
         browser_add_entry (BROWSER (browser), e);
+        
+        g_object_unref (G_OBJECT (e));
     }
     
     gtk_widget_show_all (browser);
@@ -87,11 +88,13 @@ on_add (GObject *obj, guint id, gpointer user_data)
 void
 on_add_entry (GObject *obj, Entry *entry, gpointer user_data)
 {
-    player_load (player, entry->location);
+    player_load (player, entry_get_location (entry));
     player_play (player);
     
     gchar *desc = g_strdup_printf ("%s by %s from %s",
-        entry->title, entry->artist, entry->album);
+        entry_get_title (entry),
+        entry_get_artist (entry),
+        entry_get_album (entry));
     
     gtk_label_set_text (GTK_LABEL (play_info), desc);
     
@@ -101,11 +104,13 @@ on_add_entry (GObject *obj, Entry *entry, gpointer user_data)
 void
 on_replace_entry (GObject *obj, Entry *entry, gpointer user_data)
 {
-    player_load (player, entry->location);
+    player_load (player, entry_get_location (entry));
     player_play (player);
     
     gchar *desc = g_strdup_printf ("%s by %s from %s",
-        entry->title, entry->artist, entry->album);
+        entry_get_title (entry),
+        entry_get_artist (entry),
+        entry_get_album (entry));
     
     gtk_label_set_text (GTK_LABEL (play_info), desc);
     
@@ -278,21 +283,21 @@ main (int argc, char *argv[])
     gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
     GPtrArray *entries = gmediadb_get_all_entries (mediadb, tags);
     
-    Entry *e = NULL;
     int i;
     for (i = 0; i < entries->len; i++) {
-        e = g_new0 (Entry, 1);
         gchar **entry = g_ptr_array_index (entries, i);
         
-        e->id = atoi (entry[0]);
-        e->artist = g_strdup (entry[1]);
-        e->album = g_strdup (entry[2]);
-        e->title = g_strdup (entry[3]);
-        e->duration = atoi (entry[4]);
-        e->track = atoi (entry[5]);
-        e->location = g_strdup (entry[6]);
+        Entry *e = entry_new (atoi (entry[0]));
+        entry_set_artist (e, entry[1]);
+        entry_set_album (e, entry[2]);
+        entry_set_title (e, entry[3]);
+        entry_set_duration (e, atoi (entry[4]));
+        entry_set_track (e, atoi (entry[5]));
+        entry_set_location (e, entry[6]);
         
         browser_add_entry (BROWSER (browser), e);
+        
+        g_object_unref (G_OBJECT (e));
     }
     
     g_ptr_array_free (entries, TRUE);

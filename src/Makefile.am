@@ -18,7 +18,8 @@ gmediamp_SOURCES = \
     browser.c browser.h \
     title.c title.h \
     player.c player.h \
-    entry.h gmediamp.c
+    entry.c entry.h \
+    gmediamp.c
 
 BUILT_SOURCES = \
     gmediamp-marshal.c \

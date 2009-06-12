@@ -22,17 +22,52 @@
 #ifndef __ENTRY_H__
 #define __ENTRY_H__
 
+#include <glib-object.h>
+
+#define ENTRY_TYPE (entry_get_type ())
+#define ENTRY(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), ENTRY_TYPE, Entry))
+#define ENTRY_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), ENTRY_TYPE, EntryClass))
+#define IS_ENTRY(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), ENTRY_TYPE))
+#define IS_ENTRY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), ENTRY_TYPE))
+#define ENTRY_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), ENTRY_TYPE, EntryClass))
+
+G_BEGIN_DECLS
+
 typedef struct _Entry Entry;
+typedef struct _EntryClass EntryClass;
+typedef struct _EntryPrivate EntryPrivate;
+
 struct _Entry {
-    guint track;
-    guint id;
-    guint duration;
+    GObject parent;
     
-    gchar *artist;
-    gchar *album;
-    gchar *title;
-    gchar *location;
+    EntryPrivate *priv;
 };
 
-#endif /* __TITLE_H__ */
+struct _EntryClass {
+    GObjectClass parent;
+};
+
+Entry *entry_new (guint id);
+GType entry_get_type (void);
+
+gchar *entry_get_artist (Entry *self);
+gchar *entry_get_album (Entry *self);
+gchar *entry_get_title (Entry *self);
+gchar *entry_get_genre (Entry *self);
+gchar *entry_get_location (Entry *self);
+guint entry_get_id (Entry *self);
+guint entry_get_duration (Entry *self);
+guint entry_get_track (Entry *self);
+
+void entry_set_artist (Entry *self, const gchar *artist);
+void entry_set_album (Entry *self, const gchar *album);
+void entry_set_title (Entry *self, const gchar *title);
+void entry_set_genre (Entry *self, const gchar *genre);
+void entry_set_location (Entry *self, const gchar *location);
+void entry_set_duration (Entry *self, guint duration);
+void entry_set_track (Entry *self, guint track);
+
+G_END_DECLS
+
+#endif /* __ENTRY_H__ */
 
