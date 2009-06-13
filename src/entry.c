@@ -29,8 +29,10 @@ G_DEFINE_TYPE(Entry, entry, G_TYPE_OBJECT)
 struct _EntryPrivate {
     gchar *artist, *album, *title, *genre, *location;
     guint track, id, duration;
-    gboolean playing;
+    guint state;
 };
+
+static guint signal_changed;
 
 static void
 entry_finalize (GObject *object)
@@ -49,10 +51,10 @@ entry_class_init (EntryClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (EntryPrivate));
     
     object_class->finalize = entry_finalize;
-
-//    signal_select = g_signal_new ("select", G_TYPE_FROM_CLASS (klass),
-//        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__STRING,
-//        G_TYPE_NONE, 1, G_TYPE_STRING);
+    
+    signal_changed = g_signal_new ("entry-changed", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
+        G_TYPE_NONE, 0);
 }
 
 static void
@@ -66,10 +68,10 @@ entry_init (Entry *self)
     self->priv->genre = "";
     self->priv->location = "";
     
-    self->priv->playing = FALSE;
     self->priv->track = 0;
     self->priv->id = 0;
     self->priv->duration = 0;
+    self->priv->state = ENTRY_STATE_NONE;
 }
 
 Entry*
@@ -120,6 +122,8 @@ entry_set_artist (Entry *self, const gchar *artist)
     } else {
         self->priv->artist = g_strdup (artist);
     }
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
@@ -134,6 +138,8 @@ entry_set_album (Entry *self, const gchar *album)
     } else {
         self->priv->album = g_strdup (album);
     }
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
@@ -148,6 +154,8 @@ entry_set_title (Entry *self, const gchar *title)
     } else {
         self->priv->title = g_strdup (title);
     }
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
@@ -162,6 +170,8 @@ entry_set_genre (Entry *self, const gchar *genre)
     } else {
         self->priv->genre = g_strdup (genre);
     }
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
@@ -176,6 +186,8 @@ entry_set_location (Entry *self, const gchar *location)
     } else {
         self->priv->location = g_strdup (location);
     }
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 guint
@@ -200,11 +212,42 @@ void
 entry_set_duration (Entry *self, guint duration)
 {
     self->priv->duration = duration;
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
 entry_set_track (Entry *self, guint track)
 {
     self->priv->track = track;
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+}
+
+guint
+entry_get_state (Entry *self)
+{
+    return self->priv->state;
+}
+
+void
+entry_set_state (Entry *self, guint state)
+{
+    self->priv->state = state;
+    
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+}
+
+gchar*
+entry_get_state_string (Entry *self)
+{
+    switch (self->priv->state) {
+        case ENTRY_STATE_PLAYING:
+            return GTK_STOCK_MEDIA_PLAY;
+        case ENTRY_STATE_MISSING:
+            return GTK_STOCK_DIALOG_ERROR;
+        default:
+            return NULL;
+    }
 }
 

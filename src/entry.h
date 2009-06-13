@@ -31,6 +31,12 @@
 #define IS_ENTRY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), ENTRY_TYPE))
 #define ENTRY_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), ENTRY_TYPE, EntryClass))
 
+enum {
+    ENTRY_STATE_NONE = 0,
+    ENTRY_STATE_PLAYING,
+    ENTRY_STATE_MISSING
+};
+
 G_BEGIN_DECLS
 
 typedef struct _Entry Entry;
@@ -66,6 +72,10 @@ void entry_set_genre (Entry *self, const gchar *genre);
 void entry_set_location (Entry *self, const gchar *location);
 void entry_set_duration (Entry *self, guint duration);
 void entry_set_track (Entry *self, guint track);
+
+guint entry_get_state (Entry *self);
+void entry_set_state (Entry *self, guint state);
+gchar *entry_get_state_image (Entry *self);
 
 G_END_DECLS
 

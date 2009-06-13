@@ -54,6 +54,9 @@ GType browser_get_type (void);
 
 void browser_add_entry (Browser *self, Entry *entry);
 
+Entry *browser_get_next (Browser *self);
+Entry *browser_get_prev (Browser *self);
+
 G_END_DECLS
 
 #endif /* __BROWSER_H__ */

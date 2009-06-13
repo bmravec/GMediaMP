@@ -40,6 +40,41 @@ static GtkWidget *pause_image;
 
 static GMediaDB *mediadb;
 static Player *player;
+static Entry *s_entry;
+
+void
+play_entry (Entry *e)
+{
+    g_print ("PlayEntry (%s,%s,%s)\n",
+        entry_get_title (e), entry_get_artist (e), entry_get_album (e));
+    
+    if (s_entry) {
+        if (entry_get_state (s_entry) == ENTRY_STATE_PLAYING) {
+            entry_set_state (s_entry, ENTRY_STATE_NONE);
+        }
+        
+        g_object_unref (G_OBJECT (s_entry));
+        s_entry = NULL;
+    }
+    
+    if (entry_get_state (e) != ENTRY_STATE_MISSING) {
+        s_entry = e;
+        g_object_ref (G_OBJECT (s_entry));
+        
+        entry_set_state (s_entry, ENTRY_STATE_PLAYING);
+        player_load (player, entry_get_location (s_entry));
+        player_play (player);
+        
+        gchar *desc = g_strdup_printf ("%s by %s from %s",
+            entry_get_title (s_entry),
+            entry_get_artist (s_entry),
+            entry_get_album (s_entry));
+        
+        gtk_label_set_text (GTK_LABEL (play_info), desc);
+        
+        g_free (desc);
+    }
+}
 
 void
 on_destroy (GtkWidget *widget, gpointer user_data)
@@ -88,39 +123,24 @@ on_add (GObject *obj, guint id, gpointer user_data)
 void
 on_add_entry (GObject *obj, Entry *entry, gpointer user_data)
 {
-    player_load (player, entry_get_location (entry));
-    player_play (player);
-    
-    gchar *desc = g_strdup_printf ("%s by %s from %s",
-        entry_get_title (entry),
-        entry_get_artist (entry),
-        entry_get_album (entry));
-    
-    gtk_label_set_text (GTK_LABEL (play_info), desc);
-    
-    g_free (desc);
+    g_print ("onAddEntry\n");
+    play_entry (entry);
 }
 
 void
 on_replace_entry (GObject *obj, Entry *entry, gpointer user_data)
 {
-    player_load (player, entry_get_location (entry));
-    player_play (player);
-    
-    gchar *desc = g_strdup_printf ("%s by %s from %s",
-        entry_get_title (entry),
-        entry_get_artist (entry),
-        entry_get_album (entry));
-    
-    gtk_label_set_text (GTK_LABEL (play_info), desc);
-    
-    g_free (desc);
+    g_print ("onReplaceEntry\n");
+    play_entry (entry);
 }
 
 void
 on_eos (GObject *obj, gpointer user_data)
 {
     g_print ("On EOS\n");
+    
+    Entry *e = browser_get_next (BROWSER (browser));
+    play_entry (e);
 }
 
 void
@@ -167,9 +187,14 @@ void
 on_play_button (GtkWidget *widget, gpointer user_data)
 {
     g_print ("Play Button Pressed\n");
+    Entry *e;
     
     switch (player_get_state (player)) {
         case PLAYER_STATE_NULL:
+            e = browser_get_next (BROWSER (browser));
+            play_entry (e);
+//            player_load (player, entry_get_location (e));
+//            player_play (player);
             break;
         case PLAYER_STATE_PLAYING:
             player_pause (player);
@@ -194,12 +219,31 @@ void
 on_next_button (GtkWidget *widget, gpointer user_data)
 {
     g_print ("Next Button Pressed\n");
+    
+    Entry *e = browser_get_next (BROWSER (browser));
+    
+    play_entry (e);
+//    if (e) {
+//        player_load (player, entry_get_location (e));
+//        player_play (player);
+//    } else {
+//        player_stop (player);
+//    }
 }
 
 void
 on_prev_button (GtkWidget *widget, gpointer user_data)
 {
     g_print ("Previous Button Pressed\n");
+    
+    Entry *e = browser_get_prev (BROWSER (browser));
+    
+    if (e) {
+        player_load (player, entry_get_location (e));
+        player_play (player);
+    } else {
+        player_stop (player);
+    }
 }
 
 int

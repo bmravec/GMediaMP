@@ -30,10 +30,50 @@ struct _TitlePrivate {
     GtkTreeModel *filter;
     
     gchar *s_artist, *s_album;
+    Entry *s_entry;
 };
 
 static guint signal_add;
 static guint signal_replace;
+
+static void
+entry_changed (Entry *entry, Title *self)
+{
+    GtkTreeIter iter;
+    Entry *e;
+    GtkTreeModel *model = GTK_TREE_MODEL (self->priv->filter);
+    
+    gtk_tree_model_get_iter_first (model, &iter);
+    
+    do {
+        gtk_tree_model_get (model, &iter, 0, &e, -1);
+        if (e == entry) {
+            GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
+            
+            gtk_tree_model_row_changed (model, path, &iter);
+            
+            gtk_tree_path_free (path);
+            return;
+        }
+    } while (gtk_tree_model_iter_next (model, &iter));
+}
+
+static void
+status_column_func (GtkTreeViewColumn *column,
+                    GtkCellRenderer *cell,
+                    GtkTreeModel *model,
+                    GtkTreeIter *iter,
+                    gpointer data)
+{
+    Entry *entry;
+    
+    gtk_tree_model_get (model, iter, 0, &entry, -1);
+    
+    g_object_set (G_OBJECT (cell),
+        "stock-id", entry_get_state_string (entry),
+        "stock-size", GTK_ICON_SIZE_MENU,
+        NULL);
+}
 
 static void
 track_column_func (GtkTreeViewColumn *column,
@@ -167,6 +207,12 @@ title_init (Title *self)
     GtkCellRenderer *renderer;
     GtkTreeViewColumn *column;
     
+    renderer = gtk_cell_renderer_pixbuf_new ();
+    column = gtk_tree_view_column_new_with_attributes ("", renderer, NULL);
+    gtk_tree_view_column_set_cell_data_func (column, renderer,
+        (GtkTreeCellDataFunc) status_column_func, NULL, NULL);
+    gtk_tree_view_append_column (GTK_TREE_VIEW (self), column);
+    
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Track", renderer, NULL);
     gtk_tree_view_column_set_cell_data_func (column, renderer,
@@ -205,6 +251,7 @@ title_init (Title *self)
     
     self->priv->s_artist = g_strdup ("");
     self->priv->s_album = g_strdup ("");
+    self->priv->s_entry = NULL;
     
     g_signal_connect (G_OBJECT (self), "row-activated",
         G_CALLBACK (title_row_activated), NULL);
@@ -233,6 +280,9 @@ title_set_data (Title *self,
     gtk_list_store_set (self->priv->store, iter, 0, entry, 1, visible, -1);
     
     g_object_ref (G_OBJECT (entry));
+    
+    g_signal_connect (G_OBJECT (entry), "entry-changed",
+        G_CALLBACK (entry_changed), self);
 }
 
 gint
@@ -368,5 +418,65 @@ title_set_filter (Title *self, gchar *artist, gchar *album)
             gtk_list_store_set (self->priv->store, &iter, 1, visible, -1);
         } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
     }
+}
+
+Entry*
+title_get_next (Title *self)
+{
+    GtkTreeIter iter;
+    Entry *entry;
+    
+    gtk_tree_model_get_iter_first (self->priv->filter, &iter);
+    gtk_tree_model_get (self->priv->filter, &iter, 0, &entry, -1);
+    
+    if (!self->priv->s_entry) {
+        self->priv->s_entry = entry;
+        return entry;
+    }
+    
+    while (entry != self->priv->s_entry) {
+        if (!gtk_tree_model_iter_next (self->priv->filter, &iter))
+            break;
+        gtk_tree_model_get (self->priv->filter, &iter, 0, &entry, -1);
+    }
+    
+    if (entry == self->priv->s_entry) {
+        if (!gtk_tree_model_iter_next (self->priv->filter, &iter)) {
+            self->priv->s_entry = NULL;
+            return NULL;
+        }
+        
+        gtk_tree_model_get (self->priv->filter, &iter, 0, &entry, -1);
+        self->priv->s_entry = entry;
+        return entry;
+    }
+    
+    gtk_tree_model_get_iter_first (self->priv->filter, &iter);
+    gtk_tree_model_get (self->priv->filter, &iter, 0, &entry, -1);
+    self->priv->s_entry = entry;
+    return entry;
+}
+
+Entry*
+title_get_prev (Title *self)
+{
+    GtkTreeIter iter;
+    Entry *ep = NULL, *en = NULL;
+    
+    if (!self->priv->s_entry) {
+        return NULL;
+    }
+    
+    gtk_tree_model_get_iter_first (self->priv->filter, &iter);
+    gtk_tree_model_get (self->priv->filter, &iter, 0, &en, -1);
+    
+    while (en != self->priv->s_entry) {
+        if (!gtk_tree_model_iter_next (self->priv->filter, &iter))
+            return NULL;
+        ep = en;
+        gtk_tree_model_get (self->priv->filter, &iter, 0, &en, -1);
+    }
+    
+    return ep;
 }
 

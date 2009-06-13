@@ -174,3 +174,15 @@ browser_add_entry (Browser *self, Entry *entry)
     title_add_entry (TITLE (self->priv->title), entry);
 }
 
+Entry*
+browser_get_next (Browser *self)
+{
+    return title_get_next (TITLE (self->priv->title));
+}
+
+Entry*
+browser_get_prev (Browser *self)
+{
+    return title_get_prev (TITLE (self->priv->title));
+}
+

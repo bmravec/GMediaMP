@@ -55,6 +55,9 @@ GType title_get_type (void);
 void title_add_entry (Title *self, Entry *entry);
 void title_set_filter (Title *self, gchar *artist, gchar *album);
 
+Entry *title_get_next (Title *self);
+Entry *title_get_prev (Title *self);
+
 G_END_DECLS
 
 #endif /* __TITLE_H__ */

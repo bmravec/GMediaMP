@@ -75,9 +75,9 @@ player_bus_call(GstBus *bus, GstMessage *msg, gpointer user_data)
     
     switch (GST_MESSAGE_TYPE (msg)) {
         case GST_MESSAGE_EOS:
-            g_signal_emit (self, signal_eos, 0, NULL);
-            
             player_stop (self);
+            
+            g_signal_emit (self, signal_eos, 0, NULL);
             break;
         case GST_MESSAGE_ERROR:
             player_stop (self);
