@@ -32,11 +32,13 @@ static GtkWidget *play_button;
 static GtkWidget *stop_button;
 static GtkWidget *next_button;
 static GtkWidget *prev_button;
-static GtkWidget *pos_scale;
-static GtkWidget *play_info;
 static GtkWidget *volume_button;
 static GtkWidget *play_image;
 static GtkWidget *pause_image;
+
+static GtkWidget *pos_scale;
+static GtkWidget *play_info;
+static GtkWidget *play_time;
 
 static GMediaDB *mediadb;
 static Player *player;
@@ -45,9 +47,6 @@ static Entry *s_entry;
 void
 play_entry (Entry *e)
 {
-    g_print ("PlayEntry (%s,%s,%s)\n",
-        entry_get_title (e), entry_get_artist (e), entry_get_album (e));
-    
     if (s_entry) {
         if (entry_get_state (s_entry) == ENTRY_STATE_PLAYING) {
             entry_set_state (s_entry, ENTRY_STATE_NONE);
@@ -57,22 +56,18 @@ play_entry (Entry *e)
         s_entry = NULL;
     }
     
-    if (entry_get_state (e) != ENTRY_STATE_MISSING) {
+    if (e && entry_get_state (e) != ENTRY_STATE_MISSING) {
+        g_print ("PlayEntry (%s,%s,%s)\n",
+            entry_get_title (e), entry_get_artist (e), entry_get_album (e));
+        
         s_entry = e;
         g_object_ref (G_OBJECT (s_entry));
         
         entry_set_state (s_entry, ENTRY_STATE_PLAYING);
         player_load (player, entry_get_location (s_entry));
         player_play (player);
+    } else {
         
-        gchar *desc = g_strdup_printf ("%s by %s from %s",
-            entry_get_title (s_entry),
-            entry_get_artist (s_entry),
-            entry_get_album (s_entry));
-        
-        gtk_label_set_text (GTK_LABEL (play_info), desc);
-        
-        g_free (desc);
     }
 }
 
@@ -141,6 +136,8 @@ on_eos (GObject *obj, gpointer user_data)
     
     Entry *e = browser_get_next (BROWSER (browser));
     play_entry (e);
+    
+    gtk_range_set_value (GTK_RANGE (pos_scale), 0);
 }
 
 void
@@ -152,35 +149,87 @@ on_tag (GObject *obj, gpointer user_data)
 void
 on_state_changed (GObject *obj, guint state, gpointer user_data)
 {
+    gchar *desc;
+    
     switch (state) {
         case PLAYER_STATE_NULL:
-            gtk_button_set_image (GTK_BUTTON (play_button), play_image);
             g_print ("State: NULL\n");
+            gtk_button_set_image (GTK_BUTTON (play_button), play_image);
             gtk_label_set_text (GTK_LABEL (play_info), "Not Playing");
             break;
         case PLAYER_STATE_PLAYING:
-            gtk_button_set_image (GTK_BUTTON (play_button), pause_image);
             g_print ("State: Playing\n");
+            gtk_button_set_image (GTK_BUTTON (play_button), pause_image);
+            desc = g_strdup_printf ("%s by %s from %s",
+                entry_get_title (s_entry),
+                entry_get_artist (s_entry),
+                entry_get_album (s_entry));
+            
+            gtk_label_set_text (GTK_LABEL (play_info), desc);
+            g_free (desc);
             break;
         case PLAYER_STATE_PAUSED:
-            gtk_button_set_image (GTK_BUTTON (play_button), play_image);
             g_print ("State: Paused\n");
+            
+            gtk_button_set_image (GTK_BUTTON (play_button), play_image);
+            desc = g_strdup_printf ("%s by %s from %s",
+                entry_get_title (s_entry),
+                entry_get_artist (s_entry),
+                entry_get_album (s_entry));
+            
+            gtk_label_set_text (GTK_LABEL (play_info), desc);
+            g_free (desc);
             break;
         case PLAYER_STATE_STOPPED:
+            g_print ("State: Stopped\n");
             gtk_button_set_image (GTK_BUTTON (play_button), play_image);
             gtk_label_set_text (GTK_LABEL (play_info), "Not Playing");
-            g_print ("State: Stopped\n");
             break;
         default:
-            gtk_button_set_image (GTK_BUTTON (play_button), play_image);
             g_print ("State: Invalid\n");
+            gtk_button_set_image (GTK_BUTTON (play_button), play_image);
+    }
+}
+
+gchar*
+sec_to_time (guint second)
+{
+    guint hour = second / 3600;
+    second %= 3600;
+    
+    guint minute = second / 60;
+    second %= 60;
+    
+    if (hour != 0) {
+        return g_strdup_printf ("%02d:%02d:%02d", hour, minute, second);
+    } else {
+        return g_strdup_printf ("%02d:%02d", minute, second);
     }
 }
 
 void
 on_ratio_changed (GObject *obj, gdouble ratio, gpointer user_data)
 {
+    gchar *pos, *len, *time;
+    
     gtk_range_set_value (GTK_RANGE (pos_scale), 100 * ratio);
+    
+    switch (player_get_state (player)) {
+        case PLAYER_STATE_PLAYING:
+        case PLAYER_STATE_PAUSED:
+            pos = sec_to_time (player_get_position (player));
+            len = sec_to_time (player_get_length (player));
+            time = g_strdup_printf ("%s of %s", pos, len);
+            
+            g_free (pos);
+            g_free (len);
+            
+            gtk_label_set_text (GTK_LABEL (play_time), time);
+            g_free (time);
+            break;
+        default:
+            gtk_label_set_text (GTK_LABEL (play_time), "");
+    }
 }
 
 void
@@ -193,8 +242,6 @@ on_play_button (GtkWidget *widget, gpointer user_data)
         case PLAYER_STATE_NULL:
             e = browser_get_next (BROWSER (browser));
             play_entry (e);
-//            player_load (player, entry_get_location (e));
-//            player_play (player);
             break;
         case PLAYER_STATE_PLAYING:
             player_pause (player);
@@ -203,8 +250,12 @@ on_play_button (GtkWidget *widget, gpointer user_data)
             player_play (player);
             break;
         case PLAYER_STATE_STOPPED:
+            browser_get_prev (BROWSER (browser));
+            e = browser_get_next (BROWSER (browser));
+            play_entry (e);
+            break;
         default:
-            player_stop (player);
+            play_entry (NULL);
     }
 }
 
@@ -212,7 +263,7 @@ void
 on_stop_button (GtkWidget *widget, gpointer user_data)
 {
     g_print ("Stop Button Pressed\n");
-    player_stop (player);
+    play_entry (NULL);
 }
 
 void
@@ -221,14 +272,7 @@ on_next_button (GtkWidget *widget, gpointer user_data)
     g_print ("Next Button Pressed\n");
     
     Entry *e = browser_get_next (BROWSER (browser));
-    
     play_entry (e);
-//    if (e) {
-//        player_load (player, entry_get_location (e));
-//        player_play (player);
-//    } else {
-//        player_stop (player);
-//    }
 }
 
 void
@@ -237,13 +281,7 @@ on_prev_button (GtkWidget *widget, gpointer user_data)
     g_print ("Previous Button Pressed\n");
     
     Entry *e = browser_get_prev (BROWSER (browser));
-    
-    if (e) {
-        player_load (player, entry_get_location (e));
-        player_play (player);
-    } else {
-        player_stop (player);
-    }
+    play_entry (e);
 }
 
 int
@@ -254,7 +292,7 @@ main (int argc, char *argv[])
     
     gtk_init (&argc, &argv);
     
-    mediadb = gmediadb_new ();
+    mediadb = gmediadb_new ("Music");
     player = player_new (argc, argv);
     
     window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
@@ -282,8 +320,11 @@ main (int argc, char *argv[])
     gtk_box_pack_start (GTK_BOX (hbox), stop_button, FALSE, FALSE, 0);
     gtk_box_pack_start (GTK_BOX (hbox), next_button, FALSE, FALSE, 0);
     
-    play_info = gtk_label_new ("Some Text");
+    play_info = gtk_label_new ("Not Playing");
     gtk_box_pack_start (GTK_BOX (hbox), play_info, TRUE, TRUE, 0);
+    
+    play_time = gtk_label_new ("");
+    gtk_box_pack_start (GTK_BOX (hbox), play_time, FALSE, FALSE, 0);
     
     volume_button = gtk_volume_button_new ();
     gtk_box_pack_start (GTK_BOX (hbox), volume_button, FALSE, FALSE, 0);
@@ -353,5 +394,11 @@ main (int argc, char *argv[])
     g_object_unref (G_OBJECT (pause_image));
     
     return 0;
+}
+
+gchar**
+gmediadb_get_entry_tags (GMediaDB *self, guint id)
+{
+    
 }
 

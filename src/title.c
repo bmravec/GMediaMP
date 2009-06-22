@@ -189,6 +189,7 @@ title_row_activated (Title *self,
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->filter),
         &iter, 0, &entry, -1);
     
+    self->priv->s_entry = entry;
     g_signal_emit (G_OBJECT (self), signal_replace, 0, entry);
 }
 
@@ -477,6 +478,7 @@ title_get_prev (Title *self)
         gtk_tree_model_get (self->priv->filter, &iter, 0, &en, -1);
     }
     
+    self->priv->s_entry = ep;
     return ep;
 }
 

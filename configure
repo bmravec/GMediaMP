@@ -3660,16 +3660,16 @@ if test -n "$PROG_CFLAGS"; then
     pkg_cv_PROG_CFLAGS="$PROG_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= \$DBUS_REQUIRED
 	dbus-glib-1 >= \$DBUS_REQUIRED\"") >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_PROG_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 gthread-2.0 gstreamer-0.10
+  pkg_cv_PROG_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED" 2>/dev/null`
 else
@@ -3682,16 +3682,16 @@ if test -n "$PROG_LIBS"; then
     pkg_cv_PROG_LIBS="$PROG_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= \$DBUS_REQUIRED
 	dbus-glib-1 >= \$DBUS_REQUIRED\"") >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_PROG_LIBS=`$PKG_CONFIG --libs "glib-2.0 gthread-2.0 gstreamer-0.10
+  pkg_cv_PROG_LIBS=`$PKG_CONFIG --libs "glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED" 2>/dev/null`
 else
@@ -3711,18 +3711,18 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        PROG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10
+	        PROG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED" 2>&1`
         else
-	        PROG_PKG_ERRORS=`$PKG_CONFIG --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10
+	        PROG_PKG_ERRORS=`$PKG_CONFIG --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$PROG_PKG_ERRORS" >&5
 
-	{ { $as_echo "$as_me:$LINENO: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10
+	{ { $as_echo "$as_me:$LINENO: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED) were not met:
 
@@ -3735,7 +3735,7 @@ Alternatively, you may set the environment variables PROG_CFLAGS
 and PROG_LIBS to avoid the need to call pkg-config.
 See the pkg-config man page for more details.
 " >&5
-$as_echo "$as_me: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10
+$as_echo "$as_me: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 sqlite3
 	dbus-1 >= $DBUS_REQUIRED
 	dbus-glib-1 >= $DBUS_REQUIRED) were not met:
 

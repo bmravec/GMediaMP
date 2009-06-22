@@ -48,7 +48,14 @@ position_update (Player *self)
     
     if (prev_ratio != new_ratio) {
         prev_ratio = new_ratio;
-        g_signal_emit (self, signal_ratio, 0, prev_ratio);
+        switch (self->priv->state) {
+            case PLAYER_STATE_PLAYING:
+            case PLAYER_STATE_PAUSED:
+                g_signal_emit (self, signal_ratio, 0, prev_ratio);
+                break;
+            default:
+                g_signal_emit (self, signal_ratio, 0, 0.0);
+        }
     }
     
     if (self->priv->state != PLAYER_STATE_PLAYING) {
@@ -210,7 +217,7 @@ player_play (Player *self)
         gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
         player_set_state (self, PLAYER_STATE_PLAYING);
         
-        g_timeout_add (1000, (GSourceFunc)position_update, self);
+        g_timeout_add (1000, (GSourceFunc) position_update, self);
     }
 }
 
