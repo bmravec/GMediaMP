@@ -20,8 +20,8 @@
  */
 
 #include <gtk/gtk.h>
+#include <gmediadb.h>
 
-#include "gmediadb.h"
 #include "browser.h"
 #include "player.h"
 
@@ -97,12 +97,12 @@ on_add (GObject *obj, guint id, gpointer user_data)
     for (i = 0; i < entries->len; i++) {
         gchar **entry = g_ptr_array_index (entries, i);
         
-        Entry *e = entry_new (atoi (entry[0]));
+        Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
         entry_set_artist (e, entry[1]);
         entry_set_album (e, entry[2]);
         entry_set_title (e, entry[3]);
-        entry_set_duration (e, atoi (entry[4]));
-        entry_set_track (e, atoi (entry[5]));
+        entry_set_duration (e, entry[4] ? atoi (entry[4]) : 0);
+        entry_set_track (e, entry[5] ? atoi (entry[5]) : 0);
         entry_set_location (e, entry[6]);
         
         browser_add_entry (BROWSER (browser), e);
@@ -372,12 +372,12 @@ main (int argc, char *argv[])
     for (i = 0; i < entries->len; i++) {
         gchar **entry = g_ptr_array_index (entries, i);
         
-        Entry *e = entry_new (atoi (entry[0]));
+        Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
         entry_set_artist (e, entry[1]);
         entry_set_album (e, entry[2]);
         entry_set_title (e, entry[3]);
-        entry_set_duration (e, atoi (entry[4]));
-        entry_set_track (e, atoi (entry[5]));
+        entry_set_duration (e, entry[4] ? atoi (entry[4]): 0);
+        entry_set_track (e, entry[5] ? atoi (entry[5]) : 0);
         entry_set_location (e, entry[6]);
         
         browser_add_entry (BROWSER (browser), e);
@@ -394,11 +394,5 @@ main (int argc, char *argv[])
     g_object_unref (G_OBJECT (pause_image));
     
     return 0;
-}
-
-gchar**
-gmediadb_get_entry_tags (GMediaDB *self, guint id)
-{
-    
 }
 

@@ -12,7 +12,6 @@ gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS)
 gmediamp_SOURCES = \
     gmediamp-marshal.c gmediamp-marshal.h \
     side-pane.c side-pane.h \
-    gmediadb.c gmediadb.h \
     album.c album.h \
     artist.c artist.h \
     browser.c browser.h \
