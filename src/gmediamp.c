@@ -116,6 +116,14 @@ on_add (GObject *obj, guint id, gpointer user_data)
 }
 
 void
+on_remove (GObject *obj, guint id, gpointer user_data)
+{
+    g_print ("Removed: %d\n", id);
+    
+    browser_remove_entry (BROWSER (browser), id);
+}
+
+void
 on_add_entry (GObject *obj, Entry *entry, gpointer user_data)
 {
     g_print ("onAddEntry\n");
@@ -346,6 +354,7 @@ main (int argc, char *argv[])
     
     g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
     g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
+    g_signal_connect (G_OBJECT (mediadb), "remove-entry", G_CALLBACK (on_remove), NULL);
     g_signal_connect (G_OBJECT (browser), "entry-replace",
         G_CALLBACK (on_add_entry), NULL);
     
@@ -371,7 +380,6 @@ main (int argc, char *argv[])
     int i;
     for (i = 0; i < entries->len; i++) {
         gchar **entry = g_ptr_array_index (entries, i);
-        
         Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
         entry_set_artist (e, entry[1]);
         entry_set_album (e, entry[2]);

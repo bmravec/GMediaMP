@@ -53,6 +53,7 @@ GtkWidget *title_new ();
 GType title_get_type (void);
 
 void title_add_entry (Title *self, Entry *entry);
+Entry *title_remove_entry (Title *self, guint id);
 void title_set_filter (Title *self, gchar *artist, gchar *album);
 
 Entry *title_get_next (Title *self);

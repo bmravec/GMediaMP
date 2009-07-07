@@ -77,7 +77,11 @@ entry_init (Entry *self)
 Entry*
 entry_new (guint id)
 {
-    return g_object_new (ENTRY_TYPE, NULL);
+    Entry *self = g_object_new (ENTRY_TYPE, NULL);
+    
+    self->priv->id = id;
+    
+    return self;
 }
 
 gchar*
@@ -249,5 +253,30 @@ entry_get_state_string (Entry *self)
         default:
             return NULL;
     }
+}
+
+gint
+entry_cmp (Entry *self, Entry *e)
+{
+    gint res;
+    if (self->priv->id == e->priv->id)
+        return 0;
+    
+    res = g_strcmp0 (entry_get_artist (self), entry_get_artist (e));
+    if (res != 0)
+        return res;
+    
+    res = g_strcmp0 (entry_get_album (self), entry_get_album (e));
+    if (res != 0)
+        return res;
+    
+    if (entry_get_track (e) != entry_get_track (self))
+        return entry_get_track (self) - entry_get_track (e);
+    
+    res = g_strcmp0 (entry_get_title (self), entry_get_title (e));
+    if (res != 0)
+        return res;
+    
+    return -1;
 }
 

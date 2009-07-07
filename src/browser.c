@@ -186,3 +186,16 @@ browser_get_prev (Browser *self)
     return title_get_prev (TITLE (self->priv->title));
 }
 
+void
+browser_remove_entry (Browser *self, guint id)
+{
+    Entry *e = title_remove_entry (TITLE (self->priv->title), id);
+    
+    if (e) {
+        album_remove_entry (ALBUM (self->priv->album), entry_get_album (e));
+        artist_remove_entry (ARTIST (self->priv->artist), entry_get_artist (e));
+        
+        g_object_unref (G_OBJECT (e));
+    }
+}
+

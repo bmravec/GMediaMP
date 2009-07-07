@@ -286,30 +286,6 @@ title_set_data (Title *self,
         G_CALLBACK (entry_changed), self);
 }
 
-gint
-title_compare_entries (Entry *entry,
-                       Entry *e)
-{
-    gint res;
-    
-    res = g_strcmp0 (entry_get_artist (entry), entry_get_artist (e));
-    if (res != 0)
-        return res;
-    
-    res = g_strcmp0 (entry_get_album (entry), entry_get_album (e));
-    if (res != 0)
-        return res;
-    
-    if (entry_get_track (e) != entry_get_track (entry))
-        return entry_get_track (entry) - entry_get_track (e);
-    
-    res = g_strcmp0 (entry_get_title (entry), entry_get_title (e));
-    if (res != 0)
-        return res;
-    
-    return 0;
-}
-
 void
 title_add_entry (Title *self, Entry *entry)
 {
@@ -327,7 +303,7 @@ title_add_entry (Title *self, Entry *entry)
     
     gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter);
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
-    if (title_compare_entries (entry, e) <= 0) {
+    if (entry_cmp (entry, e) <= 0) {
         gtk_list_store_insert (self->priv->store, &iter, 0);
         title_set_data (self, &iter, entry);
         return;
@@ -336,7 +312,7 @@ title_add_entry (Title *self, Entry *entry)
     gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
         &iter, NULL, r - 1);
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
-    if (title_compare_entries (entry, e) >= 0) {
+    if (entry_cmp (entry, e) >= 0) {
         gtk_list_store_append (self->priv->store, &iter);
         title_set_data (self, &iter, entry);
         return;
@@ -349,7 +325,7 @@ title_add_entry (Title *self, Entry *entry)
             &iter, NULL, m);
         gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
         
-        gint res = title_compare_entries (entry, e);
+        gint res = entry_cmp (entry, e);
         if (!res) {
             gtk_list_store_insert_before (self->priv->store, &new_iter, &iter);
             title_set_data (self, &new_iter, entry);
@@ -365,7 +341,7 @@ title_add_entry (Title *self, Entry *entry)
         &iter, NULL, m);
     gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
     
-    if (title_compare_entries (entry, e) > 0) {
+    if (entry_cmp (entry, e) > 0) {
         gtk_list_store_insert_after (self->priv->store, &new_iter, &iter);
         title_set_data (self, &new_iter, entry);
     } else {
@@ -480,5 +456,27 @@ title_get_prev (Title *self)
     
     self->priv->s_entry = ep;
     return ep;
+}
+
+Entry*
+title_remove_entry (Title *self, guint id)
+{
+    //TODO: SLOW!!!
+    GtkTreeIter iter;
+    Entry *e;
+    
+    if (!gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &iter)) {
+        return;
+    }
+    
+    do {
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &e, -1);
+        if (entry_get_id (e) == id) {
+            gtk_list_store_remove (self->priv->store, &iter);
+            return e;
+        }
+    } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->store), &iter));
+    
+    return NULL;
 }
 

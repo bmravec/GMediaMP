@@ -56,6 +56,8 @@ struct _EntryClass {
 Entry *entry_new (guint id);
 GType entry_get_type (void);
 
+gint entry_cmp (Entry *self, Entry *e);
+
 gchar *entry_get_artist (Entry *self);
 gchar *entry_get_album (Entry *self);
 gchar *entry_get_title (Entry *self);

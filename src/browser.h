@@ -53,6 +53,7 @@ GtkWidget *browser_new ();
 GType browser_get_type (void);
 
 void browser_add_entry (Browser *self, Entry *entry);
+void browser_remove_entry (Browser *self, guint id);
 
 Entry *browser_get_next (Browser *self);
 Entry *browser_get_prev (Browser *self);

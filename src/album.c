@@ -284,11 +284,113 @@ album_add_entry (Album *self,
     }
 }
 
+static void
+album_remove_iter (Album *self,
+                   GtkTreeIter *iter)
+{
+    GtkTreeIter root;
+    gboolean visible, decalbum = FALSE;
+    gint cnt;
+    
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), iter,
+        1, &cnt, 2, &visible, -1);
+    
+    if (cnt == 1) {
+        decalbum = TRUE;
+        gtk_list_store_remove (self->priv->store, iter);
+    } else {
+        gtk_list_store_set (self->priv->store, iter, 1, cnt - 1, -1);
+    }
+    
+    if (visible) {
+        gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &root);
+        
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &root, 1, &cnt, -1);
+        gtk_list_store_set (self->priv->store, &root, 1, cnt - 1, -1);
+        
+        if (decalbum) {
+            self->priv->visible_albums--;
+            
+            gchar *new_str = g_strdup_printf ("All %d Albums", self->priv->visible_albums);
+            gtk_list_store_set (self->priv->store, &root, 0, new_str, -1);
+            g_free (new_str);
+        }
+    }
+}
+
 void
 album_remove_entry (Album *self,
                     gchar *album)
 {
+    GtkTreeIter iter;
+    gchar *s;
+    gint res;
+    gint l = 1, m;
+    gint r = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (self->priv->store),
+                                             NULL);
     
+    if (r == l) {
+        return;
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, l);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    
+    res = g_strcmp0 (album, s);
+    g_free (s);
+    
+    if (res < 0) {
+        return;
+    } else if (!res) {
+        album_remove_iter (self, &iter);
+        return;
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, r - 1);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    
+    res = g_strcmp0 (album, s);
+    g_free (s);
+    
+    if (res > 0) {
+        return;
+    } else if (!res) {
+        album_remove_iter (self, &iter);
+        return;
+    }
+    
+    while (l+1 != r) {
+        m = (l + r) / 2;
+        
+        gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+            &iter, NULL, m);
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+        
+        res = g_strcmp0 (album, s);
+        g_free (s);
+        
+        if (!res) {
+            album_remove_iter (self, &iter);
+            return;
+        } else if (res < 0) {
+            r = m;
+        } else {
+            l = m;
+        }
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, m);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    
+    res = g_strcmp0 (album, s);
+    g_free (s);
+    
+    if (!res) {
+        album_remove_iter (self, &iter);
+    }
 }
 
 void
@@ -338,5 +440,6 @@ album_set_filter (Album *self,
     
     gchar *new_str = g_strdup_printf ("All %d Albums", self->priv->visible_albums);
     gtk_list_store_set (self->priv->store, &first, 0, new_str, 1, total_tracks, -1);
+    g_free (new_str);
 }
 

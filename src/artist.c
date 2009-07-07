@@ -262,10 +262,109 @@ artist_add_entry (Artist *self, gchar *artist)
     }
 }
 
+static void
+artist_remove_iter (Artist *self,
+                    GtkTreeIter *iter)
+{
+    GtkTreeIter root;
+    gboolean decartist = FALSE;
+    gint cnt;
+    
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), iter, 1, &cnt, -1);
+    
+    if (cnt == 1) {
+        decartist = TRUE;
+        gtk_list_store_remove (self->priv->store, iter);
+    } else {
+        gtk_list_store_set (self->priv->store, iter, 1, cnt - 1, -1);
+    }
+    
+    gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->store), &root);
+    
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &root, 1, &cnt, -1);
+    gtk_list_store_set (self->priv->store, &root, 1, cnt - 1, -1);
+    
+    if (decartist) {
+        self->priv->num_of_artists--;
+        
+        gchar *new_str = g_strdup_printf ("All %d Artists", self->priv->num_of_artists);
+        gtk_list_store_set (self->priv->store, &root, 0, new_str, -1);
+        g_free (new_str);
+    }
+}
+
 void
 artist_remove_entry (Artist *self,
                      gchar *artist)
 {
+    GtkTreeIter iter;
+    gchar *s;
+    gint res;
+    gint l = 1, m;
+    gint r = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (self->priv->store),
+                                               NULL);
     
+    if (r == l) {
+        return;
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, l);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    
+    res = g_strcmp0 (artist, s);
+    g_free (s);
+    
+    if (res < 0) {
+        return;
+    } else if (!res) {
+        artist_remove_iter (self, &iter);
+        return;
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, r - 1);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    
+    res = g_strcmp0 (artist, s);
+    g_free (s);
+    
+    if (res > 0) {
+        return;
+    } else if (!res) {
+        artist_remove_iter (self, &iter);
+        return;
+    }
+    
+    while (l+1 != r) {
+        m = (l + r) / 2;
+        
+        gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+            &iter, NULL, m);
+        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+        
+        res = g_strcmp0 (artist, s);
+        g_free (s);
+        
+        if (!res) {
+            artist_remove_iter (self, &iter);
+            return;
+        } else if (res < 0) {
+            r = m;
+        } else {
+            l = m;
+        }
+    }
+    
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (self->priv->store),
+        &iter, NULL, m);
+    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store), &iter, 0, &s, -1);
+    
+    res = g_strcmp0 (artist, s);
+    g_free (s);
+    
+    if (res == 0) {
+        artist_remove_iter (self, &iter);
+    }
 }
 
