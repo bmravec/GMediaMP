@@ -21,9 +21,11 @@
 
 #include <gtk/gtk.h>
 #include <gmediadb.h>
+#include <libnotify/notify.h>
 
 #include "browser.h"
 #include "player.h"
+#include "tray.h"
 
 static GtkWidget *window;
 static GtkWidget *browser;
@@ -43,6 +45,9 @@ static GtkWidget *play_time;
 static GMediaDB *mediadb;
 static Player *player;
 static Entry *s_entry;
+static Tray *tray_icon;
+
+static gboolean win_visible;
 
 void
 play_entry (Entry *e)
@@ -51,23 +56,29 @@ play_entry (Entry *e)
         if (entry_get_state (s_entry) == ENTRY_STATE_PLAYING) {
             entry_set_state (s_entry, ENTRY_STATE_NONE);
         }
-        
+
         g_object_unref (G_OBJECT (s_entry));
         s_entry = NULL;
     }
-    
+
     if (e && entry_get_state (e) != ENTRY_STATE_MISSING) {
         g_print ("PlayEntry (%s,%s,%s)\n",
             entry_get_title (e), entry_get_artist (e), entry_get_album (e));
-        
+
         s_entry = e;
         g_object_ref (G_OBJECT (s_entry));
-        
+
         entry_set_state (s_entry, ENTRY_STATE_PLAYING);
         player_load (player, entry_get_location (s_entry));
         player_play (player);
-    } else {
-        
+
+        gchar *body = g_strdup_printf ("%s\n%s\n%s",
+            entry_get_title (e), entry_get_artist (e), entry_get_album (e));
+
+        NotifyNotification *n = notify_notification_new ("Playing Track", body, 
+        "/media/BMTTable/Oggs/Element Eighty/Element Eighty/cover.bmp", NULL);
+        notify_notification_show (n, NULL);
+        g_free (body);
     }
 }
 
@@ -75,6 +86,18 @@ void
 on_destroy (GtkWidget *widget, gpointer user_data)
 {
     gtk_main_quit ();
+}
+
+void
+on_toggle (Tray *tray, gpointer user_data)
+{
+    if (win_visible) {
+        gtk_widget_hide (window);
+        win_visible = FALSE;
+    } else {
+        gtk_widget_show (window);
+        win_visible = TRUE;
+    }
 }
 
 void
@@ -158,7 +181,9 @@ void
 on_state_changed (GObject *obj, guint state, gpointer user_data)
 {
     gchar *desc;
-    
+
+    tray_set_state (tray_icon, state);
+
     switch (state) {
         case PLAYER_STATE_NULL:
             g_print ("State: NULL\n");
@@ -302,7 +327,11 @@ main (int argc, char *argv[])
     
     mediadb = gmediadb_new ("Music");
     player = player_new (argc, argv);
-    
+    tray_icon = tray_new ();
+    win_visible = TRUE;
+
+    notify_init ("gmediamp");
+
     window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     
     hbox = gtk_hbox_new (FALSE, 0);
@@ -355,8 +384,13 @@ main (int argc, char *argv[])
     g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
     g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
     g_signal_connect (G_OBJECT (mediadb), "remove-entry", G_CALLBACK (on_remove), NULL);
-    g_signal_connect (G_OBJECT (browser), "entry-replace",
-        G_CALLBACK (on_add_entry), NULL);
+    g_signal_connect (G_OBJECT (browser), "entry-replace", G_CALLBACK (on_add_entry), NULL);
+
+    g_signal_connect (G_OBJECT (tray_icon), "toggle", G_CALLBACK (on_toggle), NULL);
+    g_signal_connect (G_OBJECT (tray_icon), "quit", G_CALLBACK (on_destroy), NULL);
+    g_signal_connect (G_OBJECT (tray_icon), "play", G_CALLBACK (on_play_button), NULL);
+    g_signal_connect (G_OBJECT (tray_icon), "next", G_CALLBACK (on_next_button), NULL);
+    g_signal_connect (G_OBJECT (tray_icon), "previous", G_CALLBACK (on_prev_button), NULL);
     
     g_signal_connect (G_OBJECT (player), "eos", G_CALLBACK (on_eos), NULL);
     g_signal_connect (G_OBJECT (player), "tag", G_CALLBACK (on_tag), NULL);

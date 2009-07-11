@@ -8,9 +8,9 @@ AC_PROG_INSTALL
 
 DBUS_REQUIRED=0.60
 
-PKG_CHECK_MODULES(PROG, glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb
-	dbus-1 >= $DBUS_REQUIRED
-	dbus-glib-1 >= $DBUS_REQUIRED)
+PKG_CHECK_MODULES(PROG, glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify
+    dbus-1 >= $DBUS_REQUIRED
+    dbus-glib-1 >= $DBUS_REQUIRED)
 AC_SUBST(PROG_CFLAGS)
 AC_SUBST(PROG_LIBS)
 

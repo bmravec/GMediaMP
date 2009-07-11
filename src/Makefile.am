@@ -18,6 +18,7 @@ gmediamp_SOURCES = \
     title.c title.h \
     player.c player.h \
     entry.c entry.h \
+    tray.c tray.h \
     gmediamp.c
 
 BUILT_SOURCES = \
