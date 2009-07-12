@@ -49,6 +49,36 @@ static Tray *tray_icon;
 
 static gboolean win_visible;
 
+gchar*
+find_album_art (Entry *e)
+{
+    GFile *location = g_file_new_for_path (entry_get_location (e));
+    GFile *parent = g_file_get_parent (location);
+    gchar *ppath = g_file_get_path (parent);
+    GDir *dir = g_dir_open (ppath, 0, NULL);
+    const gchar *file;
+    gchar *ret = NULL;
+
+    while (dir && (file = g_dir_read_name (dir))) {
+        if (g_str_has_suffix (file, ".png"))
+            ret = g_strdup_printf ("%s/%s", ppath, file);
+        if (g_str_has_suffix (file, ".bmp"))
+            ret = g_strdup_printf ("%s/%s", ppath, file);
+        if (g_str_has_suffix (file, ".png"))
+            ret = g_strdup_printf ("%s/%s", ppath, file);
+    }
+
+    if (dir) {
+        g_dir_close (dir);
+    }
+
+    g_object_unref (G_OBJECT (location));
+    g_object_unref (G_OBJECT (parent));
+    g_free (ppath);
+
+    return ret;
+}
+
 void
 play_entry (Entry *e)
 {
@@ -75,8 +105,13 @@ play_entry (Entry *e)
         gchar *body = g_strdup_printf ("%s\n%s\n%s",
             entry_get_title (e), entry_get_artist (e), entry_get_album (e));
 
+        gchar *art_path = find_album_art (e);
         NotifyNotification *n = notify_notification_new ("Playing Track", body, 
-        "/media/BMTTable/Oggs/Element Eighty/Element Eighty/cover.bmp", NULL);
+        art_path, NULL);
+
+        if (art_path)
+            g_free (art_path);
+
         notify_notification_show (n, NULL);
         g_free (body);
     }
