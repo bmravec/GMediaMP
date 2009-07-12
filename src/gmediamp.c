@@ -124,6 +124,12 @@ on_destroy (GtkWidget *widget, gpointer user_data)
 }
 
 void
+on_volume_changed (GtkWidget *widget, gdouble value, gpointer user_data)
+{
+    player_set_volume (player, value);
+}
+
+void
 on_toggle (Tray *tray, gpointer user_data)
 {
     if (win_visible) {
@@ -401,6 +407,9 @@ main (int argc, char *argv[])
     volume_button = gtk_volume_button_new ();
     gtk_box_pack_start (GTK_BOX (hbox), volume_button, FALSE, FALSE, 0);
     
+    gtk_scale_button_set_value (GTK_SCALE_BUTTON (volume_button), 1.0);
+    player_set_volume (player, 1.0);
+
     pos_scale = gtk_hscale_new_with_range (0.0, 100.0, 0.5);
     gtk_scale_set_draw_value (GTK_SCALE (pos_scale), FALSE);
     
@@ -420,6 +429,8 @@ main (int argc, char *argv[])
     g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
     g_signal_connect (G_OBJECT (mediadb), "remove-entry", G_CALLBACK (on_remove), NULL);
     g_signal_connect (G_OBJECT (browser), "entry-replace", G_CALLBACK (on_add_entry), NULL);
+    g_signal_connect (G_OBJECT (volume_button), "value-changed",
+        G_CALLBACK (on_volume_changed), NULL);
 
     g_signal_connect (G_OBJECT (tray_icon), "toggle", G_CALLBACK (on_toggle), NULL);
     g_signal_connect (G_OBJECT (tray_icon), "quit", G_CALLBACK (on_destroy), NULL);

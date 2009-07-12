@@ -56,8 +56,10 @@ struct _PlayerClass {
 
 Player *player_new ();
 GType player_get_type (void);
+
 void player_load (Player *self, gchar *uri);
 void player_close (Player *self);
+
 void player_play (Player *self);
 void player_pause (Player *self);
 void player_stop (Player *self);
@@ -65,6 +67,9 @@ guint player_get_state (Player *self);
 
 guint player_get_length (Player *self);
 guint player_get_position (Player *self);
+
+gdouble player_get_volume (Player *self);
+void player_set_volume (Player *self, gdouble vol);
 
 G_END_DECLS
 

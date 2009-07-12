@@ -28,7 +28,7 @@ G_DEFINE_TYPE(Player, player, G_TYPE_OBJECT)
 struct _PlayerPrivate {
     GstElement *pipeline;
     GstTagList *songtags;
-    gint volumes;
+    gdouble volume;
     guint state;
 };
 
@@ -181,6 +181,7 @@ player_load (Player *self, gchar *uri)
     gchar *ruri = g_strdup_printf ("file://%s", uri);
     g_object_set (G_OBJECT (self->priv->pipeline),
         "uri", ruri,
+        "volume", self->priv->volume,
         NULL);
     g_free (ruri);
     
@@ -270,4 +271,24 @@ player_get_position (Player *self)
         return 0;
     }
 }
+
+gdouble
+player_get_volume (Player *self)
+{
+    return self->priv->volume;
+}
+
+void
+player_set_volume (Player *self, gdouble vol)
+{
+    self->priv->volume = vol;
+
+    if (vol > 1.0) vol = 1.0;
+    if (vol < 0.0) vol = 0.0;
+
+    if (self->priv->pipeline) {
+        g_object_set (self->priv->pipeline, "volume", vol, NULL);
+    }
+}
+
 
