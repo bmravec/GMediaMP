@@ -67,6 +67,7 @@ guint player_get_state (Player *self);
 
 guint player_get_length (Player *self);
 guint player_get_position (Player *self);
+void player_set_position (Player *self, guint pos);
 
 gdouble player_get_volume (Player *self);
 void player_set_volume (Player *self, gdouble vol);

@@ -255,7 +255,7 @@ player_get_length (Player *self)
         gst_element_query_duration (self->priv->pipeline, &fmt, &len);
         return GST_TIME_AS_SECONDS (len);
     } else {
-        return 100;
+        return 0;
     }
 }
 
@@ -270,6 +270,23 @@ player_get_position (Player *self)
     } else {
         return 0;
     }
+}
+
+void
+player_set_position (Player *self, guint pos)
+{
+    if (!self->priv->pipeline) {
+        g_signal_emit (self, signal_ratio, 0, 0.0);
+        return;
+    }
+
+    gst_element_seek_simple (self->priv->pipeline, GST_FORMAT_TIME,
+        GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT, GST_SECOND * pos);
+
+    guint len = player_get_length (self);
+    gdouble new_ratio = (gdouble) pos / (gdouble) len;
+
+    g_signal_emit (self, signal_ratio, 0, new_ratio);
 }
 
 gdouble

@@ -123,6 +123,20 @@ on_destroy (GtkWidget *widget, gpointer user_data)
     gtk_main_quit ();
 }
 
+gboolean
+on_pos_change_value (GtkWidget *range, GtkScrollType scroll, gdouble value, gpointer user_data)
+{
+    if (value > 100.0) value = 100.0;
+    if (value < 0.0) value = 0.0;
+
+    g_print ("on_pos_change_value: %f\n", value);
+    g_print ("len: %d\n", player_get_length (player));
+
+    player_set_position (player, player_get_length (player) * value / 100.0);
+
+    return TRUE;
+}
+
 void
 on_volume_changed (GtkWidget *widget, gdouble value, gpointer user_data)
 {
@@ -431,6 +445,8 @@ main (int argc, char *argv[])
     g_signal_connect (G_OBJECT (browser), "entry-replace", G_CALLBACK (on_add_entry), NULL);
     g_signal_connect (G_OBJECT (volume_button), "value-changed",
         G_CALLBACK (on_volume_changed), NULL);
+    g_signal_connect (G_OBJECT (pos_scale), "change-value",
+        G_CALLBACK (on_pos_change_value), NULL);
 
     g_signal_connect (G_OBJECT (tray_icon), "toggle", G_CALLBACK (on_toggle), NULL);
     g_signal_connect (G_OBJECT (tray_icon), "quit", G_CALLBACK (on_destroy), NULL);
