@@ -44,5 +44,16 @@
         <long>Main window height</long>
       </locale>
     </schema>
+    <schema>
+      <key>/schemas/apps/gmediamp/playback/volume</key>
+      <applyto>/apps/gmediamp/playback/volume</applyto>
+      <owner>gmediamp</owner>
+      <type>float</type>
+      <default>1.0</default>
+      <locale name="C">
+        <short>Playback volume level</short>
+        <long>Playback volume level</long>
+      </locale>
+    </schema>
   </schemalist>
 </gconfschemafile>

@@ -22,6 +22,7 @@
 #include <gtk/gtk.h>
 #include <gmediadb.h>
 #include <libnotify/notify.h>
+#include <gconf/gconf-client.h>
 
 #include "browser.h"
 #include "player.h"
@@ -46,8 +47,21 @@ static GMediaDB *mediadb;
 static Player *player;
 static Entry *s_entry;
 static Tray *tray_icon;
+static GConfClient *gc;
 
 static gboolean win_visible;
+static gint width, height, root_x, root_y;
+
+gboolean
+on_configure_event (GtkWidget *widget, GdkEventConfigure *event, gpointer user_data)
+{
+    width = event->width;
+    height = event->height;
+    root_x = event->x;
+    root_y = event->y;
+
+    return FALSE;
+}
 
 gchar*
 find_album_art (Entry *e)
@@ -140,6 +154,7 @@ on_pos_change_value (GtkWidget *range, GtkScrollType scroll, gdouble value, gpoi
 void
 on_volume_changed (GtkWidget *widget, gdouble value, gpointer user_data)
 {
+    g_print ("Vol: %f\n", value);
     player_set_volume (player, value);
 }
 
@@ -384,11 +399,20 @@ main (int argc, char *argv[])
     player = player_new (argc, argv);
     tray_icon = tray_new ();
     win_visible = TRUE;
+    gc = gconf_client_get_default ();
 
     notify_init ("gmediamp");
 
     window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+
+    width = gconf_client_get_int (gc, "/apps/gmediamp/ui/window_width", NULL);
+    height = gconf_client_get_int (gc, "/apps/gmediamp/ui/window_height", NULL);
+    gtk_window_set_default_size (GTK_WINDOW (window), width, height);
     
+    root_x = gconf_client_get_int (gc, "/apps/gmediamp/ui/window_position_x", NULL);
+    root_y = gconf_client_get_int (gc, "/apps/gmediamp/ui/window_position_y", NULL);
+    gtk_window_move (GTK_WINDOW (window), root_x, root_y);
+
     hbox = gtk_hbox_new (FALSE, 0);
     play_button = gtk_button_new ();
     stop_button = gtk_button_new ();
@@ -421,8 +445,9 @@ main (int argc, char *argv[])
     volume_button = gtk_volume_button_new ();
     gtk_box_pack_start (GTK_BOX (hbox), volume_button, FALSE, FALSE, 0);
     
-    gtk_scale_button_set_value (GTK_SCALE_BUTTON (volume_button), 1.0);
-    player_set_volume (player, 1.0);
+    gdouble vol = gconf_client_get_float (gc, "/apps/gmediamp/playback/volume", NULL);
+    gtk_scale_button_set_value (GTK_SCALE_BUTTON (volume_button), vol);
+    player_set_volume (player, vol);
 
     pos_scale = gtk_hscale_new_with_range (0.0, 100.0, 0.5);
     gtk_scale_set_draw_value (GTK_SCALE (pos_scale), FALSE);
@@ -440,6 +465,7 @@ main (int argc, char *argv[])
     gtk_widget_show_all (window);
     
     g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
+    g_signal_connect (G_OBJECT (window), "configure-event", G_CALLBACK (on_configure_event), NULL);
     g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
     g_signal_connect (G_OBJECT (mediadb), "remove-entry", G_CALLBACK (on_remove), NULL);
     g_signal_connect (G_OBJECT (browser), "entry-replace", G_CALLBACK (on_add_entry), NULL);
@@ -492,11 +518,19 @@ main (int argc, char *argv[])
     g_ptr_array_free (entries, TRUE);
     
     gtk_main ();
-    
+
+    gconf_client_set_float (gc, "/apps/gmediamp/playback/volume", player_get_volume (player), NULL);
+
+    gconf_client_set_int (gc, "/apps/gmediamp/ui/window_width", width, NULL);
+    gconf_client_set_int (gc, "/apps/gmediamp/ui/window_height", height, NULL);
+
+    gconf_client_set_int (gc, "/apps/gmediamp/ui/window_position_x", root_x, NULL);
+    gconf_client_set_int (gc, "/apps/gmediamp/ui/window_position_y", root_y, NULL);
+
     g_object_unref (G_OBJECT (mediadb));
     g_object_unref (G_OBJECT (play_image));
     g_object_unref (G_OBJECT (pause_image));
-    
+
     return 0;
 }
 
