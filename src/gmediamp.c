@@ -453,6 +453,9 @@ main (int argc, char *argv[])
     gtk_scale_set_draw_value (GTK_SCALE (pos_scale), FALSE);
     
     browser = browser_new ();
+    g_object_ref (G_OBJECT (browser));
+    gint div_pos = gconf_client_get_int (gc, "/apps/gmediamp/ui/browser_div", NULL);
+    gtk_paned_set_position (GTK_PANED (browser), div_pos);
     
     vbox = gtk_vbox_new (FALSE, 0);
     
@@ -521,6 +524,8 @@ main (int argc, char *argv[])
 
     gconf_client_set_float (gc, "/apps/gmediamp/playback/volume", player_get_volume (player), NULL);
 
+    gconf_client_set_int (gc, "/apps/gmediamp/ui/browser_div", gtk_paned_get_position (GTK_PANED (browser)), NULL);
+
     gconf_client_set_int (gc, "/apps/gmediamp/ui/window_width", width, NULL);
     gconf_client_set_int (gc, "/apps/gmediamp/ui/window_height", height, NULL);
 
@@ -528,6 +533,7 @@ main (int argc, char *argv[])
     gconf_client_set_int (gc, "/apps/gmediamp/ui/window_position_y", root_y, NULL);
 
     g_object_unref (G_OBJECT (mediadb));
+    g_object_unref (G_OBJECT (browser));
     g_object_unref (G_OBJECT (play_image));
     g_object_unref (G_OBJECT (pause_image));
 

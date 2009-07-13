@@ -55,5 +55,16 @@
         <long>Playback volume level</long>
       </locale>
     </schema>
+    <schema>
+      <key>/schemas/apps/gmediamp/ui/browser_div</key>
+      <applyto>/apps/gmediamp/ui/browser_div</applyto>
+      <owner>gmediamp</owner>
+      <type>int</type>
+      <default>400</default>
+      <locale name="C">
+        <short>Browser divider position</short>
+        <long>Position of the divider bar between artist/album and title in the browser pane</long>
+      </locale>
+    </schema>
   </schemalist>
 </gconfschemafile>
