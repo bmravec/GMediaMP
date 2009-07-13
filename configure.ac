@@ -5,10 +5,11 @@ AM_INIT_AUTOMAKE([dist-bzip2])
 
 AC_PROG_CC
 AC_PROG_INSTALL
+AM_GCONF_SOURCE_2
 
 DBUS_REQUIRED=0.60
 
-PKG_CHECK_MODULES(PROG, glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify
+PKG_CHECK_MODULES(PROG, glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED)
 AC_SUBST(PROG_CFLAGS)

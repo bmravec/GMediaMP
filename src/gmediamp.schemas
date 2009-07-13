@@ -1,0 +1,48 @@
+<gconfschemafile>
+  <schemalist>
+    <schema>
+      <key>/schemas/apps/gmediamp/ui/window_position_x</key>
+      <applyto>/apps/gmediamp/ui/window_position_x</applyto>
+      <owner>gmediamp</owner>
+      <type>int</type>
+      <default>0</default>
+      <locale name="C">
+        <short>Main window x position</short>
+        <long>Main window x position</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/apps/gmediamp/ui/window_position_y</key>
+      <applyto>/apps/gmediamp/ui/window_position_y</applyto>
+      <owner>gmediamp</owner>
+      <type>int</type>
+      <default>0</default>
+      <locale name="C">
+        <short>Main window y position</short>
+        <long>Main window y position</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/apps/gmediamp/ui/window_width</key>
+      <applyto>/apps/gmediamp/ui/window_width</applyto>
+      <owner>gmediamp</owner>
+      <type>int</type>
+      <default>800</default>
+      <locale name="C">
+        <short>Main window width</short>
+        <long>Main window width</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/apps/gmediamp/ui/window_height</key>
+      <applyto>/apps/gmediamp/ui/window_height</applyto>
+      <owner>gmediamp</owner>
+      <type>int</type>
+      <default>600</default>
+      <locale name="C">
+        <short>Main window height</short>
+        <long>Main window height</long>
+      </locale>
+    </schema>
+  </schemalist>
+</gconfschemafile>
