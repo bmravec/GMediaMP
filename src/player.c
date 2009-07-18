@@ -238,6 +238,8 @@ player_stop (Player *self)
         gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
         player_set_state (self, PLAYER_STATE_STOPPED);
     }
+    
+    g_signal_emit (self, signal_ratio, 0, 0.0);
 }
 
 guint

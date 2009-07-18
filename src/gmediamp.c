@@ -100,7 +100,9 @@ play_entry (Entry *e)
         if (entry_get_state (s_entry) == ENTRY_STATE_PLAYING) {
             entry_set_state (s_entry, ENTRY_STATE_NONE);
         }
-
+        
+        player_stop (player);
+        
         g_object_unref (G_OBJECT (s_entry));
         s_entry = NULL;
     }
@@ -206,6 +208,12 @@ on_add (GObject *obj, guint id, gpointer user_data)
     gtk_widget_show_all (browser);
     
     g_ptr_array_free (entries, TRUE);
+}
+
+void
+on_update (GObject *obj, guint id, gpointer user_data)
+{
+    g_print ("UPDATED: %d\n", id);
 }
 
 void
@@ -469,8 +477,11 @@ main (int argc, char *argv[])
     
     g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (on_destroy), NULL);
     g_signal_connect (G_OBJECT (window), "configure-event", G_CALLBACK (on_configure_event), NULL);
+
     g_signal_connect (G_OBJECT (mediadb), "add-entry", G_CALLBACK (on_add), NULL);
+    g_signal_connect (G_OBJECT (mediadb), "update-entry", G_CALLBACK (on_update), NULL);
     g_signal_connect (G_OBJECT (mediadb), "remove-entry", G_CALLBACK (on_remove), NULL);
+    
     g_signal_connect (G_OBJECT (browser), "entry-replace", G_CALLBACK (on_add_entry), NULL);
     g_signal_connect (G_OBJECT (volume_button), "value-changed",
         G_CALLBACK (on_volume_changed), NULL);
