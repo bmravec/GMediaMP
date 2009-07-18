@@ -132,6 +132,22 @@ album_column_func (GtkTreeViewColumn *column,
     g_object_set (G_OBJECT (cell), "text", entry_get_album (entry), NULL);
 }
 
+static gchar*
+sec_to_time (guint second)
+{
+    guint hour = second / 3600;
+    second %= 3600;
+    
+    guint minute = second / 60;
+    second %= 60;
+    
+    if (hour != 0) {
+        return g_strdup_printf ("%02d:%02d:%02d", hour, minute, second);
+    } else {
+        return g_strdup_printf ("%d:%02d", minute, second);
+    }
+}
+
 static void
 duration_column_func (GtkTreeViewColumn *column,
                       GtkCellRenderer *cell,
@@ -144,8 +160,7 @@ duration_column_func (GtkTreeViewColumn *column,
     
     gtk_tree_model_get (model, iter, 0, &entry, -1);
     
-    g_object_set (G_OBJECT (cell), "text",
-        g_strdup_printf ("%d", entry_get_duration (entry)), NULL);
+    g_object_set (G_OBJECT (cell), "text",sec_to_time (entry_get_duration (entry)), NULL);
 }
 
 static void
