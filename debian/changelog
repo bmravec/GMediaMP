@@ -1,0 +1,5 @@
+gmediamp (0.5-1) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Brett Mravec <bmravec@unknown>  Mon, 13 Jul 2009 02:44:34 -0400
