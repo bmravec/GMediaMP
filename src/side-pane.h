@@ -50,6 +50,8 @@ GtkWidget *side_pane_new ();
 GType side_pane_get_type (void);
 void side_pane_add (SidePane *self, GtkWidget *widget, const char *name);
 
+void side_pane_add_bar_widget (SidePane *self, GtkWidget *widget);
+
 G_END_DECLS
 
 #endif

@@ -29,9 +29,10 @@ G_DEFINE_TYPE(SidePane, side_pane, GTK_TYPE_HPANED)
 
 struct _SidePanePrivate {
     GtkTreeStore *store;
-
+    
     GtkWidget *view;
     GtkWidget *notebook;
+    GtkWidget *vbox;
 };
 
 static void selector_changed_cb (GtkTreeSelection*,gpointer);
@@ -62,12 +63,16 @@ side_pane_init (SidePane *self)
     
     self->priv = SIDE_PANE_GET_PRIVATE (self);
     
+    self->priv->vbox = gtk_vbox_new (FALSE, 0);
+    gtk_paned_add1 (GTK_PANED (self), self->priv->vbox);
+    
     self->priv->store = gtk_tree_store_new (3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT);
     
     self->priv->view = gtk_tree_view_new_with_model (GTK_TREE_MODEL (self->priv->store));
     gtk_tree_view_set_headers_visible (GTK_TREE_VIEW (self->priv->view), FALSE);
-    gtk_paned_add1 (GTK_PANED (self), self->priv->view);
-        
+    gtk_box_pack_start (GTK_BOX (self->priv->vbox), self->priv->view, TRUE, TRUE, 0);
+//    gtk_paned_add1 (GTK_PANED (self), self->priv->view);
+    
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
 
@@ -141,5 +146,13 @@ side_pane_add (SidePane *self,
     gtk_tree_store_append (GTK_TREE_STORE (priv->store), &iter, NULL);
     gtk_tree_store_set (GTK_TREE_STORE (priv->store), &iter,
                         0, GTK_STOCK_ABOUT, 1, name, 2, page, -1);
+}
+
+void
+side_pane_add_bar_widget (SidePane *self, GtkWidget *widget)
+{
+    gtk_box_pack_start (GTK_BOX (self->priv->vbox), widget, FALSE, FALSE, 0);
+    
+    gtk_widget_show (widget);
 }
 

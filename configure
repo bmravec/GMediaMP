@@ -3549,8 +3549,6 @@ fi
 
 
 
-DBUS_REQUIRED=0.60
-
 
 
 if test "x$ac_cv_env_PKG_CONFIG_set" != "xset"; then
@@ -3668,6 +3666,9 @@ $as_echo "no" >&6; }
 
 fi
 
+DBUS_REQUIRED=0.60
+
+
 pkg_failed=no
 { $as_echo "$as_me:$LINENO: checking for PROG" >&5
 $as_echo_n "checking for PROG... " >&6; }
@@ -3677,16 +3678,16 @@ if test -n "$PKG_CONFIG"; then
         pkg_cv_PROG_CFLAGS="$PROG_CFLAGS"
     else
         if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= \$DBUS_REQUIRED
     dbus-glib-1 >= \$DBUS_REQUIRED\"") >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_PROG_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+  pkg_cv_PROG_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED" 2>/dev/null`
 else
@@ -3701,16 +3702,16 @@ if test -n "$PKG_CONFIG"; then
         pkg_cv_PROG_LIBS="$PROG_LIBS"
     else
         if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= \$DBUS_REQUIRED
     dbus-glib-1 >= \$DBUS_REQUIRED\"") >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_PROG_LIBS=`$PKG_CONFIG --libs "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+  pkg_cv_PROG_LIBS=`$PKG_CONFIG --libs "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED" 2>/dev/null`
 else
@@ -3731,18 +3732,18 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        PROG_PKG_ERRORS=`$PKG_CONFIG --short-errors --errors-to-stdout --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+	        PROG_PKG_ERRORS=`$PKG_CONFIG --short-errors --errors-to-stdout --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED"`
         else
-	        PROG_PKG_ERRORS=`$PKG_CONFIG --errors-to-stdout --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+	        PROG_PKG_ERRORS=`$PKG_CONFIG --errors-to-stdout --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED"`
         fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$PROG_PKG_ERRORS" >&5
 
-	{ { $as_echo "$as_me:$LINENO: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+	{ { $as_echo "$as_me:$LINENO: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED) were not met:
 
@@ -3755,7 +3756,7 @@ Alternatively, you may set the environment variables PROG_CFLAGS
 and PROG_LIBS to avoid the need to call pkg-config.
 See the pkg-config man page for more details.
 " >&5
-$as_echo "$as_me: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0
+$as_echo "$as_me: error: Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 gmediadb libnotify gconf-2.0 taglib_c
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED) were not met:
 
@@ -4002,7 +4003,7 @@ fi
 
 
 
-ac_config_files="$ac_config_files Makefile src/Makefile"
+ac_config_files="$ac_config_files Makefile src/Makefile data/Makefile data/ui/Makefile"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -4648,6 +4649,8 @@ do
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
+    "data/Makefile") CONFIG_FILES="$CONFIG_FILES data/Makefile" ;;
+    "data/ui/Makefile") CONFIG_FILES="$CONFIG_FILES data/ui/Makefile" ;;
 
   *) { { $as_echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5
 $as_echo "$as_me: error: invalid argument: $ac_config_target" >&2;}

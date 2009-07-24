@@ -27,9 +27,12 @@
 #include "browser.h"
 #include "player.h"
 #include "tray.h"
+#include "side-pane.h"
+#include "shell.h"
 
 static GtkWidget *window;
 static GtkWidget *browser;
+static GtkWidget *side_pane;
 
 static GtkWidget *play_button;
 static GtkWidget *stop_button;
@@ -38,6 +41,7 @@ static GtkWidget *prev_button;
 static GtkWidget *volume_button;
 static GtkWidget *play_image;
 static GtkWidget *pause_image;
+static GtkWidget *album_art;
 
 static GtkWidget *pos_scale;
 static GtkWidget *play_info;
@@ -45,6 +49,7 @@ static GtkWidget *play_time;
 
 static GMediaDB *mediadb;
 static Player *player;
+static Shell *shell;
 static Entry *s_entry;
 static Tray *tray_icon;
 static GConfClient *gc;
@@ -61,36 +66,6 @@ on_configure_event (GtkWidget *widget, GdkEventConfigure *event, gpointer user_d
     root_y = event->y;
 
     return FALSE;
-}
-
-gchar*
-find_album_art (Entry *e)
-{
-    GFile *location = g_file_new_for_path (entry_get_location (e));
-    GFile *parent = g_file_get_parent (location);
-    gchar *ppath = g_file_get_path (parent);
-    GDir *dir = g_dir_open (ppath, 0, NULL);
-    const gchar *file;
-    gchar *ret = NULL;
-
-    while (dir && (file = g_dir_read_name (dir))) {
-        if (g_str_has_suffix (file, ".png"))
-            ret = g_strdup_printf ("%s/%s", ppath, file);
-        if (g_str_has_suffix (file, ".bmp"))
-            ret = g_strdup_printf ("%s/%s", ppath, file);
-        if (g_str_has_suffix (file, ".png"))
-            ret = g_strdup_printf ("%s/%s", ppath, file);
-    }
-
-    if (dir) {
-        g_dir_close (dir);
-    }
-
-    g_object_unref (G_OBJECT (location));
-    g_object_unref (G_OBJECT (parent));
-    g_free (ppath);
-
-    return ret;
 }
 
 void
@@ -121,15 +96,19 @@ play_entry (Entry *e)
         gchar *body = g_strdup_printf ("%s\n%s\n%s",
             entry_get_title (e), entry_get_artist (e), entry_get_album (e));
 
-        gchar *art_path = find_album_art (e);
+        gchar *art_path = entry_get_art (e);
         NotifyNotification *n = notify_notification_new ("Playing Track", body, 
-        art_path, NULL);
-
+            art_path, NULL);
+        
+        gtk_image_set_from_file (GTK_IMAGE (album_art), art_path);
+        
         if (art_path)
             g_free (art_path);
 
         notify_notification_show (n, NULL);
         g_free (body);
+    } else {
+        gtk_image_set_from_file (GTK_IMAGE (album_art), NULL);
     }
 }
 
@@ -140,7 +119,10 @@ on_destroy (GtkWidget *widget, gpointer user_data)
 }
 
 gboolean
-on_pos_change_value (GtkWidget *range, GtkScrollType scroll, gdouble value, gpointer user_data)
+on_pos_change_value (GtkWidget *range,
+                     GtkScrollType scroll,
+                     gdouble value,
+                     gpointer user_data)
 {
     if (value > 100.0) value = 100.0;
     if (value < 0.0) value = 0.0;
@@ -408,7 +390,10 @@ main (int argc, char *argv[])
     tray_icon = tray_new ();
     win_visible = TRUE;
     gc = gconf_client_get_default ();
-
+    side_pane = side_pane_new ();
+    album_art = gtk_image_new ();
+    shell = shell_new ();
+    
     notify_init ("gmediamp");
 
     window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
@@ -469,9 +454,16 @@ main (int argc, char *argv[])
     
     gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
     gtk_box_pack_start (GTK_BOX (vbox), pos_scale, FALSE, FALSE, 0);
-    gtk_box_pack_start (GTK_BOX (vbox), browser, TRUE, TRUE, 0);
+    gtk_box_pack_start (GTK_BOX (vbox), side_pane, TRUE, TRUE, 0);
+    
+    side_pane_add (SIDE_PANE (side_pane), browser, "Library");
+    side_pane_add_bar_widget (SIDE_PANE (side_pane), album_art);
     
     gtk_container_add (GTK_CONTAINER (window), vbox);
+    
+    side_pane_add_bar_widget (SIDE_PANE (side_pane), gtk_label_new ("BAR1"));
+    side_pane_add_bar_widget (SIDE_PANE (side_pane), gtk_label_new ("BAR2"));
+    side_pane_add_bar_widget (SIDE_PANE (side_pane), gtk_label_new ("BAR3"));
     
     gtk_widget_show_all (window);
     

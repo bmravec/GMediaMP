@@ -1,9 +1,11 @@
-INCLUDES = $(PROG_CFLAGS) $(GTK_CFLAGS)
+INCLUDES = $(PROG_CFLAGS) $(GTK_CFLAGS) \
+    -DSHARE_DIR=\"$(pkgdatadir)\"
 
 bin_PROGRAMS = gmediamp
 
 gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS)
 gmediamp_SOURCES = \
+    shell.c shell.h \
     side-pane.c side-pane.h \
     album.c album.h \
     artist.c artist.h \
@@ -12,6 +14,7 @@ gmediamp_SOURCES = \
     player.c player.h \
     entry.c entry.h \
     tray.c tray.h \
+    tag-handler.c tag-handler.h \
     gmediamp.c
 
 EXTRA_DIST=

@@ -63,6 +63,7 @@ gchar *entry_get_album (Entry *self);
 gchar *entry_get_title (Entry *self);
 gchar *entry_get_genre (Entry *self);
 gchar *entry_get_location (Entry *self);
+gchar *entry_get_art (Entry *self);
 guint entry_get_id (Entry *self);
 guint entry_get_duration (Entry *self);
 guint entry_get_track (Entry *self);
