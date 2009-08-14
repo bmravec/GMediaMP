@@ -25,6 +25,7 @@
 #include <glib-object.h>
 
 #include "progress.h"
+#include "player.h"
 
 #define SHELL_TYPE (shell_get_type ())
 #define SHELL(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), SHELL_TYPE, Shell))
@@ -57,6 +58,8 @@ gboolean shell_remove_widget (Shell *self, gchar *name);
 
 gboolean shell_add_progress (Shell *self, Progress *p);
 gboolean shell_remove_progress (Shell *self, Progress *p);
+
+Player *shell_get_player (Shell *self);
 
 void shell_run (Shell *self);
 void shell_quit (Shell *self);

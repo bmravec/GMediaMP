@@ -29,6 +29,13 @@ G_DEFINE_TYPE(Playlist, playlist, G_TYPE_OBJECT)
 struct _PlaylistPrivate {
     Shell *shell;
     GtkWidget *widget;
+
+    GtkWidget *delete_button;
+    GtkWidget *remove_button;
+    GtkWidget *add_button;
+
+    GtkWidget *view;
+    GtkListStore *store;
 };
 
 static guint signal_changed;
@@ -59,9 +66,30 @@ playlist_class_init (PlaylistClass *klass)
 static void
 playlist_init (Playlist *self)
 {
+    GtkWidget *sw, *hbox;
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), PLAYLIST_TYPE, PlaylistPrivate);
 
     self->priv->widget = gtk_vbox_new (FALSE, 0);
+
+    self->priv->store = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_POINTER);
+    self->priv->view = gtk_tree_view_new_with_model (GTK_TREE_MODEL (self->priv->store));
+
+    sw = gtk_scrolled_window_new (NULL, NULL);
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw),
+        GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_container_add (GTK_CONTAINER (sw), self->priv->view);
+    gtk_box_pack_start (GTK_BOX (self->priv->widget), sw, TRUE, TRUE, 0);
+
+    hbox = gtk_hbox_new (FALSE, 0);
+    self->priv->delete_button = gtk_button_new_from_stock (GTK_STOCK_DELETE);
+    self->priv->remove_button = gtk_button_new_from_stock (GTK_STOCK_REMOVE);
+    self->priv->add_button = gtk_button_new_from_stock (GTK_STOCK_ADD);
+
+    gtk_box_pack_start (GTK_BOX (hbox), self->priv->delete_button, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (hbox), gtk_drawing_area_new (), TRUE, TRUE, 0);
+    gtk_box_pack_start (GTK_BOX (hbox), self->priv->remove_button, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (hbox), self->priv->add_button, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (self->priv->widget), hbox, FALSE, FALSE, 0);
 }
 
 Playlist*
@@ -76,6 +104,8 @@ playlist_activate (Playlist *self)
     self->priv->shell = shell_new ();
 
     shell_add_widget (self->priv->shell, self->priv->widget, "Playlists", NULL);
+
+    gtk_widget_show_all (self->priv->widget);
 }
 
 gboolean
