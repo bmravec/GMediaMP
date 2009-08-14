@@ -6,7 +6,7 @@ bin_PROGRAMS = gmediamp
 gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS)
 gmediamp_SOURCES = \
     shell.c shell.h \
-    side-pane.c side-pane.h \
+    plugin-manager.c plugin-manager.h \
     album.c album.h \
     artist.c artist.h \
     browser.c browser.h \
@@ -15,7 +15,9 @@ gmediamp_SOURCES = \
     entry.c entry.h \
     tray.c tray.h \
     tag-handler.c tag-handler.h \
-    gmediamp.c
+    progress.c progress.h \
+    playlist.c playlist.h \
+    now-playing.c now-playing.h
 
 EXTRA_DIST=
 CLEANFILES=
