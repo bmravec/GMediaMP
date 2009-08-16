@@ -16,8 +16,7 @@ gmediamp_SOURCES = \
     tray.c tray.h \
     tag-handler.c tag-handler.h \
     progress.c progress.h \
-    playlist.c playlist.h \
-    now-playing.c now-playing.h
+    playlist.c playlist.h
 
 EXTRA_DIST=
 CLEANFILES=

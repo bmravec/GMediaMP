@@ -1,18 +1,18 @@
 /*
  *      entry.h
- *      
+ *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
- *      
+ *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
  *      the Free Software Foundation; either version 2 of the License, or
  *      (at your option) any later version.
- *      
+ *
  *      This program is distributed in the hope that it will be useful,
  *      but WITHOUT ANY WARRANTY; without even the implied warranty of
  *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *      GNU General Public License for more details.
- *      
+ *
  *      You should have received a copy of the GNU General Public License
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -45,7 +45,7 @@ typedef struct _EntryPrivate EntryPrivate;
 
 struct _Entry {
     GObject parent;
-    
+
     EntryPrivate *priv;
 };
 
@@ -56,13 +56,19 @@ struct _EntryClass {
 Entry *entry_new (guint id);
 GType entry_get_type (void);
 
+void entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value);
+void entry_set_tag_int (Entry *self, const gchar *tag, gint value);
+
+const gchar *entry_get_tag_str (Entry *self, const gchar *tag);
+gint entry_get_tag_int (Entry *self, const gchar *tag);
+
 gint entry_cmp (Entry *self, Entry *e);
 
-gchar *entry_get_artist (Entry *self);
-gchar *entry_get_album (Entry *self);
-gchar *entry_get_title (Entry *self);
-gchar *entry_get_genre (Entry *self);
-gchar *entry_get_location (Entry *self);
+const gchar *entry_get_artist (Entry *self);
+const gchar *entry_get_album (Entry *self);
+const gchar *entry_get_title (Entry *self);
+const gchar *entry_get_genre (Entry *self);
+const gchar *entry_get_location (Entry *self);
 gchar *entry_get_art (Entry *self);
 guint entry_get_id (Entry *self);
 guint entry_get_duration (Entry *self);
@@ -83,4 +89,3 @@ gchar *entry_get_state_image (Entry *self);
 G_END_DECLS
 
 #endif /* __ENTRY_H__ */
-

@@ -24,7 +24,6 @@
 #include "shell.h"
 #include "player.h"
 #include "progress.h"
-#include "now-playing.h"
 #include "playlist.h"
 #include "browser.h"
 
@@ -312,11 +311,10 @@ main (int argc, char *argv[])
 //    shell_add_widget (shell, gtk_label_new ("IPod"), "Devices/IPod", "/usr/share/icons/picard-32.png");
 //    shell_add_widget (shell, gtk_label_new ("Music"), "Devices/IPod/Music", "/usr/share/icons/picard-32.png");
 
-    NowPlaying *playing = now_playing_new ();
     Playlist *playlist = playlist_new ();
     Browser *browser = browser_new ();
 
-    now_playing_activate (playing);
+    player_activate (shell_get_player (shell));
     playlist_activate (playlist);
     browser_activate (browser);
 

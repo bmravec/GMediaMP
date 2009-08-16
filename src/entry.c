@@ -1,18 +1,18 @@
 /*
  *      entry.c
- *      
+ *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
- *      
+ *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
  *      the Free Software Foundation; either version 2 of the License, or
  *      (at your option) any later version.
- *      
+ *
  *      This program is distributed in the hope that it will be useful,
  *      but WITHOUT ANY WARRANTY; without even the implied warranty of
  *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *      GNU General Public License for more details.
- *      
+ *
  *      You should have received a copy of the GNU General Public License
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -27,6 +27,7 @@
 G_DEFINE_TYPE(Entry, entry, G_TYPE_OBJECT)
 
 struct _EntryPrivate {
+    GHashTable *table;
     gchar *artist, *album, *title, *genre, *location;
     guint track, id, duration;
     guint state;
@@ -38,7 +39,9 @@ static void
 entry_finalize (GObject *object)
 {
     Entry *self = ENTRY (object);
-    
+
+    g_hash_table_unref (self->priv->table);
+
     G_OBJECT_CLASS (entry_parent_class)->finalize (object);
 }
 
@@ -47,11 +50,11 @@ entry_class_init (EntryClass *klass)
 {
     GObjectClass *object_class;
     object_class = G_OBJECT_CLASS (klass);
-    
+
     g_type_class_add_private ((gpointer) klass, sizeof (EntryPrivate));
-    
+
     object_class->finalize = entry_finalize;
-    
+
     signal_changed = g_signal_new ("entry-changed", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
         G_TYPE_NONE, 0);
@@ -61,15 +64,17 @@ static void
 entry_init (Entry *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), ENTRY_TYPE, EntryPrivate);
-    
-    self->priv->artist = "";
-    self->priv->album = "";
-    self->priv->title = "";
-    self->priv->genre = "";
+
+    self->priv->table = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+
+//    self->priv->artist = "";
+//    self->priv->album = "";
+//    self->priv->title = "";
+//    self->priv->genre = "";
     self->priv->location = "";
-    
-    self->priv->track = 0;
-    self->priv->id = 0;
+
+//    self->priv->track = 0;
+//    self->priv->id = 0;
     self->priv->duration = 0;
     self->priv->state = ENTRY_STATE_NONE;
 }
@@ -78,37 +83,37 @@ Entry*
 entry_new (guint id)
 {
     Entry *self = g_object_new (ENTRY_TYPE, NULL);
-    
+
     self->priv->id = id;
-    
+
     return self;
 }
 
-gchar*
+const gchar*
 entry_get_artist (Entry *self)
 {
-    return self->priv->artist;
+    return entry_get_tag_str (self, "artist");
 }
 
-gchar*
+const gchar*
 entry_get_album (Entry *self)
 {
-    return self->priv->album;
+    return entry_get_tag_str (self, "album");
 }
 
-gchar*
+const gchar*
 entry_get_title (Entry *self)
 {
-    return self->priv->title;
+    return entry_get_tag_str (self, "title");
 }
 
-gchar*
+const gchar*
 entry_get_genre (Entry *self)
 {
-    return self->priv->genre;
+    return entry_get_tag_str (self, "genre");
 }
 
-gchar*
+const gchar*
 entry_get_location (Entry *self)
 {
     return self->priv->location;
@@ -147,65 +152,41 @@ entry_get_art (Entry *self)
 void
 entry_set_artist (Entry *self, const gchar *artist)
 {
-    if (self->priv->artist && strlen (self->priv->artist) != 0) {
-        g_free (self->priv->artist);
-    }
-    
     if (!artist || strlen (artist) == 0) {
-        self->priv->artist = "";
+        entry_set_tag_str (self, "artist", "");
     } else {
-        self->priv->artist = g_strdup (artist);
+        entry_set_tag_str (self, "artist", artist);
     }
-    
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
 entry_set_album (Entry *self, const gchar *album)
 {
-    if (self->priv->album && strlen (self->priv->album) != 0) {
-        g_free (self->priv->album);
-    }
-    
     if (!album || strlen (album) == 0) {
-        self->priv->album = "";
+        entry_set_tag_str (self, "album", "");
     } else {
-        self->priv->album = g_strdup (album);
+        entry_set_tag_str (self, "album", album);
     }
-    
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
 entry_set_title (Entry *self, const gchar *title)
 {
-    if (self->priv->title && strlen (self->priv->title) != 0) {
-        g_free (self->priv->title);
-    }
-    
     if (!title || strlen (title) == 0) {
-        self->priv->title = "";
+        entry_set_tag_str (self, "title", "");
     } else {
-        self->priv->title = g_strdup (title);
+        entry_set_tag_str (self, "title", title);
     }
-    
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
 entry_set_genre (Entry *self, const gchar *genre)
 {
-    if (self->priv->genre && strlen (self->priv->genre) != 0) {
-        g_free (self->priv->genre);
-    }
-    
     if (!genre || strlen (genre) == 0) {
-        self->priv->genre = "";
+        entry_set_tag_str (self, "genre", "");
     } else {
-        self->priv->genre = g_strdup (genre);
+        entry_set_tag_str (self, "genre", genre);
     }
-    
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
@@ -214,13 +195,13 @@ entry_set_location (Entry *self, const gchar *location)
     if (self->priv->location && strlen (self->priv->location) != 0) {
         g_free (self->priv->location);
     }
-    
+
     if (!location || strlen (location) == 0) {
         self->priv->location = "";
     } else {
         self->priv->location = g_strdup (location);
     }
-    
+
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
@@ -233,29 +214,25 @@ entry_get_id (Entry *self)
 guint
 entry_get_duration (Entry *self)
 {
-    return self->priv->duration;
+    return entry_get_tag_int (self, "duration");
 }
 
 guint
 entry_get_track (Entry *self)
 {
-    return self->priv->track;
+    return entry_get_tag_int (self, "track");
 }
 
 void
 entry_set_duration (Entry *self, guint duration)
 {
-    self->priv->duration = duration;
-    
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+    entry_set_tag_int (self, "duration", duration);
 }
 
 void
 entry_set_track (Entry *self, guint track)
 {
-    self->priv->track = track;
-    
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+    entry_set_tag_int (self, "track", track);
 }
 
 guint
@@ -268,7 +245,7 @@ void
 entry_set_state (Entry *self, guint state)
 {
     self->priv->state = state;
-    
+
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
@@ -291,22 +268,52 @@ entry_cmp (Entry *self, Entry *e)
     gint res;
     if (self->priv->id == e->priv->id)
         return 0;
-    
+
     res = g_strcmp0 (entry_get_artist (self), entry_get_artist (e));
     if (res != 0)
         return res;
-    
+
     res = g_strcmp0 (entry_get_album (self), entry_get_album (e));
     if (res != 0)
         return res;
-    
+
     if (entry_get_track (e) != entry_get_track (self))
         return entry_get_track (self) - entry_get_track (e);
-    
+
     res = g_strcmp0 (entry_get_title (self), entry_get_title (e));
     if (res != 0)
         return res;
-    
+
     return -1;
 }
 
+void
+entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
+{
+    g_hash_table_insert (self->priv->table, g_strdup (tag), g_strdup (value));
+
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+}
+
+void
+entry_set_tag_int (Entry *self, const gchar *tag, gint value)
+{
+    gint *val = g_new0 (gint, 1);
+    *val = value;
+
+    g_hash_table_insert (self->priv->table, g_strdup (tag), val);
+
+    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+}
+
+const gchar*
+entry_get_tag_str (Entry *self, const gchar *tag)
+{
+    return g_hash_table_lookup (self->priv->table, tag);
+}
+
+gint
+entry_get_tag_int (Entry *self, const gchar *tag)
+{
+    return *((gint*) g_hash_table_lookup (self->priv->table, tag));
+}
