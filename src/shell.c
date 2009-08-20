@@ -26,11 +26,15 @@
 #include "progress.h"
 #include "playlist.h"
 #include "browser.h"
+#include "music.h"
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
 struct _ShellPrivate {
     Player *player;
+    Music *music;
+    Playlist *playlist;
+
     GtkWidget *nowplaying;
     GtkWidget *browser;
 
@@ -119,14 +123,14 @@ shell_init (Shell *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), SHELL_TYPE, ShellPrivate);
 
-    self->priv->player = player_new ();
     self->priv->builder = gtk_builder_new ();
 
-    gint i;
-    for (i = 0; i < sizeof (builtin_uis) / sizeof (gchar*); i++) {
-        gtk_builder_add_from_file (self->priv->builder, builtin_uis[i], NULL);
-    }
+    self->priv->player = player_new (0, NULL);
+    self->priv->music = music_new ();
+    self->priv->playlist = playlist_new ();
 
+    // Load objects from main.ui
+    gtk_builder_add_from_file (self->priv->builder, "data/ui/main.ui", NULL);
     self->priv->window = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "main_win"));
     self->priv->progress_bars = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "progress_bars"));
     self->priv->sidebar = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "sidebar"));
@@ -143,6 +147,7 @@ shell_init (Shell *self)
     self->priv->tb_next = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_next"));
     self->priv->tb_vol = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_vol"));
 
+    // Create stores and columns
     self->priv->sidebar_store = gtk_tree_store_new (3, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT);
     gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->sidebar_view),
         GTK_TREE_MODEL (self->priv->sidebar_store));
@@ -285,6 +290,12 @@ selector_changed_cb (GtkTreeSelection *selection, Shell *self)
     }
 }
 
+GtkBuilder*
+shell_get_builder (Shell *self)
+{
+    return self->priv->builder;
+}
+
 void
 shell_run (Shell *self)
 {
@@ -300,6 +311,9 @@ shell_quit (Shell *self)
 int
 main (int argc, char *argv[])
 {
+    g_thread_init (NULL);
+    gdk_threads_init ();
+
     gtk_init (&argc, &argv);
 
     Shell *shell = shell_new ();
@@ -311,12 +325,12 @@ main (int argc, char *argv[])
 //    shell_add_widget (shell, gtk_label_new ("IPod"), "Devices/IPod", "/usr/share/icons/picard-32.png");
 //    shell_add_widget (shell, gtk_label_new ("Music"), "Devices/IPod/Music", "/usr/share/icons/picard-32.png");
 
-    Playlist *playlist = playlist_new ();
-    Browser *browser = browser_new ();
+//    Browser *browser = browser_new ();
 
-    player_activate (shell_get_player (shell));
-    playlist_activate (playlist);
-    browser_activate (browser);
+    player_activate (shell->priv->player);
+    playlist_activate (shell->priv->playlist);
+    music_activate (shell->priv->music);
+//    browser_activate (browser);
 
     shell_run (shell);
 }

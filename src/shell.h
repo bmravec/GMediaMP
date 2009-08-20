@@ -56,6 +56,8 @@ GType shell_get_type (void);
 gboolean shell_add_widget (Shell *self, GtkWidget *widget, gchar *name, gchar *icon);
 gboolean shell_remove_widget (Shell *self, gchar *name);
 
+GtkBuilder *shell_get_builder (Shell *self);
+
 gboolean shell_add_progress (Shell *self, Progress *p);
 gboolean shell_remove_progress (Shell *self, Progress *p);
 
