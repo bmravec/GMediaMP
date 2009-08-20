@@ -34,7 +34,14 @@
 enum {
     ENTRY_STATE_NONE = 0,
     ENTRY_STATE_PLAYING,
-    ENTRY_STATE_MISSING
+    ENTRY_STATE_MISSING,
+};
+
+enum {
+    MEDIA_SONG = 0,
+    MEDIA_MUSIC_VIDEO,
+    MEDIA_MOVIE,
+    MEDIA_TVSHOW,
 };
 
 G_BEGIN_DECLS
@@ -85,6 +92,9 @@ void entry_set_track (Entry *self, guint track);
 guint entry_get_state (Entry *self);
 void entry_set_state (Entry *self, guint state);
 gchar *entry_get_state_image (Entry *self);
+
+guint entry_get_media_type (Entry *self);
+void entry_set_media_type (Entry *self, guint type);
 
 G_END_DECLS
 

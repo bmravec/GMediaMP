@@ -28,9 +28,8 @@ G_DEFINE_TYPE(Entry, entry, G_TYPE_OBJECT)
 
 struct _EntryPrivate {
     GHashTable *table;
-    gchar *artist, *album, *title, *genre, *location;
-    guint track, id, duration;
-    guint state;
+    gchar *location;
+    guint id, state, type;
 };
 
 static guint signal_changed;
@@ -75,7 +74,7 @@ entry_init (Entry *self)
 
 //    self->priv->track = 0;
 //    self->priv->id = 0;
-    self->priv->duration = 0;
+//    self->priv->duration = 0;
     self->priv->state = ENTRY_STATE_NONE;
 }
 
@@ -316,4 +315,16 @@ gint
 entry_get_tag_int (Entry *self, const gchar *tag)
 {
     return *((gint*) g_hash_table_lookup (self->priv->table, tag));
+}
+
+guint
+entry_get_media_type (Entry *self)
+{
+    return self->priv->type;
+}
+
+void
+entry_set_media_type (Entry *self, guint type)
+{
+    self->priv->type = type;
 }
