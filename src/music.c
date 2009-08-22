@@ -56,9 +56,6 @@ struct _MusicPrivate {
     gint num_artists, num_albums;
 };
 
-static guint signal_add;
-static guint signal_replace;
-
 typedef gint (*MusicCompareFunc) (gpointer a, gpointer b);
 
 static void str_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
@@ -100,49 +97,6 @@ add_scroll_bars (GtkWidget *widget)
 }
 
 static void
-artist_select (GtkWidget *widget,
-               gchar *artist,
-               Music *self)
-{
-    g_print ("Artist Select: (%s)\n", artist);
-//    album_set_filter (ALBUM (self->priv->album), artist);
-//    title_set_filter (TITLE (self->priv->title), artist, "");
-}
-
-static void
-artist_replace (GtkWidget *widget,
-                gchar *artist,
-                Music *self)
-{
-    g_print ("Artist replace: (%s)\n", artist);
-}
-
-static void
-album_select (GtkWidget *widget,
-              gchar *album,
-              Music *self)
-{
-    g_print ("Album Select: (%s)\n", album);
-//    title_set_filter (TITLE (self->priv->title), NULL, album);
-}
-
-static void
-album_replace (GtkWidget *widget,
-               gchar *album,
-               Music *self)
-{
-    g_print ("Album replace: (%s)\n", album);
-}
-
-static void
-title_replace (GtkWidget *widget,
-               Entry *entry,
-               Music *self)
-{
-    g_signal_emit (G_OBJECT (self), signal_replace, 0, entry);
-}
-
-static void
 track_source_init (TrackSourceInterface *iface)
 {
     iface->get_next = music_get_next;
@@ -174,14 +128,6 @@ music_class_init (MusicClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (MusicPrivate));
 
     object_class->finalize = music_finalize;
-
-    signal_add = g_signal_new ("entry-add", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
-        G_TYPE_NONE, 1, G_TYPE_POINTER);
-
-    signal_replace = g_signal_new ("entry-replace", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
-        G_TYPE_NONE, 1, G_TYPE_POINTER);
 }
 
 static void
@@ -511,6 +457,8 @@ artist_cursor_changed (GtkTreeView *view, Music *self)
     gchar *art, *artist, *path_str = NULL;
     gboolean changed = FALSE;
 
+    gint albums = 0, tracks = 0, cnt;
+
     gtk_tree_view_get_cursor (GTK_TREE_VIEW (self->priv->artist), &path, NULL);
 
     if (path) {
@@ -525,9 +473,20 @@ artist_cursor_changed (GtkTreeView *view, Music *self)
 
             gtk_tree_model_get_iter_first (self->priv->album_store, &iter);
             while (gtk_tree_model_iter_next (self->priv->album_store, &iter)) {
+                gtk_tree_model_get (self->priv->album_store, &iter, 1, &cnt, -1);
+
+                albums++;
+                tracks += cnt;
+
                 gtk_list_store_set (GTK_LIST_STORE (self->priv->album_store),
                     &iter, 2, TRUE, -1);
             }
+
+            gchar *new_str = g_strdup_printf ("All %d Albums", albums);
+            gtk_tree_model_get_iter_first (self->priv->album_store, &iter);
+            gtk_list_store_set (GTK_LIST_STORE (self->priv->album_store), &iter,
+                0, new_str, 1, tracks, -1);
+            g_free (new_str);
         }
     } else {
         gtk_tree_model_get_iter (self->priv->artist_store, &iter, path);
@@ -541,12 +500,25 @@ artist_cursor_changed (GtkTreeView *view, Music *self)
 
             gtk_tree_model_get_iter_first (self->priv->album_store, &iter);
             while (gtk_tree_model_iter_next (self->priv->album_store, &iter)) {
-                gtk_tree_model_get (self->priv->album_store, &iter, 3, &artist, -1);
+                gtk_tree_model_get (self->priv->album_store, &iter,
+                    1, &cnt, 3, &artist, -1);
+
+                gboolean visible = !g_strcmp0 (self->priv->s_artist, artist);
+                if (visible) {
+                    albums++;
+                    tracks += cnt;
+                }
 
                 gtk_list_store_set (GTK_LIST_STORE (self->priv->album_store),
                     &iter, 2, !g_strcmp0 (self->priv->s_artist, artist), -1);
                 g_free (artist);
             }
+
+            gchar *new_str = g_strdup_printf ("All %d Albums", albums);
+            gtk_tree_model_get_iter_first (self->priv->album_store, &iter);
+            gtk_list_store_set (GTK_LIST_STORE (self->priv->album_store), &iter,
+                0, new_str, 1, tracks, -1);
+            g_free (new_str);
         }
 
         g_free (art);
