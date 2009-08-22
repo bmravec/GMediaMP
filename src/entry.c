@@ -254,6 +254,8 @@ entry_get_state_string (Entry *self)
     switch (self->priv->state) {
         case ENTRY_STATE_PLAYING:
             return GTK_STOCK_MEDIA_PLAY;
+        case ENTRY_STATE_PAUSED:
+            return GTK_STOCK_MEDIA_PAUSE;
         case ENTRY_STATE_MISSING:
             return GTK_STOCK_DIALOG_ERROR;
         default:
