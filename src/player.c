@@ -36,6 +36,9 @@ struct _PlayerPrivate {
     GstTagList *songtags;
     gdouble volume;
     guint state;
+    gdouble prev_ratio;
+
+    Entry *entry;
 
     Shell *shell;
     GtkWidget *widget;
@@ -47,7 +50,65 @@ guint signal_tag;
 guint signal_state;
 guint signal_ratio;
 
-static gdouble prev_ratio;
+static gboolean position_update (Player *self);
+static void player_set_state (Player *self, guint state);
+static gboolean player_bus_call(GstBus *bus, GstMessage *msg, Player *self);
+
+static void
+player_finalize (GObject *object)
+{
+    Player *self = PLAYER (object);
+
+    G_OBJECT_CLASS (player_parent_class)->finalize (object);
+}
+
+static void
+player_class_init (PlayerClass *klass)
+{
+    GObjectClass *object_class;
+    object_class = G_OBJECT_CLASS (klass);
+
+    g_type_class_add_private ((gpointer) klass, sizeof (PlayerPrivate));
+
+    object_class->finalize = player_finalize;
+
+    signal_eos = g_signal_new ("eos", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
+        G_TYPE_NONE, 0);
+
+    signal_tag = g_signal_new ("tag", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
+        G_TYPE_NONE, 0);
+
+    signal_state = g_signal_new ("state-changed", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__UINT,
+        G_TYPE_NONE, 1, G_TYPE_UINT);
+
+    signal_ratio = g_signal_new ("ratio-changed", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__DOUBLE,
+        G_TYPE_NONE, 1, G_TYPE_DOUBLE);
+}
+
+static void
+player_init (Player *self)
+{
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), PLAYER_TYPE, PlayerPrivate);
+
+    self->priv->pipeline = NULL;
+    self->priv->songtags = NULL;
+    self->priv->state = PLAYER_STATE_NULL;
+    self->priv->volume = 1.0;
+    self->priv->win = 0;
+
+    self->priv->widget = gtk_drawing_area_new ();
+}
+
+Player*
+player_new (int argc, char *argv[])
+{
+    gst_init (&argc, &argv);
+    return g_object_new (PLAYER_TYPE, NULL);
+}
 
 static gboolean
 position_update (Player *self)
@@ -56,12 +117,12 @@ position_update (Player *self)
     guint pos = player_get_position (self);
     gdouble new_ratio = (gdouble) pos / (gdouble) len;
 
-    if (prev_ratio != new_ratio) {
-        prev_ratio = new_ratio;
+    if (self->priv->prev_ratio != new_ratio) {
+        self->priv->prev_ratio = new_ratio;
         switch (self->priv->state) {
             case PLAYER_STATE_PLAYING:
             case PLAYER_STATE_PAUSED:
-                g_signal_emit (self, signal_ratio, 0, prev_ratio);
+                g_signal_emit (self, signal_ratio, 0, self->priv->prev_ratio);
                 break;
             default:
                 g_signal_emit (self, signal_ratio, 0, 0.0);
@@ -135,74 +196,26 @@ player_bus_call(GstBus *bus, GstMessage *msg, Player *self)
     return TRUE;
 }
 
-static void
-player_finalize (GObject *object)
-{
-    Player *self = PLAYER (object);
-
-    G_OBJECT_CLASS (player_parent_class)->finalize (object);
-}
-
-static void
-player_class_init (PlayerClass *klass)
-{
-    GObjectClass *object_class;
-    object_class = G_OBJECT_CLASS (klass);
-
-    g_type_class_add_private ((gpointer) klass, sizeof (PlayerPrivate));
-
-    object_class->finalize = player_finalize;
-
-    signal_eos = g_signal_new ("eos", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
-        G_TYPE_NONE, 0);
-
-    signal_tag = g_signal_new ("tag", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
-        G_TYPE_NONE, 0);
-
-    signal_state = g_signal_new ("state-changed", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__UINT,
-        G_TYPE_NONE, 1, G_TYPE_UINT);
-
-    signal_ratio = g_signal_new ("ratio-changed", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__DOUBLE,
-        G_TYPE_NONE, 1, G_TYPE_DOUBLE);
-}
-
-static void
-player_init (Player *self)
-{
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), PLAYER_TYPE, PlayerPrivate);
-
-    self->priv->pipeline = NULL;
-    self->priv->songtags = NULL;
-    self->priv->state = PLAYER_STATE_NULL;
-    self->priv->volume = 1.0;
-    self->priv->win = 0;
-
-    self->priv->widget = gtk_drawing_area_new ();
-}
-
-Player*
-player_new (int argc, char *argv[])
-{
-    gst_init (&argc, &argv);
-    return g_object_new (PLAYER_TYPE, NULL);
-}
-
 void
-player_load (Player *self, const gchar *uri)
+player_load (Player *self, Entry *entry)
 {
     if (self->priv->pipeline)
         player_close (self);
+
+    if (self->priv->entry) {
+        g_object_unref (self->priv->entry);
+        self->priv->entry = NULL;
+    }
+
+    self->priv->entry = entry;
+    g_object_ref (entry);
 
     self->priv->pipeline = gst_element_factory_make ("playbin", NULL);
     self->priv->vsink = gst_element_factory_make ("xvimagesink", NULL);
 
     g_object_set (self->priv->vsink, "force-aspect-ratio", TRUE, NULL);
 
-    gchar *ruri = g_strdup_printf ("file://%s", uri);
+    gchar *ruri = g_strdup_printf ("file://%s", entry_get_location (entry));
     g_object_set (G_OBJECT (self->priv->pipeline),
         "video-sink", self->priv->vsink,
         "uri", ruri,
@@ -234,6 +247,15 @@ player_close (Player *self)
         gst_tag_list_free (self->priv->songtags);
         self->priv->songtags = NULL;
     }
+
+    if (self->priv->entry) {
+        if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
+            entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
+        }
+
+        g_object_unref (self->priv->entry);
+        self->priv->entry = NULL;
+    }
 }
 
 void
@@ -243,7 +265,9 @@ player_play (Player *self)
         gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
         player_set_state (self, PLAYER_STATE_PLAYING);
 
-        g_timeout_add (1000, (GSourceFunc) position_update, self);
+        entry_set_state (self->priv->entry, ENTRY_STATE_PLAYING);
+
+        g_timeout_add (500, (GSourceFunc) position_update, self);
     }
 }
 
@@ -253,6 +277,8 @@ player_pause (Player *self)
     if (self->priv->pipeline) {
         gst_element_set_state (self->priv->pipeline, GST_STATE_PAUSED);
         player_set_state (self, PLAYER_STATE_PAUSED);
+
+        entry_set_state (self->priv->entry, ENTRY_STATE_PAUSED);
     }
 }
 
@@ -262,6 +288,8 @@ player_stop (Player *self)
     if (self->priv->pipeline) {
         gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
         player_set_state (self, PLAYER_STATE_STOPPED);
+
+        entry_set_state (self->priv->entry, ENTRY_STATE_STOPPED);
     }
 
     g_signal_emit (self, signal_ratio, 0, 0.0);

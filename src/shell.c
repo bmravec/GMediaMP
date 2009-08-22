@@ -84,23 +84,67 @@ on_destroy (GtkWidget *widget, Shell *self)
 static void
 on_ts_play (TrackSource *ts, Entry *entry, Shell *self)
 {
-    g_print ("TS_PLAY (%s,%s,%s,%s)\n",
-        entry_get_tag_str (entry, "title"),
-        entry_get_tag_str (entry, "artist"),
-        entry_get_tag_str (entry, "album"),
-        entry_get_location (entry));
-
     self->priv->playing_source = ts;
     self->priv->playing_entry = entry;
 
-    player_load (self->priv->player, entry_get_location (entry));
+    player_load (self->priv->player, entry);
     player_play (self->priv->player);
 }
 
+static gchar*
+time_to_string (gdouble time)
+{
+    gint hr, min, sec;
+
+    hr = time;
+    sec = hr % 60;
+    hr /= 60;
+    min = hr % 60;
+    hr /= 60;
+
+    if (hr > 0) {
+        return g_strdup_printf ("%d:%02d:%02d", hr, min, sec);
+    }
+
+    return g_strdup_printf ("%02d:%02d", min, sec);
+}
+
 static void
-on_ratio_changed (Player *player, gdouble ratio, Shell *self)
+on_player_ratio (Player *player, gdouble ratio, Shell *self)
 {
     g_print ("RATIO: (%f)\n", ratio);
+
+    gdouble pos = (gdouble) player_get_position (self->priv->player);
+    gdouble len = (gdouble) player_get_length (self->priv->player);
+
+    gtk_range_set_range (GTK_RANGE (self->priv->play_pos), 0.0, len);
+    gtk_range_set_value (GTK_RANGE (self->priv->play_pos), pos);
+
+    gchar *pos_str = time_to_string (pos);
+    gchar *len_str = time_to_string (len);
+
+    gchar *str = g_strdup_printf ("%s of %s", pos_str, len_str);
+    gtk_label_set_text (GTK_LABEL (self->priv->time_label), str);
+    g_free (str);
+
+    g_free (pos_str);
+    g_free (len_str);
+}
+
+static void
+on_player_eos (Player *player, Shell *self)
+{
+    if (self->priv->playing_source) {
+        Entry *ne = track_source_get_next (self->priv->playing_source);
+        if (ne) {
+            player_load (self->priv->player, ne);
+            player_play (self->priv->player);
+        } else {
+            player_close (self->priv->player);
+        }
+    } else {
+        player_close (self->priv->player);
+    }
 }
 
 static void
@@ -203,7 +247,8 @@ shell_init (Shell *self)
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->sidebar_view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
 
-    g_signal_connect (self->priv->player, "ratio-changed", G_CALLBACK (on_ratio_changed), self);
+    g_signal_connect (self->priv->player, "ratio-changed", G_CALLBACK (on_player_ratio), self);
+    g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
 
     self->priv->playing_source = NULL;
     self->priv->playing_entry = NULL;

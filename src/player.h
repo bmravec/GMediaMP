@@ -24,6 +24,8 @@
 
 #include <glib-object.h>
 
+#include "entry.h"
+
 #define PLAYER_TYPE (player_get_type ())
 #define PLAYER(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), PLAYER_TYPE, Player))
 #define PLAYER_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), PLAYER_TYPE, PlayerClass))
@@ -57,7 +59,7 @@ struct _PlayerClass {
 Player *player_new ();
 GType player_get_type (void);
 
-void player_load (Player *self, const gchar *uri);
+void player_load (Player *self, Entry *entry);
 void player_close (Player *self);
 
 void player_play (Player *self);
