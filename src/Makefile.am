@@ -7,17 +7,14 @@ gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS)
 gmediamp_SOURCES = \
     shell.c shell.h \
     plugin-manager.c plugin-manager.h \
-    album.c album.h \
-    artist.c artist.h \
-    browser.c browser.h \
-    title.c title.h \
     player.c player.h \
     entry.c entry.h \
     tray.c tray.h \
     tag-handler.c tag-handler.h \
     progress.c progress.h \
     playlist.c playlist.h \
-    music.c music.h
+    music.c music.h \
+    track-source.c track-source.h
 
 EXTRA_DIST=
 CLEANFILES=

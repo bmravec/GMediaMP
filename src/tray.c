@@ -1,18 +1,18 @@
 /*
  *      tray.c
- *      
+ *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
- *      
+ *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
  *      the Free Software Foundation; either version 2 of the License, or
  *      (at your option) any later version.
- *      
+ *
  *      This program is distributed in the hope that it will be useful,
  *      but WITHOUT ANY WARRANTY; without even the implied warranty of
  *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *      GNU General Public License for more details.
- *      
+ *
  *      You should have received a copy of the GNU General Public License
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -24,9 +24,10 @@
 #include "tray.h"
 #include "player.h"
 
-G_DEFINE_TYPE(Tray, tray, GTK_TYPE_STATUS_ICON)
+G_DEFINE_TYPE(Tray, tray, G_TYPE_OBJECT)
 
 struct _TrayPrivate {
+    GtkStatusIcon *icon;
     GtkWidget *menu;
 
     GtkWidget *play_item;
@@ -40,7 +41,7 @@ static guint signal_prev;
 static guint signal_quit;
 
 static void
-tray_activate (Tray *self, gpointer user_data)
+tray_icon_activate (Tray *self, gpointer user_data)
 {
     g_signal_emit (G_OBJECT (self), signal_toggle, 0);
 }
@@ -79,7 +80,7 @@ static void
 tray_finalize (GObject *object)
 {
     Tray *self = TRAY (object);
-    
+
     G_OBJECT_CLASS (tray_parent_class)->finalize (object);
 }
 
@@ -115,12 +116,13 @@ tray_init (Tray *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), TRAY_TYPE, TrayPrivate);
 
-    gtk_status_icon_set_from_stock (GTK_STATUS_ICON (self), GTK_STOCK_MEDIA_PLAY);
+    self->priv->icon = gtk_status_icon_new ();
+    gtk_status_icon_set_from_stock (GTK_STATUS_ICON (self->priv->icon), GTK_STOCK_MEDIA_PLAY);
 
-    g_signal_connect (G_OBJECT (self), "activate", G_CALLBACK (tray_activate), NULL);
-    g_signal_connect (G_OBJECT (self), "popup-menu", G_CALLBACK (tray_popup), NULL);
+    g_signal_connect (G_OBJECT (self->priv->icon), "activate", G_CALLBACK (tray_icon_activate), NULL);
+    g_signal_connect (G_OBJECT (self->priv->icon), "popup-menu", G_CALLBACK (tray_popup), NULL);
 
-    self->priv->menu = gtk_menu_new();
+    self->priv->menu = gtk_menu_new ();
 
     self->priv->play_item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PLAY, NULL);
     g_signal_connect (G_OBJECT (self->priv->play_item), "activate", G_CALLBACK (tray_play), self);
@@ -170,3 +172,14 @@ tray_set_state (Tray *self, gint state)
     }
 }
 
+void
+tray_activate (Tray *self)
+{
+    gtk_widget_show (GTK_WIDGET (self->priv->icon));
+}
+
+void
+tray_deactivate (Tray *self)
+{
+    gtk_widget_hide (GTK_WIDGET (self->priv->icon));
+}

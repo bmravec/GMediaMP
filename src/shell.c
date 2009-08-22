@@ -25,18 +25,18 @@
 #include "player.h"
 #include "progress.h"
 #include "playlist.h"
-#include "browser.h"
 #include "music.h"
+#include "tray.h"
+#include "track-source.h"
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
 struct _ShellPrivate {
     Player *player;
+
     Music *music;
     Playlist *playlist;
-
-    GtkWidget *nowplaying;
-    GtkWidget *browser;
+    Tray *tray;
 
     GtkBuilder *builder;
 
@@ -60,13 +60,6 @@ struct _ShellPrivate {
     GtkWidget *tb_vol;
 };
 
-const gchar *builtin_uis[] = {
-//    SHARE_DIR "ui/main.ui",
-//    SHARE_DIR "ui/browser.ui"
-    "data/ui/main.ui",
-    "data/ui/browser.ui"
-};
-
 guint signal_eos;
 guint signal_tag;
 guint signal_state;
@@ -76,6 +69,8 @@ static gdouble prev_ratio;
 static Shell *instance = NULL;
 
 static void selector_changed_cb (GtkTreeSelection *selection, Shell *self);
+static void import_file_cb (GtkMenuItem *item, Shell *self);
+static void import_dir_cb (GtkMenuItem *item, Shell *self);
 
 static void
 on_destroy (GtkWidget *widget, Shell *self)
@@ -128,6 +123,7 @@ shell_init (Shell *self)
     self->priv->player = player_new (0, NULL);
     self->priv->music = music_new ();
     self->priv->playlist = playlist_new ();
+//    self->priv->tray = tray_new ();
 
     // Load objects from main.ui
     gtk_builder_add_from_file (self->priv->builder, "data/ui/main.ui", NULL);
@@ -146,6 +142,11 @@ shell_init (Shell *self)
     self->priv->tb_play = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_play"));
     self->priv->tb_next = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_next"));
     self->priv->tb_vol = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_vol"));
+
+    // Connect signals for menu items
+    g_signal_connect (gtk_builder_get_object (self->priv->builder, "menu_quit"),"activate", G_CALLBACK (shell_quit), NULL);
+    g_signal_connect (gtk_builder_get_object (self->priv->builder, "menu_import_file"),"activate", G_CALLBACK (import_file_cb), self);
+    g_signal_connect (gtk_builder_get_object (self->priv->builder, "menu_import_directory"),"activate", G_CALLBACK (import_dir_cb), self);
 
     // Create stores and columns
     self->priv->sidebar_store = gtk_tree_store_new (3, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT);
@@ -170,8 +171,8 @@ shell_init (Shell *self)
     g_signal_connect (G_OBJECT (self->priv->window), "destroy",
         G_CALLBACK (on_destroy), self);
 
-    gtk_widget_show_all (self->priv->window);
-    gtk_widget_hide (self->priv->tb_pause);
+    gtk_widget_show (self->priv->window);
+//    gtk_widget_hide (self->priv->tb_pause);
 
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->sidebar_view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
@@ -308,6 +309,18 @@ shell_quit (Shell *self)
     gtk_main_quit ();
 }
 
+void
+shell_hide (Shell *self)
+{
+    gtk_widget_hide (self->priv->window);
+}
+
+void
+shell_show (Shell *self)
+{
+    gtk_widget_show (self->priv->window);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -325,12 +338,92 @@ main (int argc, char *argv[])
 //    shell_add_widget (shell, gtk_label_new ("IPod"), "Devices/IPod", "/usr/share/icons/picard-32.png");
 //    shell_add_widget (shell, gtk_label_new ("Music"), "Devices/IPod/Music", "/usr/share/icons/picard-32.png");
 
-//    Browser *browser = browser_new ();
-
     player_activate (shell->priv->player);
     playlist_activate (shell->priv->playlist);
     music_activate (shell->priv->music);
-//    browser_activate (browser);
 
     shell_run (shell);
+}
+
+static void
+import_file_cb (GtkMenuItem *item, Shell *self)
+{
+    GtkWidget *dialog;
+
+    dialog = gtk_file_chooser_dialog_new ("Import File",
+                    GTK_WINDOW (self->priv->window),
+                    GTK_FILE_CHOOSER_ACTION_OPEN,
+                    GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                    "Import", GTK_RESPONSE_ACCEPT,
+                    NULL);
+    if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT) {
+        gchar *filename;
+
+        filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
+
+        shell_import_path (self, filename);
+        g_free (filename);
+    }
+
+    gtk_widget_destroy (dialog);
+}
+
+static void
+import_dir_cb (GtkMenuItem *item, Shell *self)
+{
+    GtkWidget *dialog;
+
+    dialog = gtk_file_chooser_dialog_new ("Import Directory",
+                    GTK_WINDOW (self->priv->window),
+                    GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+                    GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                    "Import", GTK_RESPONSE_ACCEPT,
+                    NULL);
+    if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT) {
+        char *filename;
+
+        filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
+
+        shell_import_path (self, filename);
+
+        g_free (filename);
+    }
+
+    gtk_widget_destroy (dialog);
+}
+
+static void
+shell_import_thread_rec (Shell *self, const gchar *path)
+{
+    if (g_file_test (path, G_FILE_TEST_IS_REGULAR)) {
+//        tag_handler_add_entry (tag, path);
+        g_print ("IMPORTING: %s\n", path);
+    } else if (g_file_test (path, G_FILE_TEST_IS_DIR)) {
+        GDir *dir = g_dir_open (path, 0, NULL);
+        const gchar *entry;
+        while (entry = g_dir_read_name (dir)) {
+            gchar *new_path = g_strdup_printf ("%s/%s", path, entry);
+//            gchar *new_path = g_strjoin ("/", path, entry, NULL);
+//            import_recurse (new_path);
+            shell_import_thread_rec (self, new_path);
+            g_free (new_path);
+        }
+
+        g_dir_close (dir);
+    }
+}
+
+static gpointer
+shell_import_thread (gchar *path)
+{
+    shell_import_thread_rec (shell_new (), path);
+    g_free (path);
+}
+
+gboolean
+shell_import_path (Shell *self, const gchar *path)
+{
+    g_print ("IMPORTING: %s\n", path);
+
+    g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) g_strdup (path), FALSE, NULL);
 }

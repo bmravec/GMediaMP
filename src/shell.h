@@ -61,10 +61,15 @@ GtkBuilder *shell_get_builder (Shell *self);
 gboolean shell_add_progress (Shell *self, Progress *p);
 gboolean shell_remove_progress (Shell *self, Progress *p);
 
+gboolean shell_import_path (Shell *self, const gchar *path);
+
 Player *shell_get_player (Shell *self);
 
 void shell_run (Shell *self);
 void shell_quit (Shell *self);
+
+void shell_hide (Shell *self);
+void shell_show (Shell *self);
 
 G_END_DECLS
 

@@ -24,8 +24,12 @@
 
 #include "shell.h"
 #include "music.h"
+#include "track-source.h"
 
-G_DEFINE_TYPE(Music, music, G_TYPE_OBJECT)
+static void track_source_init (TrackSourceInterface *iface);
+G_DEFINE_TYPE_WITH_CODE (Music, music, G_TYPE_OBJECT,
+    G_IMPLEMENT_INTERFACE (TRACK_SOURCE_TYPE, track_source_init)
+)
 
 struct _MusicPrivate {
     Shell *shell;
@@ -71,6 +75,9 @@ static void title_row_activated (GtkTreeView *view, GtkTreePath *path,
 
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
     gpointer ne, MusicCompareFunc cmp, gint l, gboolean create);
+
+static Entry *music_get_next (TrackSource *self);
+static Entry *music_get_prev (TrackSource *self);
 
 static GtkWidget*
 add_scroll_bars (GtkWidget *widget)
@@ -124,6 +131,13 @@ title_replace (GtkWidget *widget,
                Music *self)
 {
     g_signal_emit (G_OBJECT (self), signal_replace, 0, entry);
+}
+
+static void
+track_source_init (TrackSourceInterface *iface)
+{
+    iface->get_next = music_get_next;
+    iface->get_prev = music_get_prev;
 }
 
 static void
@@ -297,7 +311,8 @@ music_activate (Music *self)
 
     gtk_widget_show_all (self->priv->widget);
 
-    g_thread_create ((GThreadFunc) initial_import, self, FALSE, NULL);
+//    g_thread_create ((GThreadFunc) initial_import, self, FALSE, NULL);
+    initial_import (self);
 }
 
 gboolean
@@ -373,17 +388,21 @@ music_add_entry (Music *self, Entry *entry)
         0, entry, 1, visible, -1);
 }
 
-Entry*
-music_get_next (Music *self)
+static Entry*
+music_get_next (TrackSource *self)
 {
 //    return title_get_next (TITLE (self->priv->title));
+    g_print ("MUSIC GET NEXT\n");
+
     return NULL;
 }
 
-Entry*
-music_get_prev (Music *self)
+static Entry*
+music_get_prev (TrackSource *self)
 {
 //    return title_get_prev (TITLE (self->priv->title));
+    g_print ("MUSIC GET PREV\n");
+
     return NULL;
 }
 
@@ -443,6 +462,8 @@ initial_import (Music *self)
     gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
     GPtrArray *entries = gmediadb_get_all_entries (self->priv->db, tags);
 
+    gdk_threads_enter ();
+
     int i;
     for (i = 0; i < entries->len; i++) {
         gchar **entry = g_ptr_array_index (entries, i);
@@ -457,13 +478,12 @@ initial_import (Music *self)
         entry_set_media_type (e, MEDIA_SONG);
         entry_set_location (e, entry[6]);
 
-        gdk_threads_enter ();
         music_add_entry (self, e);
-        gdk_threads_leave ();
 
         g_object_unref (G_OBJECT (e));
     }
 
+    gdk_threads_leave ();
 
     g_ptr_array_free (entries, TRUE);
 }

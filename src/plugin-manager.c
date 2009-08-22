@@ -1,5 +1,5 @@
 /*
- *      plugin-manger.c
+ *      plugin-manager.c
  *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
  *

@@ -58,9 +58,6 @@ gboolean music_deactivate (Music *self);
 void music_add_entry (Music *self, Entry *entry);
 void music_remove_entry (Music *self, guint id);
 
-Entry *music_get_next (Music *self);
-Entry *music_get_prev (Music *self);
-
 G_END_DECLS
 
 #endif /* __MUSIC_H__ */

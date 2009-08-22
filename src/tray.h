@@ -1,18 +1,18 @@
 /*
  *      tray.h
- *      
+ *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
- *      
+ *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
  *      the Free Software Foundation; either version 2 of the License, or
  *      (at your option) any later version.
- *      
+ *
  *      This program is distributed in the hope that it will be useful,
  *      but WITHOUT ANY WARRANTY; without even the implied warranty of
  *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *      GNU General Public License for more details.
- *      
+ *
  *      You should have received a copy of the GNU General Public License
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -38,13 +38,13 @@ typedef struct _TrayClass TrayClass;
 typedef struct _TrayPrivate TrayPrivate;
 
 struct _Tray {
-    GtkStatusIcon parent;
-    
+    GObject parent;
+
     TrayPrivate *priv;
 };
 
 struct _TrayClass {
-    GtkStatusIconClass parent;
+    GObjectClass parent;
 };
 
 Tray *tray_new ();
@@ -52,7 +52,9 @@ GType tray_get_type (void);
 
 void tray_set_type (Tray *self, gint state);
 
+void tray_activate (Tray *self);
+void tray_deactivate (Tray *self);
+
 G_END_DECLS
 
 #endif /* __TRAY_H__ */
-
