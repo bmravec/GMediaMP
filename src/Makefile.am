@@ -14,7 +14,8 @@ gmediamp_SOURCES = \
     progress.c progress.h \
     playlist.c playlist.h \
     music.c music.h \
-    track-source.c track-source.h
+    track-source.c track-source.h \
+    media-store.c media-store.h
 
 EXTRA_DIST=
 CLEANFILES=

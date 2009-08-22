@@ -1,5 +1,5 @@
 /*
- *      track-source.c
+ *      media-store.c
  *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
  *
@@ -19,56 +19,51 @@
  *      MA 02110-1301, USA.
  */
 
-#include "track-source.h"
-
-static guint signal_play;
+#include "media-store.h"
 
 static void
-track_source_base_init (gpointer g_iface)
+media_store_base_init (gpointer g_iface)
 {
     static gboolean initialized = FALSE;
 
     if (!initialized) {
         initialized = TRUE;
 
-        signal_play = g_signal_new ("entry-play", TRACK_SOURCE_TYPE,
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
-        G_TYPE_NONE, 1, G_TYPE_POINTER);
     }
 }
 
 GType
-track_source_get_type ()
+media_store_get_type ()
 {
     static GType object_type = 0;
     if (!object_type) {
         static const GTypeInfo object_info = {
-            sizeof(TrackSourceInterface),
-            track_source_base_init, /* base init */
+            sizeof(MediaStoreInterface),
+            media_store_base_init,  /* base init */
             NULL,                   /* base finalize */
         };
 
         object_type = g_type_register_static(G_TYPE_INTERFACE,
-            "TrackSource", &object_info, 0);
+            "MediaStore", &object_info, 0);
     }
 
     return object_type;
 }
 
-Entry*
-track_source_get_next (TrackSource *self)
+void
+media_store_add_entry (MediaStore *self, Entry *entry)
 {
-    return TRACK_SOURCE_GET_IFACE (self)->get_next (self);
-}
-
-Entry*
-track_source_get_prev (TrackSource *self)
-{
-    return TRACK_SOURCE_GET_IFACE (self)->get_prev (self);
+    MEDIA_STORE_GET_IFACE (self)->add_entry (self, entry);
 }
 
 void
-track_source_emit_play (TrackSource *self, Entry *entry)
+media_store_remove_entry (MediaStore *self, Entry *entry)
 {
-    g_signal_emit (G_OBJECT (self), signal_play, 0, entry);
+    MEDIA_STORE_GET_IFACE (self)->rem_entry (self, entry);
+}
+
+guint
+media_store_get_media_type (MediaStore *self)
+{
+    return MEDIA_STORE_GET_IFACE (self)->get_mtype (self);
 }

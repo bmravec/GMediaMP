@@ -24,11 +24,15 @@
 
 #include "shell.h"
 #include "music.h"
+
 #include "track-source.h"
+#include "media-store.h"
 
 static void track_source_init (TrackSourceInterface *iface);
+static void media_store_init (MediaStoreInterface *iface);
 G_DEFINE_TYPE_WITH_CODE (Music, music, G_TYPE_OBJECT,
-    G_IMPLEMENT_INTERFACE (TRACK_SOURCE_TYPE, track_source_init)
+    G_IMPLEMENT_INTERFACE (TRACK_SOURCE_TYPE, track_source_init);
+    G_IMPLEMENT_INTERFACE (MEDIA_STORE_TYPE, media_store_init)
 )
 
 struct _MusicPrivate {
@@ -76,8 +80,13 @@ static void title_row_activated (GtkTreeView *view, GtkTreePath *path,
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
     gpointer ne, MusicCompareFunc cmp, gint l, gboolean create);
 
+// Interface methods
 static Entry *music_get_next (TrackSource *self);
 static Entry *music_get_prev (TrackSource *self);
+
+static void music_add_entry (MediaStore *self, Entry *entry);
+static void music_remove_entry (MediaStore *self, Entry *entry);
+static guint music_get_mtype (MediaStore *self);
 
 static GtkWidget*
 add_scroll_bars (GtkWidget *widget)
@@ -138,6 +147,14 @@ track_source_init (TrackSourceInterface *iface)
 {
     iface->get_next = music_get_next;
     iface->get_prev = music_get_prev;
+}
+
+static void
+media_store_init (MediaStoreInterface *iface)
+{
+    iface->add_entry = music_add_entry;
+    iface->rem_entry = music_remove_entry;
+    iface->get_mtype = music_get_mtype;
 }
 
 static void
@@ -321,9 +338,10 @@ music_deactivate (Music *self)
 
 }
 
-void
-music_add_entry (Music *self, Entry *entry)
+static void
+music_add_entry (MediaStore *self, Entry *entry)
 {
+    MusicPrivate *priv = MUSIC (self)->priv;
     GtkTreeIter first, iter;
     gint cnt;
     gchar *new_str;
@@ -332,60 +350,72 @@ music_add_entry (Music *self, Entry *entry)
     const gchar *artist = entry_get_tag_str (entry, "artist");
     const gchar *album = entry_get_tag_str (entry, "album");
 
-    gboolean visible = (self->priv->s_artist == NULL ||
-                       !g_strcmp0 (self->priv->s_artist, artist)) &&
-                       (self->priv->s_album == NULL ||
-                       !g_strcmp0 (self->priv->s_album, album));
+    gboolean visible = (priv->s_artist == NULL ||
+                       !g_strcmp0 (priv->s_artist, artist)) &&
+                       (priv->s_album == NULL ||
+                       !g_strcmp0 (priv->s_album, album));
 
     // Add artist to view
-    res = insert_iter (GTK_LIST_STORE (self->priv->artist_store), &iter,
+    res = insert_iter (GTK_LIST_STORE (priv->artist_store), &iter,
         (gpointer) artist, (MusicCompareFunc) g_strcmp0, 1, FALSE);
 
-    gtk_tree_model_get (self->priv->artist_store, &iter, 1, &cnt, -1);
-    gtk_list_store_set (GTK_LIST_STORE (self->priv->artist_store), &iter,
+    gtk_tree_model_get (priv->artist_store, &iter, 1, &cnt, -1);
+    gtk_list_store_set (GTK_LIST_STORE (priv->artist_store), &iter,
         0, artist, 1, cnt + 1, -1);
 
-    gtk_tree_model_get_iter_first (self->priv->artist_store, &first);
-    gtk_tree_model_get (self->priv->artist_store, &first, 1, &cnt, -1);
+    gtk_tree_model_get_iter_first (priv->artist_store, &first);
+    gtk_tree_model_get (priv->artist_store, &first, 1, &cnt, -1);
 
     if (res) {
-        new_str = g_strdup_printf ("All %d Artists", ++self->priv->num_artists);
-        gtk_list_store_set (GTK_LIST_STORE (self->priv->artist_store), &first,
+        new_str = g_strdup_printf ("All %d Artists", ++priv->num_artists);
+        gtk_list_store_set (GTK_LIST_STORE (priv->artist_store), &first,
             0, new_str, 1, cnt + 1, -1);
         g_free (new_str);
     } else {
-        gtk_list_store_set (GTK_LIST_STORE (self->priv->artist_store), &first,
+        gtk_list_store_set (GTK_LIST_STORE (priv->artist_store), &first,
             1, cnt + 1, -1);
     }
 
     // Add album to view
-    res = insert_iter (GTK_LIST_STORE (self->priv->album_store), &iter,
+    res = insert_iter (GTK_LIST_STORE (priv->album_store), &iter,
         (gpointer) album, (MusicCompareFunc) g_strcmp0, 1, FALSE);
 
-    gtk_tree_model_get (self->priv->album_store, &iter, 1, &cnt, -1);
-    gtk_list_store_set (GTK_LIST_STORE (self->priv->album_store), &iter,
+    gtk_tree_model_get (priv->album_store, &iter, 1, &cnt, -1);
+    gtk_list_store_set (GTK_LIST_STORE (priv->album_store), &iter,
         0, album, 1, cnt + 1, 2, visible, 3, artist, -1);
 
     if (visible) {
-        gtk_tree_model_get_iter_first (self->priv->album_store, &first);
-        gtk_tree_model_get (self->priv->album_store, &first, 1, &cnt, -1);
+        gtk_tree_model_get_iter_first (priv->album_store, &first);
+        gtk_tree_model_get (priv->album_store, &first, 1, &cnt, -1);
 
         if (res) {
-            new_str = g_strdup_printf ("All %d Albums", ++self->priv->num_albums);
-            gtk_list_store_set (GTK_LIST_STORE (self->priv->album_store), &first,
+            new_str = g_strdup_printf ("All %d Albums", ++priv->num_albums);
+            gtk_list_store_set (GTK_LIST_STORE (priv->album_store), &first,
                 0, new_str, 1, cnt + 1, -1);
             g_free (new_str);
         } else {
-            gtk_list_store_set (GTK_LIST_STORE (self->priv->album_store), &first,
+            gtk_list_store_set (GTK_LIST_STORE (priv->album_store), &first,
                 1, cnt + 1, -1);
         }
     }
 
-    insert_iter (GTK_LIST_STORE (self->priv->title_store), &iter, entry,
+    insert_iter (GTK_LIST_STORE (priv->title_store), &iter, entry,
         (MusicCompareFunc) entry_cmp, 0, TRUE);
 
-    gtk_list_store_set (GTK_LIST_STORE (self->priv->title_store), &iter,
+    gtk_list_store_set (GTK_LIST_STORE (priv->title_store), &iter,
         0, entry, 1, visible, -1);
+}
+
+static void
+music_remove_entry (MediaStore *self, Entry *entry)
+{
+    g_print ("MUSIC REMOVE ENTRY\n");
+}
+
+static guint
+music_get_mtype (MediaStore *self)
+{
+    return MEDIA_SONG;
 }
 
 static Entry*
@@ -404,21 +434,6 @@ music_get_prev (TrackSource *self)
     g_print ("MUSIC GET PREV\n");
 
     return NULL;
-}
-
-void
-music_remove_entry (Music *self, guint id)
-{
-/*
-    Entry *e = title_remove_entry (TITLE (self->priv->title), id);
-
-    if (e) {
-        album_remove_entry (ALBUM (self->priv->album), entry_get_album (e));
-        artist_remove_entry (ARTIST (self->priv->artist), entry_get_artist (e));
-
-        g_object_unref (G_OBJECT (e));
-    }
-*/
 }
 
 static void
@@ -478,7 +493,7 @@ initial_import (Music *self)
         entry_set_media_type (e, MEDIA_SONG);
         entry_set_location (e, entry[6]);
 
-        music_add_entry (self, e);
+        music_add_entry (MEDIA_STORE (self), e);
 
         g_object_unref (G_OBJECT (e));
     }
