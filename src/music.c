@@ -52,6 +52,7 @@ struct _MusicPrivate {
 
     gchar *s_artist;
     gchar *s_album;
+    Entry *s_entry;
 
     gint num_artists, num_albums;
 };
@@ -62,7 +63,8 @@ static void str_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
     GtkTreeModel *model, GtkTreeIter *iter, gchar *data);
 static void int_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
     GtkTreeModel *model, GtkTreeIter *iter, gchar *data);
-static gpointer initial_import (Music *self);
+static void status_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
+    GtkTreeModel *model, GtkTreeIter *iter, gpointer data);
 
 static void artist_cursor_changed (GtkTreeView *view, Music *self);
 static void album_cursor_changed (GtkTreeView *view, Music *self);
@@ -74,8 +76,10 @@ static void album_row_activated (GtkTreeView *view, GtkTreePath *path,
 static void title_row_activated (GtkTreeView *view, GtkTreePath *path,
     GtkTreeViewColumn *column, Music *self);
 
+static gpointer initial_import (Music *self);
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
     gpointer ne, MusicCompareFunc cmp, gint l, gboolean create);
+static void entry_changed (Entry *entry, Music *self);
 
 // Interface methods
 static Entry *music_get_next (TrackSource *self);
@@ -140,6 +144,7 @@ music_init (Music *self)
 
     self->priv->s_artist = NULL;
     self->priv->s_album = NULL;
+    self->priv->s_entry = NULL;
 }
 
 Music*
@@ -221,8 +226,8 @@ music_activate (Music *self)
     // Create Columns for Title
     renderer = gtk_cell_renderer_pixbuf_new ();
     column = gtk_tree_view_column_new_with_attributes ("", renderer, NULL);
-//    gtk_tree_view_column_set_cell_data_func (column, renderer,
-//        (GtkTreeCellDataFunc) status_column_func, NULL, NULL);
+    gtk_tree_view_column_set_cell_data_func (column, renderer,
+        (GtkTreeCellDataFunc) status_column_func, NULL, NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->title), column);
 
     renderer = gtk_cell_renderer_text_new ();
@@ -350,6 +355,9 @@ music_add_entry (MediaStore *self, Entry *entry)
 
     gtk_list_store_set (GTK_LIST_STORE (priv->title_store), &iter,
         0, entry, 1, visible, -1);
+
+    g_signal_connect (G_OBJECT (entry), "entry-changed",
+        G_CALLBACK (entry_changed), MUSIC (self));
 }
 
 static void
@@ -367,19 +375,64 @@ music_get_mtype (MediaStore *self)
 static Entry*
 music_get_next (TrackSource *self)
 {
-//    return title_get_next (TITLE (self->priv->title));
-    g_print ("MUSIC GET NEXT\n");
+    MusicPrivate *priv = MUSIC (self)->priv;
+    GtkTreeIter iter;
+    Entry *entry;
 
-    return NULL;
+    gtk_tree_model_get_iter_first (priv->title_filter, &iter);
+    gtk_tree_model_get (priv->title_filter, &iter, 0, &entry, -1);
+
+    if (!priv->s_entry) {
+        priv->s_entry = entry;
+        return entry;
+    }
+
+    while (entry != priv->s_entry) {
+        if (!gtk_tree_model_iter_next (priv->title_filter, &iter))
+            break;
+        gtk_tree_model_get (priv->title_filter, &iter, 0, &entry, -1);
+    }
+
+    if (entry == priv->s_entry) {
+        if (!gtk_tree_model_iter_next (priv->title_filter, &iter)) {
+            priv->s_entry = NULL;
+            return NULL;
+        }
+
+        gtk_tree_model_get (priv->title_filter, &iter, 0, &entry, -1);
+        priv->s_entry = entry;
+        return entry;
+    }
+
+    gtk_tree_model_get_iter_first (priv->title_filter, &iter);
+    gtk_tree_model_get (priv->title_filter, &iter, 0, &entry, -1);
+    priv->s_entry = entry;
+    return entry;
 }
 
 static Entry*
 music_get_prev (TrackSource *self)
 {
-//    return title_get_prev (TITLE (self->priv->title));
-    g_print ("MUSIC GET PREV\n");
+    MusicPrivate *priv = MUSIC (self)->priv;
+    GtkTreeIter iter;
+    Entry *ep = NULL, *en = NULL;
 
-    return NULL;
+    if (!priv->s_entry) {
+        return NULL;
+    }
+
+    gtk_tree_model_get_iter_first (priv->title_filter, &iter);
+    gtk_tree_model_get (priv->title_filter, &iter, 0, &en, -1);
+
+    while (en != priv->s_entry) {
+        if (!gtk_tree_model_iter_next (priv->title_filter, &iter))
+            return NULL;
+        ep = en;
+        gtk_tree_model_get (priv->title_filter, &iter, 0, &en, -1);
+    }
+
+    priv->s_entry = ep;
+    return ep;
 }
 
 static void
@@ -415,6 +468,42 @@ int_column_func (GtkTreeViewColumn *column,
     } else {
         g_object_set (G_OBJECT (cell), "text", "", NULL);
     }
+}
+
+static void
+status_column_func (GtkTreeViewColumn *column,
+                    GtkCellRenderer *cell,
+                    GtkTreeModel *model,
+                    GtkTreeIter *iter,
+                    gpointer data)
+{
+    Entry *entry;
+
+    gtk_tree_model_get (model, iter, 0, &entry, -1);
+
+    g_object_set (G_OBJECT (cell),
+        "stock-id", entry_get_state_string (entry),
+        "stock-size", GTK_ICON_SIZE_MENU,
+        NULL);
+}
+
+static void
+entry_changed (Entry *entry, Music *self)
+{
+    GtkTreeIter iter;
+    Entry *e;
+
+    gtk_tree_model_get_iter_first (self->priv->title_filter, &iter);
+
+    do {
+        gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
+        if (e == entry) {
+            GtkTreePath *path = gtk_tree_model_get_path (self->priv->title_filter, &iter);
+            gtk_tree_model_row_changed (self->priv->title_filter, path, &iter);
+            gtk_tree_path_free (path);
+            return;
+        }
+    } while (gtk_tree_model_iter_next (self->priv->title_filter, &iter));
 }
 
 static gpointer
@@ -603,27 +692,8 @@ artist_row_activated (GtkTreeView *view,
                       GtkTreeViewColumn *column,
                       Music *self)
 {
-    /*
-    GtkTreeIter iter;
-    gchar *art;
-    gchar *path_str = gtk_tree_path_to_string (path);
-
-    if (!g_strcmp0 (path_str, "0")) {
-        g_signal_emit (G_OBJECT (self), signal_replace, 0, "");
-    } else {
-        gtk_tree_model_get_iter (GTK_TREE_MODEL (self->priv->store),
-            &iter, path);
-
-        gtk_tree_model_get (GTK_TREE_MODEL (self->priv->store),
-            &iter, 0, &art, -1);
-
-        g_signal_emit (G_OBJECT (self), signal_replace, 0, art);
-        g_free (art);
-    }
-
-    g_free (path_str);
-    */
-    g_print ("ARTIST-RA\n");
+    Entry *entry = music_get_next (TRACK_SOURCE (self));
+    track_source_emit_play (TRACK_SOURCE (self), entry);
 }
 
 
@@ -633,7 +703,8 @@ album_row_activated (GtkTreeView *view,
                      GtkTreeViewColumn *column,
                      Music *self)
 {
-    g_print ("ALBUM-RA\n");
+    Entry *entry = music_get_next (TRACK_SOURCE (self));
+    track_source_emit_play (TRACK_SOURCE (self), entry);
 }
 
 static void
@@ -642,7 +713,14 @@ title_row_activated (GtkTreeView *view,
                      GtkTreeViewColumn *column,
                      Music *self)
 {
-    g_print ("TITLE-RA\n");
+    GtkTreeIter iter;
+    Entry *entry;
+
+    gtk_tree_model_get_iter (self->priv->title_filter, &iter, path);
+    gtk_tree_model_get (self->priv->title_filter, &iter, 0, &entry, -1);
+
+    self->priv->s_entry = entry;
+    track_source_emit_play (TRACK_SOURCE (self), entry);
 }
 
 static gboolean

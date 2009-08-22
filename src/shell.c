@@ -44,6 +44,9 @@ struct _ShellPrivate {
 
     GtkWidget *progress_bars;
 
+    TrackSource *playing_source;
+    Entry *playing_entry;
+
     GtkWidget *window;
     GtkWidget *sidebar;
     GtkWidget *sidebar_view;
@@ -76,6 +79,28 @@ static void
 on_destroy (GtkWidget *widget, Shell *self)
 {
     shell_quit (self);
+}
+
+static void
+on_ts_play (TrackSource *ts, Entry *entry, Shell *self)
+{
+    g_print ("TS_PLAY (%s,%s,%s,%s)\n",
+        entry_get_tag_str (entry, "title"),
+        entry_get_tag_str (entry, "artist"),
+        entry_get_tag_str (entry, "album"),
+        entry_get_location (entry));
+
+    self->priv->playing_source = ts;
+    self->priv->playing_entry = entry;
+
+    player_load (self->priv->player, entry_get_location (entry));
+    player_play (self->priv->player);
+}
+
+static void
+on_ratio_changed (Player *player, gdouble ratio, Shell *self)
+{
+    g_print ("RATIO: (%f)\n", ratio);
 }
 
 static void
@@ -170,12 +195,18 @@ shell_init (Shell *self)
 
     g_signal_connect (G_OBJECT (self->priv->window), "destroy",
         G_CALLBACK (on_destroy), self);
+    g_signal_connect (G_OBJECT (self->priv->music), "entry-play", G_CALLBACK (on_ts_play), self);
 
     gtk_widget_show (self->priv->window);
 //    gtk_widget_hide (self->priv->tb_pause);
 
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->sidebar_view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
+
+    g_signal_connect (self->priv->player, "ratio-changed", G_CALLBACK (on_ratio_changed), self);
+
+    self->priv->playing_source = NULL;
+    self->priv->playing_entry = NULL;
 }
 
 Shell*
