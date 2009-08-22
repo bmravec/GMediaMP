@@ -22,19 +22,24 @@
 #include <gst/gst.h>
 #include <gtk/gtk.h>
 
+#include <gdk/gdkx.h>
+#include <gst/interfaces/xoverlay.h>
+#include <gst/video/gstvideosink.h>
+
 #include "player.h"
 #include "shell.h"
 
 G_DEFINE_TYPE(Player, player, G_TYPE_OBJECT)
 
 struct _PlayerPrivate {
-    GstElement *pipeline;
+    GstElement *pipeline, *vsink;
     GstTagList *songtags;
     gdouble volume;
     guint state;
 
     Shell *shell;
     GtkWidget *widget;
+    XID win;
 };
 
 guint signal_eos;
@@ -78,12 +83,19 @@ player_set_state (Player *self, guint state)
 }
 
 static gboolean
-player_bus_call(GstBus *bus, GstMessage *msg, gpointer user_data)
+player_bus_call(GstBus *bus, GstMessage *msg, Player *self)
 {
-    Player *self = PLAYER (user_data);
     GstTagList *taglist;
     gchar *debug;
     GError *err;
+
+    if (msg->structure && gst_structure_has_name (msg->structure, "prepare-xwindow-id")) {
+        gst_x_overlay_set_xwindow_id ((GstXOverlay*) msg->src, self->priv->win);
+        gdouble ratio = (gdouble) GST_VIDEO_SINK_WIDTH (self->priv->vsink) /
+            (gdouble) GST_VIDEO_SINK_HEIGHT (self->priv->vsink);
+        g_print ("ASPECT RATIO = %f\n", ratio);
+        return;
+    }
 
     switch (GST_MESSAGE_TYPE (msg)) {
         case GST_MESSAGE_EOS:
@@ -166,6 +178,8 @@ player_init (Player *self)
     self->priv->pipeline = NULL;
     self->priv->songtags = NULL;
     self->priv->state = PLAYER_STATE_NULL;
+    self->priv->volume = 1.0;
+    self->priv->win = 0;
 
     self->priv->widget = gtk_drawing_area_new ();
 }
@@ -178,15 +192,19 @@ player_new (int argc, char *argv[])
 }
 
 void
-player_load (Player *self, gchar *uri)
+player_load (Player *self, const gchar *uri)
 {
     if (self->priv->pipeline)
         player_close (self);
 
     self->priv->pipeline = gst_element_factory_make ("playbin", NULL);
+    self->priv->vsink = gst_element_factory_make ("xvimagesink", NULL);
+
+    g_object_set (self->priv->vsink, "force-aspect-ratio", TRUE, NULL);
 
     gchar *ruri = g_strdup_printf ("file://%s", uri);
     g_object_set (G_OBJECT (self->priv->pipeline),
+        "video-sink", self->priv->vsink,
         "uri", ruri,
         "volume", self->priv->volume,
         NULL);
@@ -195,7 +213,7 @@ player_load (Player *self, gchar *uri)
     gst_object_ref (self->priv->pipeline);
 
     GstBus *bus = gst_pipeline_get_bus (GST_PIPELINE (self->priv->pipeline));
-    gst_bus_add_watch (bus, player_bus_call, self);
+    gst_bus_add_watch (bus, (GstBusFunc) player_bus_call, self);
     gst_object_unref (bus);
 
     self->priv->songtags = gst_tag_list_new ();
@@ -321,11 +339,10 @@ gboolean
 player_activate (Player *self)
 {
     self->priv->shell = shell_new ();
-
-    shell_add_widget (self->priv->shell, gtk_label_new ("NOW PLAYING"), "Now Playing", NULL);
-//    shell_add_widget (self->priv->shell, self->priv->widget, "Now Playing", NULL);
+    shell_add_widget (self->priv->shell, self->priv->widget, "Now Playing", NULL);
 
     gtk_widget_show_all (self->priv->widget);
+    self->priv->win = GDK_WINDOW_XID (self->priv->widget->window);
 }
 
 gboolean

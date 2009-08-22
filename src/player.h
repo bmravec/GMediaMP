@@ -57,7 +57,7 @@ struct _PlayerClass {
 Player *player_new ();
 GType player_get_type (void);
 
-void player_load (Player *self, gchar *uri);
+void player_load (Player *self, const gchar *uri);
 void player_close (Player *self);
 
 void player_play (Player *self);
