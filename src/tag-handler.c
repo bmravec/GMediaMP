@@ -1,43 +1,52 @@
 /*
  *      tag-handler.c
- *      
+ *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
- *      
+ *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
  *      the Free Software Foundation; either version 2 of the License, or
  *      (at your option) any later version.
- *      
+ *
  *      This program is distributed in the hope that it will be useful,
  *      but WITHOUT ANY WARRANTY; without even the implied warranty of
  *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *      GNU General Public License for more details.
- *      
+ *
  *      You should have received a copy of the GNU General Public License
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *      MA 02110-1301, USA.
  */
 
+#include "shell.h"
+#include "progress.h"
+
 #include "tag-handler.h"
+#include "entry.h"
 
 #include <tag_c.h>
+//#include <vorbis/vorbisfile.h>
 
 G_DEFINE_TYPE(TagHandler, tag_handler, G_TYPE_OBJECT)
 
 static guint signal_add_entry;
+static guint signal_add_movie;
 
 #define TAG_HANDLER_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), TAG_HANDLER_TYPE, TagHandlerPrivate))
 
 struct _TagHandlerPrivate
 {
+    Shell *shell;
+    Progress *p;
+
+    gint total, done;
+
     GAsyncQueue *job_queue;
     GThread *job_thread;
 
     gboolean run;
 };
-
-void tag_handler_emit_add_signal (TagHandler *self, GHashTable *info);
 
 gchar *
 g_strdup0 (gchar *str)
@@ -48,47 +57,161 @@ g_strdup0 (gchar *str)
 gpointer
 tag_handler_main (TagHandler *self)
 {
-    
     const TagLib_AudioProperties *properties;
     TagLib_File *file;
     TagLib_Tag *tag;
-    GHashTable *info;
-    
+//    GHashTable *info;
+    Entry *ne;
+
     gboolean has_ref = FALSE;
-    
+
     taglib_set_strings_unicode(TRUE);
-    
+
     while (self->priv->run) {
         gchar *entry;
-        
+
+        if (self->priv->p) {
+            if (g_async_queue_length (self->priv->job_queue) == 0) {
+                shell_remove_progress (self->priv->shell, self->priv->p);
+                g_object_unref (self->priv->p);
+                self->priv->p = NULL;
+                self->priv->total = 0;
+                self->priv->done = 0;
+            } else {
+                gchar *new_str = g_strdup_printf ("%d of %d",
+                    self->priv->done, self->priv->total);
+                progress_set_text (self->priv->p, new_str);
+                progress_set_percent (self->priv->p,
+                    (gdouble) self->priv->done / (gdouble) self->priv->total);
+                g_free (new_str);
+            }
+        }
+
         entry = g_async_queue_pop (self->priv->job_queue);
-        
+
         if (!entry || !self->priv->run)
             continue;
-        
-        info = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
-        
+
+        if (!self->priv->p) {
+            self->priv->p = progress_new ("Importing...");
+            shell_add_progress (self->priv->shell, self->priv->p);
+            gchar *new_str = g_strdup_printf ("%d of %d", self->priv->done, self->priv->total);
+            progress_set_text (self->priv->p, new_str);
+            progress_set_percent (self->priv->p,
+                (gdouble) self->priv->done / (gdouble) self->priv->total);
+            g_free (new_str);
+        }
+
+//        info = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+        ne = entry_new (-1);
+
         file = taglib_file_new(entry);
-        if (!file) continue;
-        
+        if (!file) {
+            entry_set_tag_str (ne, "location", entry);
+//            g_hash_table_insert (info, g_strdup ("location"), g_strdup0 (entry));
+            gchar *title = g_path_get_basename (entry);
+            gint i = 0;
+            while (title[i++]);
+            for (;i > 0;i--) {
+                if (title[i] == '.') {
+                    title[i] = '\0';
+                    break;
+                }
+            }
+
+            if (i == 0) {
+                g_free (title);
+//                g_hash_table_unref (info);
+                g_object_unref (ne);
+                continue;
+            }
+
+//            g_hash_table_insert (info, g_strdup ("title"), title);
+            entry_set_tag_str (ne, "title", title);
+
+            gchar *ext = &title[i+1];
+
+            if (!g_strcmp0 (ext, "ogg") || !g_strcmp0 (ext, "ogv") ||
+                !g_strcmp0 (ext, "avi") || !g_strcmp0 (ext, "mov") ||
+                !g_strcmp0 (ext, "mp4") || !g_strcmp0 (ext, "m4v") ||
+                !g_strcmp0 (ext, "mkv") || !g_strcmp0 (ext, "ogm")) {
+//                g_signal_emit (self, signal_add_movie, 0, info);
+                g_signal_emit (self, signal_add_movie, 0, ne);
+            }
+
+            self->priv->done++;
+
+            g_object_unref (ne);
+//            g_hash_table_unref (info);
+//            info = NULL;
+            ne = NULL;
+            continue;
+        }
+
+/*
+        OggVorbis_File vf;
+        ov_fopen (entry, &vf);
+
+        vorbis_comment *vc = ov_comment (&vf, -1);
+        if (vc) {
+            gint num;
+            for (num = 0; num < vc->comments; num++) {
+                gchar **strs = g_strsplit (vc->user_comments[num], "=", 2);
+                g_hash_table_insert (info,
+                    g_strdup (strs[0]),
+                    g_strdup (strs[1]));
+                g_strfreev (strs);
+            }
+        }
+*/
         tag = taglib_file_tag(file);
         properties = taglib_file_audioproperties(file);
-        
+
+/*
         g_hash_table_insert (info, g_strdup ("artist"), g_strdup0 (taglib_tag_artist (tag)));
         g_hash_table_insert (info, g_strdup ("title"), g_strdup0 (taglib_tag_title (tag)));
         g_hash_table_insert (info, g_strdup ("album"), g_strdup0 (taglib_tag_album (tag)));
         g_hash_table_insert (info, g_strdup ("comment"), g_strdup0 (taglib_tag_comment (tag)));
         g_hash_table_insert (info, g_strdup ("genre"), g_strdup0 (taglib_tag_genre (tag)));
-        g_hash_table_insert (info, g_strdup ("year"), g_strdup_printf ("%d",taglib_tag_year (tag))); 
-        g_hash_table_insert (info, g_strdup ("track"), g_strdup_printf ("%d",taglib_tag_track (tag))); 
+        g_hash_table_insert (info, g_strdup ("year"), g_strdup_printf ("%d",taglib_tag_year (tag)));
+        g_hash_table_insert (info, g_strdup ("track"), g_strdup_printf ("%d",taglib_tag_track (tag)));
         g_hash_table_insert (info, g_strdup ("duration"), g_strdup_printf ("%d", taglib_audioproperties_length (properties)));
         g_hash_table_insert (info, g_strdup ("location"), g_strdup0 (entry));
-        
-        tag_handler_emit_add_signal (self, info);
-        
+
+        g_signal_emit (self, signal_add_entry, 0, info);
+
         g_hash_table_unref (info);
         info = NULL;
-        
+*/
+
+        entry_set_tag_str (ne, "artist", taglib_tag_artist (tag));
+        entry_set_tag_str (ne, "title", taglib_tag_title (tag));
+        entry_set_tag_str (ne, "album", taglib_tag_album (tag));
+        entry_set_tag_str (ne, "comment", taglib_tag_comment (tag));
+        entry_set_tag_str (ne, "genre", taglib_tag_genre (tag));
+
+        gchar *year = g_strdup_printf ("%d", taglib_tag_year (tag));
+        entry_set_tag_str (ne, "year", year);
+        g_free (year);
+
+        gchar *track = g_strdup_printf ("%d",taglib_tag_track (tag));
+        entry_set_tag_str (ne, "track", track);
+        g_free (track);
+
+        gchar *duration = g_strdup_printf ("%d", taglib_audioproperties_length (properties));
+        entry_set_tag_str (ne, "duration", duration);
+        g_free (duration);
+
+        entry_set_tag_str (ne, "location", entry);
+
+        g_signal_emit (self, signal_add_entry, 0, ne);
+
+//        g_hash_table_unref (ne);
+        g_object_unref (ne);
+        ne = NULL;
+
+        self->priv->done++;
+
         taglib_tag_free_strings();
         taglib_file_free(file);
     }
@@ -98,9 +221,9 @@ static void
 tag_handler_finalize (GObject *object)
 {
     TagHandler *self = TAG_HANDLER (object);
-    
+
     self->priv->run = FALSE;
-    
+
     while (g_async_queue_length (self->priv->job_queue) > 0) {
         gchar *str = g_async_queue_try_pop (self->priv->job_queue);
         if (str) {
@@ -108,13 +231,13 @@ tag_handler_finalize (GObject *object)
             g_free (str);
         }
     }
-    
+
     g_async_queue_push (self->priv->job_queue, "");
-    
+
     g_thread_join (self->priv->job_thread);
-    
+
     g_async_queue_unref (self->priv->job_queue);
-    
+
     G_OBJECT_CLASS (tag_handler_parent_class)->finalize (object);
 }
 
@@ -123,46 +246,59 @@ tag_handler_class_init (TagHandlerClass *klass)
 {
     GObjectClass *object_class;
     object_class = G_OBJECT_CLASS (klass);
-    
+
     g_type_class_add_private ((gpointer) klass, sizeof (TagHandlerPrivate));
-    
+
     object_class->finalize = tag_handler_finalize;
-    
+
     signal_add_entry = g_signal_new ("add-entry", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__BOXED,
-        G_TYPE_NONE, 1, G_TYPE_HASH_TABLE);
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__OBJECT,
+        G_TYPE_NONE, 1, ENTRY_TYPE);
+
+    signal_add_movie = g_signal_new ("add-movie", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__OBJECT,
+        G_TYPE_NONE, 1, ENTRY_TYPE);
 }
 
 static void
 tag_handler_init (TagHandler *self)
 {
     self->priv = TAG_HANDLER_GET_PRIVATE (self);
-    
+
     self->priv->job_queue = g_async_queue_new ();
     self->priv->run = TRUE;
-    self->priv->job_thread =
-        g_thread_create ((GThreadFunc) tag_handler_main, self, TRUE, NULL);
+
+    self->priv->shell = NULL;
+    self->priv->p = NULL;
 }
 
 TagHandler *
 tag_handler_new ()
 {
     TagHandler *self = g_object_new (TAG_HANDLER_TYPE, NULL);
-    
+
     return self;
 }
 
-void
-tag_handler_emit_add_signal (TagHandler *self, GHashTable *info)
+gboolean
+tag_handler_activate (TagHandler *self)
 {
-    GHashTableIter iter;
-    gpointer key, value;
-    g_signal_emit (self, signal_add_entry, 0, info);
+    self->priv->shell = shell_new ();
+
+    self->priv->job_thread =
+        g_thread_create ((GThreadFunc) tag_handler_main, self, TRUE, NULL);
+}
+
+gboolean
+tag_handler_deactivate (TagHandler *self)
+{
+
 }
 
 void
 tag_handler_add_entry (TagHandler *self, const gchar *location)
 {
     g_async_queue_push (self->priv->job_queue, g_strdup (location));
-}
 
+    self->priv->total++;
+}

@@ -66,15 +66,7 @@ entry_init (Entry *self)
 
     self->priv->table = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
 
-//    self->priv->artist = "";
-//    self->priv->album = "";
-//    self->priv->title = "";
-//    self->priv->genre = "";
     self->priv->location = "";
-
-//    self->priv->track = 0;
-//    self->priv->id = 0;
-//    self->priv->duration = 0;
     self->priv->state = ENTRY_STATE_NONE;
 }
 
@@ -86,30 +78,6 @@ entry_new (guint id)
     self->priv->id = id;
 
     return self;
-}
-
-const gchar*
-entry_get_artist (Entry *self)
-{
-    return entry_get_tag_str (self, "artist");
-}
-
-const gchar*
-entry_get_album (Entry *self)
-{
-    return entry_get_tag_str (self, "album");
-}
-
-const gchar*
-entry_get_title (Entry *self)
-{
-    return entry_get_tag_str (self, "title");
-}
-
-const gchar*
-entry_get_genre (Entry *self)
-{
-    return entry_get_tag_str (self, "genre");
 }
 
 const gchar*
@@ -149,46 +117,6 @@ entry_get_art (Entry *self)
 }
 
 void
-entry_set_artist (Entry *self, const gchar *artist)
-{
-    if (!artist || strlen (artist) == 0) {
-        entry_set_tag_str (self, "artist", "");
-    } else {
-        entry_set_tag_str (self, "artist", artist);
-    }
-}
-
-void
-entry_set_album (Entry *self, const gchar *album)
-{
-    if (!album || strlen (album) == 0) {
-        entry_set_tag_str (self, "album", "");
-    } else {
-        entry_set_tag_str (self, "album", album);
-    }
-}
-
-void
-entry_set_title (Entry *self, const gchar *title)
-{
-    if (!title || strlen (title) == 0) {
-        entry_set_tag_str (self, "title", "");
-    } else {
-        entry_set_tag_str (self, "title", title);
-    }
-}
-
-void
-entry_set_genre (Entry *self, const gchar *genre)
-{
-    if (!genre || strlen (genre) == 0) {
-        entry_set_tag_str (self, "genre", "");
-    } else {
-        entry_set_tag_str (self, "genre", genre);
-    }
-}
-
-void
 entry_set_location (Entry *self, const gchar *location)
 {
     if (self->priv->location && strlen (self->priv->location) != 0) {
@@ -210,28 +138,10 @@ entry_get_id (Entry *self)
     return self->priv->id;
 }
 
-guint
-entry_get_duration (Entry *self)
-{
-    return entry_get_tag_int (self, "duration");
-}
-
-guint
-entry_get_track (Entry *self)
-{
-    return entry_get_tag_int (self, "track");
-}
-
 void
-entry_set_duration (Entry *self, guint duration)
+entry_set_id (Entry *self, guint id)
 {
-    entry_set_tag_int (self, "duration", duration);
-}
-
-void
-entry_set_track (Entry *self, guint track)
-{
-    entry_set_tag_int (self, "track", track);
+    self->priv->id = id;
 }
 
 guint
@@ -272,18 +182,18 @@ entry_cmp (Entry *self, Entry *e)
     if (self->priv->id == e->priv->id)
         return 0;
 
-    res = g_strcmp0 (entry_get_artist (self), entry_get_artist (e));
+    res = g_strcmp0 (entry_get_tag_str (self, "artist"), entry_get_tag_str (e, "artist"));
     if (res != 0)
         return res;
 
-    res = g_strcmp0 (entry_get_album (self), entry_get_album (e));
+    res = g_strcmp0 (entry_get_tag_str (self, "album"), entry_get_tag_str (e, "album"));
     if (res != 0)
         return res;
 
-    if (entry_get_track (e) != entry_get_track (self))
-        return entry_get_track (self) - entry_get_track (e);
+    if (entry_get_tag_int (e, "track") != entry_get_tag_int (self, "track"))
+        return entry_get_tag_int (self, "track") - entry_get_tag_int (e, "track");
 
-    res = g_strcmp0 (entry_get_title (self), entry_get_title (e));
+    res = g_strcmp0 (entry_get_tag_str (self, "title"), entry_get_tag_str (e, "title"));
     if (res != 0)
         return res;
 
@@ -331,4 +241,28 @@ void
 entry_set_media_type (Entry *self, guint type)
 {
     self->priv->type = type;
+}
+
+guint
+entry_get_key_value_pairs (Entry *self, gchar ***keys, gchar ***vals)
+{
+    guint size = g_hash_table_size (self->priv->table);
+    gchar **tkeys = g_new0 (gchar*, size+1);
+    gchar **tvals = g_new0 (gchar*, size+1);
+    gint i;
+
+    GList *lkeys = g_hash_table_get_keys (self->priv->table);
+    for (i = 0; i < size; i++)
+        tkeys[i] = g_strdup ((gchar*) g_list_nth_data (lkeys, i));
+    g_list_free (lkeys);
+
+    GList *lvals = g_hash_table_get_values (self->priv->table);
+    for (i = 0; i < size; i++)
+        tvals[i] = g_strdup ((gchar*) g_list_nth_data (lvals, i));
+    g_list_free (lvals);
+
+    *keys = tkeys;
+    *vals = tvals;
+
+    return size;
 }

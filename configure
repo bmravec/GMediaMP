@@ -3413,16 +3413,16 @@ if test -n "$PROG_CFLAGS"; then
     pkg_cv_PROG_CFLAGS="$PROG_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= \$DBUS_REQUIRED
     dbus-glib-1 >= \$DBUS_REQUIRED\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED") 2>&5
   ac_status=$?
   $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_PROG_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+  pkg_cv_PROG_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED" 2>/dev/null`
 else
@@ -3435,16 +3435,16 @@ if test -n "$PROG_LIBS"; then
     pkg_cv_PROG_LIBS="$PROG_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= \$DBUS_REQUIRED
     dbus-glib-1 >= \$DBUS_REQUIRED\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED") 2>&5
   ac_status=$?
   $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_PROG_LIBS=`$PKG_CONFIG --libs "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+  pkg_cv_PROG_LIBS=`$PKG_CONFIG --libs "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED" 2>/dev/null`
 else
@@ -3464,18 +3464,18 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        PROG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+	        PROG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED" 2>&1`
         else
-	        PROG_PKG_ERRORS=`$PKG_CONFIG --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+	        PROG_PKG_ERRORS=`$PKG_CONFIG --print-errors "glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$PROG_PKG_ERRORS" >&5
 
-	as_fn_error "Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c
+	as_fn_error "Package requirements (glib-2.0 gthread-2.0 gstreamer-0.10 gstreamer-interfaces-0.10 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED) were not met:
 

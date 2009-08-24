@@ -110,13 +110,16 @@ progress_get_widget (Progress *self)
 void
 progress_set_text (Progress *self, const gchar *text)
 {
-    gtk_progress_bar_set_text (GTK_PROGRESS_BAR (self->priv->progress_bar),
-        text);
+    gdk_threads_enter ();
+    gtk_progress_bar_set_text (GTK_PROGRESS_BAR (self->priv->progress_bar), text);
+    gdk_threads_leave ();
 }
 
 void
 progress_set_percent (Progress *self, gdouble frac)
 {
+    gdk_threads_enter ();
     gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (self->priv->progress_bar),
         frac);
+    gdk_threads_leave ();
 }

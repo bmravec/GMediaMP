@@ -26,8 +26,10 @@
 #include "progress.h"
 #include "playlist.h"
 #include "music.h"
+#include "tag-handler.h"
 #include "tray.h"
 #include "track-source.h"
+#include "media-store.h"
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
@@ -37,6 +39,7 @@ struct _ShellPrivate {
     Music *music;
     Playlist *playlist;
     Tray *tray;
+    TagHandler *tag_handler;
 
     GtkBuilder *builder;
 
@@ -74,6 +77,14 @@ static Shell *instance = NULL;
 static void selector_changed_cb (GtkTreeSelection *selection, Shell *self);
 static void import_file_cb (GtkMenuItem *item, Shell *self);
 static void import_dir_cb (GtkMenuItem *item, Shell *self);
+static void import_music_tag_cb (TagHandler *th, Entry *ne, Shell *self);
+static void import_movie_tag_cb (TagHandler *th, Entry *ne, Shell *self);
+
+static void play_cb (GtkWidget *widget, Shell *self);
+static void pause_cb (GtkWidget *widget, Shell *self);
+static void stop_cb (GtkWidget *widget, Shell *self);
+static void prev_cb (GtkWidget *widget, Shell *self);
+static void next_cb (GtkWidget *widget, Shell *self);
 
 static void
 on_destroy (GtkWidget *widget, Shell *self)
@@ -85,13 +96,16 @@ static void
 on_ts_play (TrackSource *ts, Entry *entry, Shell *self)
 {
     self->priv->playing_source = ts;
+    g_object_ref (self->priv->playing_source);
+
     self->priv->playing_entry = entry;
+    g_object_ref (self->priv->playing_entry);
 
     player_load (self->priv->player, entry);
     player_play (self->priv->player);
 }
 
-static gchar*
+gchar*
 time_to_string (gdouble time)
 {
     gint hr, min, sec;
@@ -112,13 +126,16 @@ time_to_string (gdouble time)
 static void
 on_player_ratio (Player *player, gdouble ratio, Shell *self)
 {
-    g_print ("RATIO: (%f)\n", ratio);
-
     gdouble pos = (gdouble) player_get_position (self->priv->player);
     gdouble len = (gdouble) player_get_length (self->priv->player);
 
-    gtk_range_set_range (GTK_RANGE (self->priv->play_pos), 0.0, len);
-    gtk_range_set_value (GTK_RANGE (self->priv->play_pos), pos);
+    if (len > 0.0) {
+        gtk_range_set_range (GTK_RANGE (self->priv->play_pos), 0.0, len);
+        gtk_range_set_value (GTK_RANGE (self->priv->play_pos), pos);
+    } else {
+        gtk_range_set_range (GTK_RANGE (self->priv->play_pos), 0.0, 1.0);
+        gtk_range_set_value (GTK_RANGE (self->priv->play_pos), 0.0);
+    }
 
     gchar *pos_str = time_to_string (pos);
     gchar *len_str = time_to_string (len);
@@ -193,6 +210,7 @@ shell_init (Shell *self)
     self->priv->music = music_new ();
     self->priv->playlist = playlist_new ();
 //    self->priv->tray = tray_new ();
+    self->priv->tag_handler = tag_handler_new ();
 
     // Load objects from main.ui
     gtk_builder_add_from_file (self->priv->builder, "data/ui/main.ui", NULL);
@@ -237,9 +255,17 @@ shell_init (Shell *self)
 
     gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->sidebar_view), column);
 
-    g_signal_connect (G_OBJECT (self->priv->window), "destroy",
-        G_CALLBACK (on_destroy), self);
-    g_signal_connect (G_OBJECT (self->priv->music), "entry-play", G_CALLBACK (on_ts_play), self);
+    g_signal_connect (self->priv->window, "destroy", G_CALLBACK (on_destroy), self);
+    g_signal_connect (self->priv->tb_prev, "clicked", G_CALLBACK (prev_cb), self);
+    g_signal_connect (self->priv->tb_next, "clicked", G_CALLBACK (next_cb), self);
+    g_signal_connect (self->priv->tb_pause, "clicked", G_CALLBACK (pause_cb), self);
+    g_signal_connect (self->priv->tb_play, "clicked", G_CALLBACK (play_cb), self);
+    g_signal_connect (self->priv->tb_stop, "clicked", G_CALLBACK (stop_cb), self);
+
+    g_signal_connect (self->priv->music, "entry-play", G_CALLBACK (on_ts_play), self);
+
+    g_signal_connect (self->priv->tag_handler, "add-entry", G_CALLBACK (import_music_tag_cb), self);
+    g_signal_connect (self->priv->tag_handler, "add-movie", G_CALLBACK (import_movie_tag_cb), self);
 
     gtk_widget_show (self->priv->window);
 //    gtk_widget_hide (self->priv->tb_pause);
@@ -342,13 +368,17 @@ shell_remove_widget (Shell *self, gchar *name)
 gboolean
 shell_add_progress (Shell *self, Progress *p)
 {
+    gdk_threads_enter ();
     gtk_box_pack_start (GTK_BOX (self->priv->progress_bars), progress_get_widget (p), FALSE, FALSE, 0);
+    gdk_threads_leave ();
 }
 
 gboolean
 shell_remove_progress (Shell *self, Progress *p)
 {
+    gdk_threads_enter ();
     gtk_container_remove (GTK_CONTAINER (self->priv->progress_bars), progress_get_widget (p));
+    gdk_threads_leave ();
 }
 
 static void
@@ -376,7 +406,9 @@ shell_get_builder (Shell *self)
 void
 shell_run (Shell *self)
 {
+    gdk_threads_enter ();
     gtk_main ();
+    gdk_threads_leave ();
 }
 
 void
@@ -407,16 +439,10 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
-//    shell_add_widget (shell, gtk_label_new ("Library"), "Library", "/usr/share/icons/picard-32.png");
-//    shell_add_widget (shell, gtk_label_new ("Music"), "Library/Music", "/usr/share/icons/picard-32.png");
-//    shell_add_widget (shell, gtk_label_new ("Music Videos"), "Library/Music Videos", "/usr/share/icons/picard-32.png");
-//    shell_add_widget (shell, gtk_label_new ("Devices"), "Devices", "/usr/share/icons/picard-32.png");
-//    shell_add_widget (shell, gtk_label_new ("IPod"), "Devices/IPod", "/usr/share/icons/picard-32.png");
-//    shell_add_widget (shell, gtk_label_new ("Music"), "Devices/IPod/Music", "/usr/share/icons/picard-32.png");
-
     player_activate (shell->priv->player);
     playlist_activate (shell->priv->playlist);
     music_activate (shell->priv->music);
+    tag_handler_activate (shell->priv->tag_handler);
 
     shell_run (shell);
 }
@@ -472,7 +498,7 @@ static void
 shell_import_thread_rec (Shell *self, const gchar *path)
 {
     if (g_file_test (path, G_FILE_TEST_IS_REGULAR)) {
-//        tag_handler_add_entry (tag, path);
+        tag_handler_add_entry (self->priv->tag_handler, path);
         g_print ("IMPORTING: %s\n", path);
     } else if (g_file_test (path, G_FILE_TEST_IS_DIR)) {
         GDir *dir = g_dir_open (path, 0, NULL);
@@ -502,4 +528,93 @@ shell_import_path (Shell *self, const gchar *path)
     g_print ("IMPORTING: %s\n", path);
 
     g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) g_strdup (path), FALSE, NULL);
+}
+
+static void
+import_music_tag_cb (TagHandler *th, Entry *entry, Shell *self)
+{
+    media_store_add_entry (MEDIA_STORE (self->priv->music), entry);
+}
+
+static void
+import_movie_tag_cb (TagHandler *th, Entry *entry, Shell *self)
+{
+
+}
+
+static void
+play_cb (GtkWidget *widget, Shell *self)
+{
+    if (self->priv->playing_entry) {
+        player_play (self->priv->player);
+    } else if (self->priv->playing_source) {
+        Entry *ne = track_source_get_next (self->priv->playing_source);
+        if (ne) {
+            player_load (self->priv->player, ne);
+            player_play (self->priv->player);
+
+            self->priv->playing_entry = ne;
+            g_object_ref (ne);
+        }
+    }
+}
+
+static void
+pause_cb (GtkWidget *widget, Shell *self)
+{
+    player_pause (self->priv->player);
+}
+
+static void
+stop_cb (GtkWidget *widget, Shell *self)
+{
+    player_stop (self->priv->player);
+}
+
+static void
+prev_cb (GtkWidget *widget, Shell *self)
+{
+    if (!self->priv->playing_source || !self->priv->playing_entry) {
+        return;
+    }
+
+    if (self->priv->playing_entry) {
+        g_object_unref (self->priv->playing_entry);
+        self->priv->playing_entry = NULL;
+    }
+
+    Entry *ne = track_source_get_prev (self->priv->playing_source);
+    if (ne) {
+        player_load (self->priv->player, ne);
+        player_play (self->priv->player);
+
+        self->priv->playing_entry = ne;
+        g_object_ref (self->priv->playing_entry);
+    } else {
+        player_close (self->priv->player);
+    }
+}
+
+static void
+next_cb (GtkWidget *widget, Shell *self)
+{
+    if (!self->priv->playing_source || !self->priv->playing_entry) {
+        return;
+    }
+
+    if (self->priv->playing_entry) {
+        g_object_unref (self->priv->playing_entry);
+        self->priv->playing_entry = NULL;
+    }
+
+    Entry *ne = track_source_get_next (self->priv->playing_source);
+    if (ne) {
+        player_load (self->priv->player, ne);
+        player_play (self->priv->player);
+
+        self->priv->playing_entry = ne;
+        g_object_ref (self->priv->playing_entry);
+    } else {
+        player_close (self->priv->player);
+    }
 }

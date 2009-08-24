@@ -65,6 +65,8 @@ static void int_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
     GtkTreeModel *model, GtkTreeIter *iter, gchar *data);
 static void status_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
     GtkTreeModel *model, GtkTreeIter *iter, gpointer data);
+static void time_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
+    GtkTreeModel *model, GtkTreeIter *iter, gchar *data);
 
 static void artist_cursor_changed (GtkTreeView *view, Music *self);
 static void album_cursor_changed (GtkTreeView *view, Music *self);
@@ -85,9 +87,15 @@ static void entry_changed (Entry *entry, Music *self);
 static Entry *music_get_next (TrackSource *self);
 static Entry *music_get_prev (TrackSource *self);
 
+static void music_insert_entry (Music *self, Entry *entry);
 static void music_add_entry (MediaStore *self, Entry *entry);
 static void music_remove_entry (MediaStore *self, Entry *entry);
 static guint music_get_mtype (MediaStore *self);
+
+// Signals from GMediaDB
+static void music_gmediadb_add (GMediaDB *db, guint id, Music *self);
+static void music_gmediadb_remove (GMediaDB *db, guint id, Music *self);
+static void music_gmediadb_update (GMediaDB *db, guint id, Music *self);
 
 static GtkWidget*
 add_scroll_bars (GtkWidget *widget)
@@ -263,7 +271,7 @@ music_activate (Music *self)
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Time", renderer, NULL);
     gtk_tree_view_column_set_cell_data_func (column, renderer,
-        (GtkTreeCellDataFunc) int_column_func, "duration", NULL);
+        (GtkTreeCellDataFunc) time_column_func, "duration", NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->title), column);
 
     // Connect Signals
@@ -273,6 +281,10 @@ music_activate (Music *self)
     g_signal_connect (G_OBJECT (self->priv->artist), "row-activated", G_CALLBACK (artist_row_activated), self);
     g_signal_connect (G_OBJECT (self->priv->album), "row-activated", G_CALLBACK (album_row_activated), self);
     g_signal_connect (G_OBJECT (self->priv->title), "row-activated", G_CALLBACK (title_row_activated), self);
+
+    g_signal_connect (self->priv->db, "add-entry", G_CALLBACK (music_gmediadb_add), self);
+    g_signal_connect (self->priv->db, "remove-entry", G_CALLBACK (music_gmediadb_remove), self);
+    g_signal_connect (self->priv->db, "update-entry", G_CALLBACK (music_gmediadb_update), self);
 
     shell_add_widget (self->priv->shell, gtk_label_new ("Library"), "Library", NULL);
     shell_add_widget (self->priv->shell, self->priv->widget, "Library/Music", NULL);
@@ -293,6 +305,29 @@ static void
 music_add_entry (MediaStore *self, Entry *entry)
 {
     MusicPrivate *priv = MUSIC (self)->priv;
+
+    gchar **keys, **vals;
+
+    guint size = entry_get_key_value_pairs (entry, &keys, &vals);
+
+/*
+    g_print ("ADDED MUSIC\n");
+    gint i;
+    for (i = 0; i < size; i++) {
+        g_print ("%s: %s\n", keys[i], vals[i]);
+    }
+    g_print ("-----------\n");
+*/
+    gmediadb_add_entry (priv->db, keys, vals);
+
+    g_strfreev (keys);
+    g_strfreev (vals);
+}
+
+static void
+music_insert_entry (Music *self, Entry *entry)
+{
+    MusicPrivate *priv = self->priv;
     GtkTreeIter first, iter;
     gint cnt;
     gchar *new_str;
@@ -463,8 +498,28 @@ int_column_func (GtkTreeViewColumn *column,
 
     gtk_tree_model_get (model, iter, 0, &entry, -1);
     if (entry) {
-        g_object_set (G_OBJECT (cell), "text",
-            g_strdup_printf ("%d", entry_get_tag_int (entry, data)), NULL);
+        gchar *str = g_strdup_printf ("%d", entry_get_tag_int (entry, data));
+        g_object_set (G_OBJECT (cell), "text", str, NULL);
+        g_free (str);
+    } else {
+        g_object_set (G_OBJECT (cell), "text", "", NULL);
+    }
+}
+
+static void
+time_column_func (GtkTreeViewColumn *column,
+                  GtkCellRenderer *cell,
+                  GtkTreeModel *model,
+                  GtkTreeIter *iter,
+                  gchar *data)
+{
+    Entry *entry;
+
+    gtk_tree_model_get (model, iter, 0, &entry, -1);
+    if (entry) {
+        gchar *str = time_to_string ((gdouble) entry_get_tag_int (entry, data));
+        g_object_set (G_OBJECT (cell), "text", str, NULL);
+        g_free (str);
     } else {
         g_object_set (G_OBJECT (cell), "text", "", NULL);
     }
@@ -512,8 +567,6 @@ initial_import (Music *self)
     gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
     GPtrArray *entries = gmediadb_get_all_entries (self->priv->db, tags);
 
-    gdk_threads_enter ();
-
     int i;
     for (i = 0; i < entries->len; i++) {
         gchar **entry = g_ptr_array_index (entries, i);
@@ -528,12 +581,10 @@ initial_import (Music *self)
         entry_set_media_type (e, MEDIA_SONG);
         entry_set_location (e, entry[6]);
 
-        music_add_entry (MEDIA_STORE (self), e);
+        music_insert_entry (self, e);
 
         g_object_unref (G_OBJECT (e));
     }
-
-    gdk_threads_leave ();
 
     g_ptr_array_free (entries, TRUE);
 }
@@ -798,4 +849,40 @@ insert_iter (GtkListStore *store,
     }
 
     return FALSE;
+}
+
+static void
+music_gmediadb_add (GMediaDB *db, guint id, Music *self)
+{
+    gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
+    gchar **entry = gmediadb_get_entry (self->priv->db, id, tags);
+
+    Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
+    entry_set_tag_str (e, "artist", entry[1] ? entry[1] : "");
+    entry_set_tag_str (e, "album", entry[2] ? entry[2] : "");
+    entry_set_tag_str (e, "title", entry[3] ? entry[3] : "");
+
+    entry_set_tag_int (e, "duration", entry[4] ? atoi (entry[4]) : 0);
+    entry_set_tag_int (e, "track", entry[5] ? atoi (entry[5]) : 0);
+
+    entry_set_media_type (e, MEDIA_SONG);
+    entry_set_location (e, entry[6]);
+
+    gdk_threads_enter ();
+    music_insert_entry (self, e);
+    gdk_threads_leave ();
+
+    g_object_unref (G_OBJECT (e));
+}
+
+static void
+music_gmediadb_remove (GMediaDB *db, guint id, Music *self)
+{
+
+}
+
+static void
+music_gmediadb_update (GMediaDB *db, guint id, Music *self)
+{
+
 }

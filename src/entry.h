@@ -62,8 +62,11 @@ struct _EntryClass {
     GObjectClass parent;
 };
 
-Entry *entry_new (guint id);
 GType entry_get_type (void);
+
+Entry *entry_new (guint id);
+guint entry_get_id (Entry *self);
+void entry_set_id (Entry *self, guint id);
 
 void entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value);
 void entry_set_tag_int (Entry *self, const gchar *tag, gint value);
@@ -73,23 +76,10 @@ gint entry_get_tag_int (Entry *self, const gchar *tag);
 
 gint entry_cmp (Entry *self, Entry *e);
 
-const gchar *entry_get_artist (Entry *self);
-const gchar *entry_get_album (Entry *self);
-const gchar *entry_get_title (Entry *self);
-const gchar *entry_get_genre (Entry *self);
 const gchar *entry_get_location (Entry *self);
-gchar *entry_get_art (Entry *self);
-guint entry_get_id (Entry *self);
-guint entry_get_duration (Entry *self);
-guint entry_get_track (Entry *self);
-
-void entry_set_artist (Entry *self, const gchar *artist);
-void entry_set_album (Entry *self, const gchar *album);
-void entry_set_title (Entry *self, const gchar *title);
-void entry_set_genre (Entry *self, const gchar *genre);
 void entry_set_location (Entry *self, const gchar *location);
-void entry_set_duration (Entry *self, guint duration);
-void entry_set_track (Entry *self, guint track);
+
+gchar *entry_get_art (Entry *self);
 
 guint entry_get_state (Entry *self);
 void entry_set_state (Entry *self, guint state);
@@ -97,6 +87,8 @@ gchar *entry_get_state_image (Entry *self);
 
 guint entry_get_media_type (Entry *self);
 void entry_set_media_type (Entry *self, guint type);
+
+guint entry_get_key_value_pairs (Entry *self, gchar ***keys, gchar ***vals);
 
 G_END_DECLS
 
