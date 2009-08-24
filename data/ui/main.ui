@@ -146,18 +146,6 @@
               </packing>
             </child>
             <child>
-              <object class="GtkToolButton" id="tb_stop">
-                <property name="visible">True</property>
-                <property name="label" translatable="yes">toolbutton2</property>
-                <property name="use_underline">True</property>
-                <property name="stock_id">gtk-media-stop</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="homogeneous">True</property>
-              </packing>
-            </child>
-            <child>
               <object class="GtkToolButton" id="tb_pause">
                 <property name="label" translatable="yes">toolbutton3</property>
                 <property name="use_underline">True</property>

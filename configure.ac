@@ -31,4 +31,5 @@ Makefile
 src/Makefile
 data/Makefile
 data/ui/Makefile
+data/imgs/Makefile
 ])

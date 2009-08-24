@@ -62,6 +62,8 @@ GType player_get_type (void);
 void player_load (Player *self, Entry *entry);
 void player_close (Player *self);
 
+Entry *player_get_entry (Player *self);
+
 void player_play (Player *self);
 void player_pause (Player *self);
 void player_stop (Player *self);

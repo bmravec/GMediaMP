@@ -68,6 +68,7 @@ Player *shell_get_player (Shell *self);
 void shell_run (Shell *self);
 void shell_quit (Shell *self);
 
+void shell_toggle_visibility (Shell *self);
 void shell_hide (Shell *self);
 void shell_show (Shell *self);
 

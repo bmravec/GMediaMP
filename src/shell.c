@@ -52,6 +52,8 @@ struct _ShellPrivate {
     TrackSource *playing_source;
     Entry *playing_entry;
 
+    gboolean visible;
+
     GtkWidget *window;
     GtkWidget *sidebar;
     GtkWidget *sidebar_view;
@@ -61,7 +63,6 @@ struct _ShellPrivate {
     GtkWidget *time_label;
 
     GtkWidget *tb_prev;
-    GtkWidget *tb_stop;
     GtkWidget *tb_pause;
     GtkWidget *tb_play;
     GtkWidget *tb_next;
@@ -84,7 +85,6 @@ static void import_movie_tag_cb (TagHandler *th, Entry *ne, Shell *self);
 
 static void play_cb (GtkWidget *widget, Shell *self);
 static void pause_cb (GtkWidget *widget, Shell *self);
-static void stop_cb (GtkWidget *widget, Shell *self);
 static void prev_cb (GtkWidget *widget, Shell *self);
 static void next_cb (GtkWidget *widget, Shell *self);
 
@@ -167,6 +167,18 @@ on_player_eos (Player *player, Shell *self)
 }
 
 static void
+on_player_state_changed (Player *player, guint state, Shell *self)
+{
+    if (state == PLAYER_STATE_PLAYING) {
+        gtk_widget_show (self->priv->tb_pause);
+        gtk_widget_hide (self->priv->tb_play);
+    } else {
+        gtk_widget_show (self->priv->tb_play);
+        gtk_widget_hide (self->priv->tb_pause);
+    };
+}
+
+static void
 shell_finalize (GObject *object)
 {
     Shell *self = SHELL (object);
@@ -212,7 +224,7 @@ shell_init (Shell *self)
     self->priv->music = music_new ();
     self->priv->movies = movies_new ();
     self->priv->playlist = playlist_new ();
-//    self->priv->tray = tray_new ();
+    self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
 
     // Load objects from main.ui
@@ -227,11 +239,13 @@ shell_init (Shell *self)
     self->priv->time_label = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "time_label"));
 
     self->priv->tb_prev = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_prev"));
-    self->priv->tb_stop = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_stop"));
     self->priv->tb_pause = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_pause"));
     self->priv->tb_play = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_play"));
     self->priv->tb_next = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_next"));
     self->priv->tb_vol = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_vol"));
+
+    gtk_window_set_icon_from_file (GTK_WINDOW (self->priv->window),
+        "data/imgs/tray-icon.svg", NULL);
 
     // Connect signals for menu items
     g_signal_connect (gtk_builder_get_object (self->priv->builder, "menu_quit"),"activate", G_CALLBACK (shell_quit), NULL);
@@ -263,7 +277,11 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->tb_next, "clicked", G_CALLBACK (next_cb), self);
     g_signal_connect (self->priv->tb_pause, "clicked", G_CALLBACK (pause_cb), self);
     g_signal_connect (self->priv->tb_play, "clicked", G_CALLBACK (play_cb), self);
-    g_signal_connect (self->priv->tb_stop, "clicked", G_CALLBACK (stop_cb), self);
+
+    g_signal_connect (self->priv->tray, "play", G_CALLBACK (play_cb), self);
+    g_signal_connect (self->priv->tray, "pause", G_CALLBACK (pause_cb), self);
+    g_signal_connect (self->priv->tray, "next", G_CALLBACK (next_cb), self);
+    g_signal_connect (self->priv->tray, "previous", G_CALLBACK (prev_cb), self);
 
     g_signal_connect (self->priv->music, "entry-play", G_CALLBACK (on_ts_play), self);
     g_signal_connect (self->priv->movies, "entry-play", G_CALLBACK (on_ts_play), self);
@@ -271,13 +289,14 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->tag_handler, "add-entry", G_CALLBACK (import_music_tag_cb), self);
     g_signal_connect (self->priv->tag_handler, "add-movie", G_CALLBACK (import_movie_tag_cb), self);
 
+    self->priv->visible = TRUE;
     gtk_widget_show (self->priv->window);
-//    gtk_widget_hide (self->priv->tb_pause);
 
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->sidebar_view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
 
     g_signal_connect (self->priv->player, "ratio-changed", G_CALLBACK (on_player_ratio), self);
+    g_signal_connect (self->priv->player, "state-changed", G_CALLBACK (on_player_state_changed), self);
     g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
 
     self->priv->playing_source = NULL;
@@ -440,6 +459,18 @@ shell_quit (Shell *self)
 }
 
 void
+shell_toggle_visibility (Shell *self)
+{
+    if (self->priv->visible) {
+        gtk_widget_hide (self->priv->window);
+        self->priv->visible = FALSE;
+    } else {
+        gtk_widget_show (self->priv->window);
+        self->priv->visible = TRUE;
+    }
+}
+
+void
 shell_hide (Shell *self)
 {
     gtk_widget_hide (self->priv->window);
@@ -466,6 +497,7 @@ main (int argc, char *argv[])
     music_activate (shell->priv->music);
     movies_activate (shell->priv->movies);
     tag_handler_activate (shell->priv->tag_handler);
+    tray_activate (shell->priv->tray);
 
     shell_run (shell);
 }
@@ -586,12 +618,6 @@ static void
 pause_cb (GtkWidget *widget, Shell *self)
 {
     player_pause (self->priv->player);
-}
-
-static void
-stop_cb (GtkWidget *widget, Shell *self)
-{
-    player_stop (self->priv->player);
 }
 
 static void

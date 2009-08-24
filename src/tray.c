@@ -22,11 +22,15 @@
 #include <gtk/gtk.h>
 
 #include "tray.h"
+
 #include "player.h"
+#include "shell.h"
 
 G_DEFINE_TYPE(Tray, tray, G_TYPE_OBJECT)
 
 struct _TrayPrivate {
+    Shell *shell;
+
     GtkStatusIcon *icon;
     GtkWidget *menu;
 
@@ -34,20 +38,22 @@ struct _TrayPrivate {
     GtkWidget *paused_item;
 };
 
-static guint signal_toggle;
 static guint signal_play;
+static guint signal_pause;
 static guint signal_next;
 static guint signal_prev;
 static guint signal_quit;
 
+static void tray_state_changed (Player *player, gint state, Tray *self);
+
 static void
-tray_icon_activate (Tray *self, gpointer user_data)
+tray_icon_activate (GtkStatusIcon *icon, Tray *self)
 {
-    g_signal_emit (G_OBJECT (self), signal_toggle, 0);
+    shell_toggle_visibility (self->priv->shell);
 }
 
 static void
-tray_popup (Tray *self, guint button, guint activate_time, gpointer user_data)
+tray_popup (GtkStatusIcon *icon, guint button, guint activate_time, Tray *self)
 {
     gtk_menu_popup (GTK_MENU (self->priv->menu), NULL, NULL, NULL, NULL, button, activate_time);
 }
@@ -59,9 +65,15 @@ tray_play (GtkWidget *widget, Tray *self)
 }
 
 static void
+tray_pause (GtkWidget *widget, Tray *self)
+{
+    g_signal_emit (G_OBJECT (self), signal_pause, 0);
+}
+
+static void
 tray_quit (GtkWidget *widget, Tray *self)
 {
-    g_signal_emit (G_OBJECT (self), signal_quit, 0);
+    shell_quit (self->priv->shell);
 }
 
 static void
@@ -94,10 +106,10 @@ tray_class_init (TrayClass *klass)
 
     object_class->finalize = tray_finalize;
 
-    signal_toggle = g_signal_new ("toggle", G_TYPE_FROM_CLASS (klass),
+    signal_play = g_signal_new ("play", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
         G_TYPE_NONE, 0);
-    signal_play = g_signal_new ("play", G_TYPE_FROM_CLASS (klass),
+    signal_pause = g_signal_new ("pause", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
         G_TYPE_NONE, 0);
     signal_next = g_signal_new ("next", G_TYPE_FROM_CLASS (klass),
@@ -106,21 +118,44 @@ tray_class_init (TrayClass *klass)
     signal_prev = g_signal_new ("previous", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
         G_TYPE_NONE, 0);
-    signal_quit = g_signal_new ("quit", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
-        G_TYPE_NONE, 0);
 }
 
 static void
 tray_init (Tray *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), TRAY_TYPE, TrayPrivate);
+}
+
+Tray*
+tray_new ()
+{
+    return g_object_new (TRAY_TYPE, NULL);
+}
+
+static void
+tray_state_changed (Player *player, gint state, Tray *self)
+{
+    if (state == PLAYER_STATE_PLAYING) {
+        gtk_widget_show (GTK_WIDGET (self->priv->paused_item));
+        gtk_widget_hide (GTK_WIDGET (self->priv->play_item));
+        gtk_status_icon_set_from_file (self->priv->icon, "data/imgs/tray-icon-playing.svg");
+    } else {
+        gtk_widget_show (GTK_WIDGET (self->priv->play_item));
+        gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
+        gtk_status_icon_set_from_file (self->priv->icon, "data/imgs/tray-icon.svg");
+    }
+}
+
+void
+tray_activate (Tray *self)
+{
+    self->priv->shell = shell_new ();
 
     self->priv->icon = gtk_status_icon_new ();
-    gtk_status_icon_set_from_stock (GTK_STATUS_ICON (self->priv->icon), GTK_STOCK_MEDIA_PLAY);
+    gtk_status_icon_set_from_file (self->priv->icon, "data/imgs/tray-icon.svg");
 
-    g_signal_connect (G_OBJECT (self->priv->icon), "activate", G_CALLBACK (tray_icon_activate), NULL);
-    g_signal_connect (G_OBJECT (self->priv->icon), "popup-menu", G_CALLBACK (tray_popup), NULL);
+    g_signal_connect (self->priv->icon, "activate", G_CALLBACK (tray_icon_activate), self);
+    g_signal_connect (self->priv->icon, "popup-menu", G_CALLBACK (tray_popup), self);
 
     self->priv->menu = gtk_menu_new ();
 
@@ -129,7 +164,7 @@ tray_init (Tray *self)
     gtk_menu_append (self->priv->menu, self->priv->play_item);
 
     self->priv->paused_item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PAUSE, NULL);
-    g_signal_connect (G_OBJECT (self->priv->paused_item), "activate", G_CALLBACK (tray_play), self);
+    g_signal_connect (G_OBJECT (self->priv->paused_item), "activate", G_CALLBACK (tray_pause), self);
     gtk_menu_append (self->priv->menu, self->priv->paused_item);
 
     GtkWidget *item = gtk_separator_menu_item_new ();
@@ -152,30 +187,9 @@ tray_init (Tray *self)
 
     gtk_widget_show_all (GTK_WIDGET (self->priv->menu));
     gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
-}
 
-Tray*
-tray_new ()
-{
-    return g_object_new (TRAY_TYPE, NULL);
-}
-
-void
-tray_set_state (Tray *self, gint state)
-{
-    if (state == PLAYER_STATE_PLAYING) {
-        gtk_widget_show (GTK_WIDGET (self->priv->paused_item));
-        gtk_widget_hide (GTK_WIDGET (self->priv->play_item));
-    } else {
-        gtk_widget_show (GTK_WIDGET (self->priv->play_item));
-        gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
-    }
-}
-
-void
-tray_activate (Tray *self)
-{
-    gtk_widget_show (GTK_WIDGET (self->priv->icon));
+    Player *p = shell_get_player (self->priv->shell);
+    g_signal_connect (p, "state-changed", G_CALLBACK (tray_state_changed), self);
 }
 
 void

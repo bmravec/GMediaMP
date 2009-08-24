@@ -143,6 +143,12 @@ player_set_state (Player *self, guint state)
     g_signal_emit (self, signal_state, 0, state);
 }
 
+Entry*
+player_get_entry (Player *self)
+{
+    return self->priv->entry;
+}
+
 static gboolean
 player_bus_call(GstBus *bus, GstMessage *msg, Player *self)
 {
@@ -289,8 +295,9 @@ player_stop (Player *self)
         gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
         player_set_state (self, PLAYER_STATE_STOPPED);
 
-        entry_set_state (self->priv->entry, ENTRY_STATE_STOPPED);
-    }
+        if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
+            entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
+        }    }
 
     g_signal_emit (self, signal_ratio, 0, 0.0);
 }
