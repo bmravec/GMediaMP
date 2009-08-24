@@ -228,7 +228,11 @@ entry_get_tag_str (Entry *self, const gchar *tag)
 gint
 entry_get_tag_int (Entry *self, const gchar *tag)
 {
-    return *((gint*) g_hash_table_lookup (self->priv->table, tag));
+    gint *val = (gint*) g_hash_table_lookup (self->priv->table, tag);
+    if (val) {
+        return *(val);
+    }
+    return 0;
 }
 
 guint

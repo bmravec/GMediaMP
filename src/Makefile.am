@@ -14,6 +14,7 @@ gmediamp_SOURCES = \
     progress.c progress.h \
     playlist.c playlist.h \
     music.c music.h \
+    movies.c movies.h \
     track-source.c track-source.h \
     media-store.c media-store.h
 

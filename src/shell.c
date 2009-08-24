@@ -26,6 +26,7 @@
 #include "progress.h"
 #include "playlist.h"
 #include "music.h"
+#include "movies.h"
 #include "tag-handler.h"
 #include "tray.h"
 #include "track-source.h"
@@ -37,6 +38,7 @@ struct _ShellPrivate {
     Player *player;
 
     Music *music;
+    Movies *movies;
     Playlist *playlist;
     Tray *tray;
     TagHandler *tag_handler;
@@ -208,6 +210,7 @@ shell_init (Shell *self)
 
     self->priv->player = player_new (0, NULL);
     self->priv->music = music_new ();
+    self->priv->movies = movies_new ();
     self->priv->playlist = playlist_new ();
 //    self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
@@ -263,6 +266,7 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->tb_stop, "clicked", G_CALLBACK (stop_cb), self);
 
     g_signal_connect (self->priv->music, "entry-play", G_CALLBACK (on_ts_play), self);
+    g_signal_connect (self->priv->movies, "entry-play", G_CALLBACK (on_ts_play), self);
 
     g_signal_connect (self->priv->tag_handler, "add-entry", G_CALLBACK (import_music_tag_cb), self);
     g_signal_connect (self->priv->tag_handler, "add-movie", G_CALLBACK (import_movie_tag_cb), self);
@@ -316,6 +320,7 @@ shell_add_widget (Shell *self,
 
         if (parent) {
             gtk_tree_iter_free (parent);
+            parent = NULL;
         }
 
         do {
@@ -343,7 +348,23 @@ shell_add_widget (Shell *self,
         gtk_widget_show (widget);
     }
 
-    gtk_tree_store_append (self->priv->sidebar_store, &iter, parent);
+    if (!gtk_tree_model_iter_children (GTK_TREE_MODEL (self->priv->sidebar_store),
+        &iter, parent)) {
+        gtk_tree_store_append (self->priv->sidebar_store, &iter, parent);
+    } else {
+        do {
+            gchar *str;
+
+            gtk_tree_model_get (GTK_TREE_MODEL (self->priv->sidebar_store), &iter, 1, &str, -1);
+
+            if (!g_strcmp0 (str, path[i])) {
+                return TRUE;
+            }
+        } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->sidebar_store), &iter));
+
+        gtk_tree_store_append (self->priv->sidebar_store, &iter, parent);
+    }
+
     gtk_tree_store_set (self->priv->sidebar_store, &iter,
         0, icon ? gdk_pixbuf_new_from_file_at_size (icon, 16, 16, NULL) : NULL,
         1, path[len-1],
@@ -352,6 +373,7 @@ shell_add_widget (Shell *self,
 
     if (parent) {
         gtk_tree_iter_free (parent);
+        parent = NULL;
     }
 
     g_strfreev (path);
@@ -442,6 +464,7 @@ main (int argc, char *argv[])
     player_activate (shell->priv->player);
     playlist_activate (shell->priv->playlist);
     music_activate (shell->priv->music);
+    movies_activate (shell->priv->movies);
     tag_handler_activate (shell->priv->tag_handler);
 
     shell_run (shell);
@@ -539,7 +562,7 @@ import_music_tag_cb (TagHandler *th, Entry *entry, Shell *self)
 static void
 import_movie_tag_cb (TagHandler *th, Entry *entry, Shell *self)
 {
-
+    media_store_add_entry (MEDIA_STORE (self->priv->movies), entry);
 }
 
 static void
