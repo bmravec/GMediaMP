@@ -297,7 +297,8 @@ player_stop (Player *self)
 
         if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
             entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
-        }    }
+        }
+    }
 
     g_signal_emit (self, signal_ratio, 0, 0.0);
 }

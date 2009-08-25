@@ -44,6 +44,8 @@ struct _MusicPrivate {
     GtkWidget *album;
     GtkWidget *title;
 
+    GtkTreeSelection *title_sel;
+
     GtkTreeModel *artist_store;
     GtkTreeModel *album_store;
     GtkTreeModel *title_store;
@@ -78,6 +80,12 @@ static void album_row_activated (GtkTreeView *view, GtkTreePath *path,
 static void title_row_activated (GtkTreeView *view, GtkTreePath *path,
     GtkTreeViewColumn *column, Music *self);
 
+static gboolean on_artist_click (GtkWidget *view, GdkEventButton *event, Music *self);
+static gboolean on_album_click (GtkWidget *view, GdkEventButton *event, Music *self);
+static gboolean on_title_click (GtkWidget *view, GdkEventButton *event, Music *self);
+
+static void on_title_remove (GtkWidget *item, Music *self);
+
 static gpointer initial_import (Music *self);
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
     gpointer ne, MusicCompareFunc cmp, gint l, gboolean create);
@@ -87,9 +95,10 @@ static void entry_changed (Entry *entry, Music *self);
 static Entry *music_get_next (TrackSource *self);
 static Entry *music_get_prev (TrackSource *self);
 
-static void music_insert_entry (Music *self, Entry *entry);
 static void music_add_entry (MediaStore *self, Entry *entry);
+static void music_insert_entry (Music *self, Entry *entry);
 static void music_remove_entry (MediaStore *self, Entry *entry);
+static void music_deinsert_entry (Music *self, Entry *entry);
 static guint music_get_mtype (MediaStore *self);
 
 // Signals from GMediaDB
@@ -200,6 +209,9 @@ music_activate (Music *self)
     gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->album), self->priv->album_filter);
     gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->title), self->priv->title_filter);
 
+    self->priv->title_sel = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->title));
+    gtk_tree_selection_set_mode (self->priv->title_sel, GTK_SELECTION_MULTIPLE);
+
     GtkCellRenderer *renderer;
     GtkTreeViewColumn *column;
 
@@ -230,6 +242,12 @@ music_activate (Music *self)
 
     gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->album_store),
         NULL, 0, 0, "All 0 Albums", 1, 0, 2, TRUE, 3, NULL, -1);
+
+    // Select All for both artist and album
+    GtkTreePath *root = gtk_tree_path_new_from_string ("0");
+    gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->artist)), root);
+    gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->album)), root);
+    gtk_tree_path_free (root);
 
     // Create Columns for Title
     renderer = gtk_cell_renderer_pixbuf_new ();
@@ -282,6 +300,10 @@ music_activate (Music *self)
     g_signal_connect (G_OBJECT (self->priv->album), "row-activated", G_CALLBACK (album_row_activated), self);
     g_signal_connect (G_OBJECT (self->priv->title), "row-activated", G_CALLBACK (title_row_activated), self);
 
+    g_signal_connect (self->priv->artist, "button-press-event", G_CALLBACK (on_artist_click), self);
+    g_signal_connect (self->priv->album, "button-press-event", G_CALLBACK (on_album_click), self);
+    g_signal_connect (self->priv->title, "button-press-event", G_CALLBACK (on_title_click), self);
+
     g_signal_connect (self->priv->db, "add-entry", G_CALLBACK (music_gmediadb_add), self);
     g_signal_connect (self->priv->db, "remove-entry", G_CALLBACK (music_gmediadb_remove), self);
     g_signal_connect (self->priv->db, "update-entry", G_CALLBACK (music_gmediadb_update), self);
@@ -310,14 +332,6 @@ music_add_entry (MediaStore *self, Entry *entry)
 
     guint size = entry_get_key_value_pairs (entry, &keys, &vals);
 
-/*
-    g_print ("ADDED MUSIC\n");
-    gint i;
-    for (i = 0; i < size; i++) {
-        g_print ("%s: %s\n", keys[i], vals[i]);
-    }
-    g_print ("-----------\n");
-*/
     gmediadb_add_entry (priv->db, keys, vals);
 
     g_strfreev (keys);
@@ -398,7 +412,73 @@ music_insert_entry (Music *self, Entry *entry)
 static void
 music_remove_entry (MediaStore *self, Entry *entry)
 {
-    g_print ("MUSIC REMOVE ENTRY\n");
+    MusicPrivate *priv = MUSIC (self)->priv;
+    g_print ("MUSIC REMOVE ENTRY: %s\n", entry_get_location (entry));
+
+    gmediadb_remove_entry (priv->db, entry_get_id (entry));
+}
+
+static void
+music_deinsert_entry (Music *self, Entry *entry)
+{
+    MusicPrivate *priv = self->priv;
+
+    GtkTreeIter first, iter;
+    gint cnt;
+    gchar *new_str;
+
+    const gchar *artist = entry_get_tag_str (entry, "artist");
+    const gchar *album = entry_get_tag_str (entry, "album");
+
+    gboolean visible = (priv->s_artist == NULL ||
+                       !g_strcmp0 (priv->s_artist, artist));
+
+    insert_iter (GTK_LIST_STORE (priv->artist_store), &iter, (gpointer) artist,
+                 (MusicCompareFunc) g_strcmp0, 1, FALSE);
+
+    gtk_tree_model_get (priv->artist_store, &iter, 1, &cnt, -1);
+
+    if (cnt == 1) {
+        gtk_list_store_remove (GTK_LIST_STORE (priv->artist_store), &iter);
+
+        gtk_tree_model_get_iter_first (priv->artist_store, &first);
+        gtk_tree_model_get (priv->artist_store, &first, 1, &cnt, -1);
+
+        new_str = g_strdup_printf ("All %d Artists", --priv->num_artists);
+        gtk_list_store_set (GTK_LIST_STORE (priv->artist_store), &first,
+            0, new_str, 1, cnt - 1, -1);
+        g_free (new_str);
+    } else {
+        gtk_list_store_set (GTK_LIST_STORE (priv->artist_store), &iter, 1, cnt - 1, -1);
+    }
+
+    insert_iter (GTK_LIST_STORE (priv->album_store), &iter, (gpointer) album,
+                 (MusicCompareFunc) g_strcmp0, 1, FALSE);
+
+    gtk_tree_model_get (priv->album_store, &iter, 1, &cnt, -1);
+
+    if (cnt == 1) {
+        gtk_list_store_remove (GTK_LIST_STORE (priv->album_store), &iter);
+
+        if (visible) {
+            gtk_tree_model_get_iter_first (priv->album_store, &first);
+            gtk_tree_model_get (priv->album_store, &first, 1, &cnt, -1);
+
+            new_str = g_strdup_printf ("All %d Albums", --priv->num_albums);
+            gtk_list_store_set (GTK_LIST_STORE (priv->album_store), &first,
+                0, new_str, 1, cnt - 1, -1);
+            g_free (new_str);
+        }
+    } else {
+        gtk_list_store_set (GTK_LIST_STORE (priv->album_store), &iter, 1, cnt - 1, -1);
+    }
+
+    insert_iter (GTK_LIST_STORE (priv->title_store), &iter, entry,
+        (MusicCompareFunc) entry_cmp, 0, FALSE);
+
+    gtk_list_store_remove (GTK_LIST_STORE (priv->title_store), &iter);
+
+    g_object_unref (entry);
 }
 
 static guint
@@ -878,11 +958,109 @@ music_gmediadb_add (GMediaDB *db, guint id, Music *self)
 static void
 music_gmediadb_remove (GMediaDB *db, guint id, Music *self)
 {
+    Entry *entry;
+    GtkTreeIter iter;
 
+    gtk_tree_model_iter_children (self->priv->title_store, &iter, NULL);
+
+    do {
+        gtk_tree_model_get (self->priv->title_store, &iter, 0, &entry, -1);
+
+        if (entry_get_id (entry) == id) {
+            gdk_threads_enter ();
+            music_deinsert_entry (self, entry);
+            gdk_threads_leave ();
+            break;
+        }
+    } while (gtk_tree_model_iter_next (self->priv->title_store, &iter));
 }
 
 static void
 music_gmediadb_update (GMediaDB *db, guint id, Music *self)
 {
 
+}
+
+static gboolean
+on_artist_click (GtkWidget *view, GdkEventButton *event, Music *self)
+{
+    if (event->button == 3) {
+        g_print ("RBUTTON ARTIST\n");
+
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static gboolean
+on_album_click (GtkWidget *view, GdkEventButton *event, Music *self)
+{
+    if (event->button == 3) {
+        g_print ("RBUTTON ALBUM\n");
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static gboolean
+on_title_click (GtkWidget *view, GdkEventButton *event, Music *self)
+{
+    if (event->button == 3) {
+        GtkTreePath *cpath;
+        gboolean retval = TRUE;
+
+        gtk_tree_view_get_path_at_pos (GTK_TREE_VIEW (view), event->x, event->y,
+            &cpath, NULL, NULL, NULL);
+
+        if (cpath) {
+            if (!gtk_tree_selection_path_is_selected (self->priv->title_sel, cpath)) {
+                retval = FALSE;
+            }
+
+            gtk_tree_path_free (cpath);
+        }
+
+        GtkWidget *menu = gtk_menu_new ();
+
+        GtkWidget *item = gtk_image_menu_item_new_from_stock (GTK_STOCK_REMOVE, NULL);
+        gtk_menu_append (GTK_MENU (menu), item);
+        g_signal_connect (item, "activate", G_CALLBACK (on_title_remove), self);
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_DELETE, NULL);
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_widget_show_all (menu);
+
+        gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,
+                        event->button, event->time);
+
+        return retval;
+    }
+    return FALSE;
+}
+
+static void
+on_title_remove (GtkWidget *item, Music *self)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i;
+
+    GList *rows = gtk_tree_selection_get_selected_rows (self->priv->title_sel, NULL);
+    size = g_list_length (rows);
+
+    entries = g_new0 (Entry*, size);
+    for (i = 0; i < size; i++) {
+        gtk_tree_model_get_iter (self->priv->title_store, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->title_store, &iter, 0, &entries[i], -1);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    for (i = 0; i < size; i++) {
+        music_remove_entry (MEDIA_STORE (self), entries[i]);
+    }
+
+    g_free (entries);
 }
