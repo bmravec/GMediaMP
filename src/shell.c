@@ -156,11 +156,19 @@ on_player_ratio (Player *player, gdouble ratio, Shell *self)
 static void
 on_player_eos (Player *player, Shell *self)
 {
+    if (self->priv->playing_entry) {
+        g_object_unref (self->priv->playing_entry);
+        self->priv->playing_entry = NULL;
+    }
+
     if (self->priv->playing_source) {
         Entry *ne = track_source_get_next (self->priv->playing_source);
         if (ne) {
             player_load (self->priv->player, ne);
             player_play (self->priv->player);
+
+            self->priv->playing_entry = ne;
+            g_object_ref (self->priv->playing_entry);
         } else {
             player_close (self->priv->player);
         }
