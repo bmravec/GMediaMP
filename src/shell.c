@@ -87,6 +87,7 @@ static void play_cb (GtkWidget *widget, Shell *self);
 static void pause_cb (GtkWidget *widget, Shell *self);
 static void prev_cb (GtkWidget *widget, Shell *self);
 static void next_cb (GtkWidget *widget, Shell *self);
+static void update_info_label (Shell *self);
 
 static void
 on_destroy (GtkWidget *widget, Shell *self)
@@ -105,6 +106,8 @@ on_ts_play (TrackSource *ts, Entry *entry, Shell *self)
 
     player_load (self->priv->player, entry);
     player_play (self->priv->player);
+
+    update_info_label (self);
 }
 
 gchar*
@@ -164,6 +167,8 @@ on_player_eos (Player *player, Shell *self)
     } else {
         player_close (self->priv->player);
     }
+
+    update_info_label (self);
 }
 
 static void
@@ -245,6 +250,7 @@ shell_init (Shell *self)
     self->priv->tb_vol = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_vol"));
 
     gtk_window_set_icon_from_file (GTK_WINDOW (self->priv->window),
+//        SHARE_DIR "data/imgs/tray-icon.svg", NULL);
         "data/imgs/tray-icon.svg", NULL);
 
     // Connect signals for menu items
@@ -598,6 +604,33 @@ import_movie_tag_cb (TagHandler *th, Entry *entry, Shell *self)
 }
 
 static void
+update_info_label (Shell *self)
+{
+    if (!self->priv->playing_entry) {
+        gtk_label_set_text (GTK_LABEL (self->priv->info_label), "Not Playing");
+        return;
+    }
+
+    const gchar *artist = entry_get_tag_str (self->priv->playing_entry, "artist");
+    const gchar *album = entry_get_tag_str (self->priv->playing_entry, "album");
+    const gchar *title = entry_get_tag_str (self->priv->playing_entry, "title");
+
+    GString *str = g_string_new (title);
+
+    if (album) {
+        g_string_append_printf (str, " from %s", album);
+    }
+
+    if (artist) {
+        g_string_append_printf (str, " by %s", artist);
+    }
+
+    gtk_label_set_text (GTK_LABEL (self->priv->info_label), str->str);
+
+    g_string_free (str, TRUE);
+}
+
+static void
 play_cb (GtkWidget *widget, Shell *self)
 {
     if (self->priv->playing_entry) {
@@ -610,6 +643,8 @@ play_cb (GtkWidget *widget, Shell *self)
 
             self->priv->playing_entry = ne;
             g_object_ref (ne);
+
+            update_info_label (self);
         }
     }
 }
@@ -642,6 +677,8 @@ prev_cb (GtkWidget *widget, Shell *self)
     } else {
         player_close (self->priv->player);
     }
+
+    update_info_label (self);
 }
 
 static void
@@ -666,4 +703,6 @@ next_cb (GtkWidget *widget, Shell *self)
     } else {
         player_close (self->priv->player);
     }
+
+    update_info_label (self);
 }
