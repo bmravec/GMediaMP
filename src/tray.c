@@ -138,11 +138,11 @@ tray_state_changed (Player *player, gint state, Tray *self)
     if (state == PLAYER_STATE_PLAYING) {
         gtk_widget_show (GTK_WIDGET (self->priv->paused_item));
         gtk_widget_hide (GTK_WIDGET (self->priv->play_item));
-        gtk_status_icon_set_from_file (self->priv->icon, "data/imgs/tray-icon-playing.svg");
+        gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon-playing.svg");
     } else {
         gtk_widget_show (GTK_WIDGET (self->priv->play_item));
         gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
-        gtk_status_icon_set_from_file (self->priv->icon, "data/imgs/tray-icon.svg");
+        gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon.svg");
     }
 }
 
@@ -152,7 +152,7 @@ tray_activate (Tray *self)
     self->priv->shell = shell_new ();
 
     self->priv->icon = gtk_status_icon_new ();
-    gtk_status_icon_set_from_file (self->priv->icon, "data/imgs/tray-icon.svg");
+    gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon.svg");
 
     g_signal_connect (self->priv->icon, "activate", G_CALLBACK (tray_icon_activate), self);
     g_signal_connect (self->priv->icon, "popup-menu", G_CALLBACK (tray_popup), self);

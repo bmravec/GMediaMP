@@ -233,7 +233,7 @@ shell_init (Shell *self)
     self->priv->tag_handler = tag_handler_new ();
 
     // Load objects from main.ui
-    gtk_builder_add_from_file (self->priv->builder, "data/ui/main.ui", NULL);
+    gtk_builder_add_from_file (self->priv->builder, SHARE_DIR "/ui/main.ui", NULL);
     self->priv->window = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "main_win"));
     self->priv->progress_bars = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "progress_bars"));
     self->priv->sidebar = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "sidebar"));
@@ -250,8 +250,7 @@ shell_init (Shell *self)
     self->priv->tb_vol = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "tb_vol"));
 
     gtk_window_set_icon_from_file (GTK_WINDOW (self->priv->window),
-//        SHARE_DIR "data/imgs/tray-icon.svg", NULL);
-        "data/imgs/tray-icon.svg", NULL);
+        SHARE_DIR "/imgs/tray-icon.svg", NULL);
 
     // Connect signals for menu items
     g_signal_connect (gtk_builder_get_object (self->priv->builder, "menu_quit"),"activate", G_CALLBACK (shell_quit), NULL);

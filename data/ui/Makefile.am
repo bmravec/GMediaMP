@@ -1,6 +1,5 @@
 GTK_BUILDER_FILES = \
     main.ui         \
-    browser.ui      \
     music.ui
 
 uidir = $(pkgdatadir)/ui

@@ -179,8 +179,7 @@ music_activate (Music *self)
     GtkBuilder *builder = shell_get_builder (self->priv->shell);
 
     GError *err = NULL;
-//    gtk_builder_add_from_file (self->priv->builder, SHARE_DIR "ui/music.ui", NULL);
-    gtk_builder_add_from_file (builder, "data/ui/music.ui", &err);
+    gtk_builder_add_from_file (builder, SHARE_DIR "/ui/music.ui", &err);
 
     if (err) {
         g_print ("ERROR ADDING: %s", err->message);
