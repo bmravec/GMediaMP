@@ -226,6 +226,7 @@ player_load (Player *self, Entry *entry)
         "video-sink", self->priv->vsink,
         "uri", ruri,
         "volume", self->priv->volume,
+        "subtitle-font-desc", "Sans 32",
         NULL);
     g_free (ruri);
 
