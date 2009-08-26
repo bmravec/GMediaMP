@@ -1058,7 +1058,7 @@ on_title_remove (GtkWidget *item, Music *self)
     g_list_free (rows);
 
     for (i = 0; i < size; i++) {
-        music_remove_entry (MEDIA_STORE (self), entries[i]);
+        media_store_remove_entry (MEDIA_STORE (self), entries[i]);
     }
 
     g_free (entries);

@@ -43,6 +43,7 @@ struct _MoviesPrivate {
     GtkWidget *title;
 
     GtkTreeModel *title_store;
+    GtkTreeSelection *title_sel;
 
     Entry *s_entry;
 };
@@ -61,6 +62,9 @@ static void time_column_func (GtkTreeViewColumn *column, GtkCellRenderer *cell,
 static void title_row_activated (GtkTreeView *view, GtkTreePath *path,
     GtkTreeViewColumn *column, Movies *self);
 
+static gboolean on_title_click (GtkWidget *view, GdkEventButton *event, Movies *self);
+static void on_title_remove (GtkWidget *item, Movies *self);
+
 static gpointer initial_import (Movies *self);
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
     gpointer ne, MoviesCompareFunc cmp, gint l, gboolean create);
@@ -73,6 +77,7 @@ static Entry *movies_get_prev (TrackSource *self);
 static void movies_insert_entry (Movies *self, Entry *entry);
 static void movies_add_entry (MediaStore *self, Entry *entry);
 static void movies_remove_entry (MediaStore *self, Entry *entry);
+
 static guint movies_get_mtype (MediaStore *self);
 
 // Signals from GMediaDB
@@ -152,6 +157,9 @@ movies_activate (Movies *self)
     self->priv->title_store = GTK_TREE_MODEL (gtk_list_store_new (1, G_TYPE_OBJECT));
     gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->title), self->priv->title_store);
 
+    self->priv->title_sel = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->title));
+    gtk_tree_selection_set_mode (self->priv->title_sel, GTK_SELECTION_MULTIPLE);
+
     GtkCellRenderer *renderer;
     GtkTreeViewColumn *column;
 
@@ -186,6 +194,8 @@ movies_activate (Movies *self)
     shell_add_widget (self->priv->shell, gtk_label_new ("Library"), "Library", NULL);
     shell_add_widget (self->priv->shell, self->priv->widget, "Library/Movies", NULL);
 
+    g_signal_connect (self->priv->title, "button-press-event", G_CALLBACK (on_title_click), self);
+
     gtk_widget_show_all (self->priv->widget);
 
     initial_import (self);
@@ -215,24 +225,23 @@ movies_add_entry (MediaStore *self, Entry *entry)
 static void
 movies_insert_entry (Movies *self, Entry *entry)
 {
-    MoviesPrivate *priv = self->priv;
-    GtkTreeIter first, iter;
-    gchar *new_str;
+    GtkTreeIter iter;
 
-    insert_iter (GTK_LIST_STORE (priv->title_store), &iter, entry,
+    insert_iter (GTK_LIST_STORE (self->priv->title_store), &iter, entry,
         (MoviesCompareFunc) entry_cmp, 0, TRUE);
 
-    gtk_list_store_set (GTK_LIST_STORE (priv->title_store), &iter,
+    gtk_list_store_set (GTK_LIST_STORE (self->priv->title_store), &iter,
         0, entry, -1);
 
-    g_signal_connect (G_OBJECT (entry), "entry-changed",
-        G_CALLBACK (entry_changed), MOVIES (self));
+    g_signal_connect (entry, "entry-changed", G_CALLBACK (entry_changed), self);
 }
 
 static void
 movies_remove_entry (MediaStore *self, Entry *entry)
 {
-    g_print ("MOVIES REMOVE ENTRY\n");
+    MoviesPrivate *priv = MOVIES (self)->priv;
+
+    gmediadb_remove_entry (priv->db, entry_get_id (entry));
 }
 
 static guint
@@ -513,6 +522,69 @@ insert_iter (GtkListStore *store,
     return FALSE;
 }
 
+static gboolean
+on_title_click (GtkWidget *view, GdkEventButton *event, Movies *self)
+{
+    if (event->button == 3) {
+        GtkTreePath *cpath;
+        gboolean retval = TRUE;
+
+        gtk_tree_view_get_path_at_pos (GTK_TREE_VIEW (view), event->x, event->y,
+            &cpath, NULL, NULL, NULL);
+
+        if (cpath) {
+            if (!gtk_tree_selection_path_is_selected (self->priv->title_sel, cpath)) {
+                retval = FALSE;
+            }
+
+            gtk_tree_path_free (cpath);
+        }
+
+        GtkWidget *menu = gtk_menu_new ();
+
+        GtkWidget *item = gtk_image_menu_item_new_from_stock (GTK_STOCK_REMOVE, NULL);
+        gtk_menu_append (GTK_MENU (menu), item);
+        g_signal_connect (item, "activate", G_CALLBACK (on_title_remove), self);
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_DELETE, NULL);
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_widget_show_all (menu);
+
+        gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,
+                        event->button, event->time);
+
+        return retval;
+    }
+    return FALSE;
+}
+
+static void
+on_title_remove (GtkWidget *item, Movies *self)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i;
+
+    GList *rows = gtk_tree_selection_get_selected_rows (self->priv->title_sel, NULL);
+    size = g_list_length (rows);
+
+    entries = g_new0 (Entry*, size);
+    for (i = 0; i < size; i++) {
+        gtk_tree_model_get_iter (self->priv->title_store, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->title_store, &iter, 0, &entries[i], -1);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    for (i = 0; i < size; i++) {
+        media_store_remove_entry (MEDIA_STORE (self), entries[i]);
+    }
+
+    g_free (entries);
+}
+
 static void
 movies_gmediadb_add (GMediaDB *db, guint id, Movies *self)
 {
@@ -537,7 +609,19 @@ movies_gmediadb_add (GMediaDB *db, guint id, Movies *self)
 static void
 movies_gmediadb_remove (GMediaDB *db, guint id, Movies *self)
 {
+    Entry *entry;
+    GtkTreeIter iter;
 
+    gtk_tree_model_iter_children (self->priv->title_store, &iter, NULL);
+
+    do {
+        gtk_tree_model_get (self->priv->title_store, &iter, 0, &entry, -1);
+
+        if (entry_get_id (entry) == id) {
+            gtk_list_store_remove (GTK_LIST_STORE (self->priv->title_store), &iter);
+            g_object_unref (entry);
+        }
+    } while (gtk_tree_model_iter_next (self->priv->title_store, &iter));
 }
 
 static void
