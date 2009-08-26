@@ -88,6 +88,9 @@ static void pause_cb (GtkWidget *widget, Shell *self);
 static void prev_cb (GtkWidget *widget, Shell *self);
 static void next_cb (GtkWidget *widget, Shell *self);
 static void update_info_label (Shell *self);
+static gboolean on_pos_change_value (GtkWidget *range, GtkScrollType scroll,
+    gdouble value, Shell *self);
+
 
 static void
 on_destroy (GtkWidget *widget, Shell *self)
@@ -189,6 +192,22 @@ on_player_state_changed (Player *player, guint state, Shell *self)
         gtk_widget_show (self->priv->tb_play);
         gtk_widget_hide (self->priv->tb_pause);
     };
+}
+
+static gboolean
+on_pos_change_value (GtkWidget *range,
+                     GtkScrollType scroll,
+                     gdouble value,
+                     Shell *self)
+{
+    gint len = player_get_length (self->priv->player);
+
+    if (value > len) value = len;
+    if (value < 0.0) value = 0.0;
+
+    player_set_position (self->priv->player,  value);
+
+    return FALSE;
 }
 
 static void
@@ -311,6 +330,9 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->player, "ratio-changed", G_CALLBACK (on_player_ratio), self);
     g_signal_connect (self->priv->player, "state-changed", G_CALLBACK (on_player_state_changed), self);
     g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
+
+    g_signal_connect (self->priv->play_pos, "change-value", G_CALLBACK (on_pos_change_value), self);
+
 
     self->priv->playing_source = NULL;
     self->priv->playing_entry = NULL;
