@@ -37,12 +37,29 @@ struct _PlayerPrivate {
     gdouble volume;
     guint state;
     gdouble prev_ratio;
+    gint t_pos;
 
     Entry *entry;
 
     Shell *shell;
-    GtkWidget *widget;
-    XID win;
+
+    gint monitor;
+
+    gboolean fullscreen;
+
+    GtkWidget *em_da;
+
+    GtkWidget *fs_win;
+    GtkWidget *fs_da;
+    GtkWidget *fs_title;
+    GtkWidget *fs_vol;
+    GtkWidget *fs_time;
+    GtkWidget *fs_prev;
+    GtkWidget *fs_play;
+    GtkWidget *fs_pause;
+    GtkWidget *fs_next;
+    GtkWidget *fs_vbox;
+    GtkWidget *fs_hbox;
 };
 
 guint signal_eos;
@@ -51,8 +68,13 @@ guint signal_state;
 guint signal_ratio;
 
 static gboolean position_update (Player *self);
+static gboolean player_button_press (GtkWidget *da, GdkEventButton *event, Player *self);
 static void player_set_state (Player *self, guint state);
-static gboolean player_bus_call(GstBus *bus, GstMessage *msg, Player *self);
+static gboolean player_bus_call (GstBus *bus, GstMessage *msg, Player *self);
+static void on_win_show (GtkWidget *widget, Player *self);
+static gboolean on_window_state (GtkWidget *widget, GdkEventWindowState *event, Player *self);
+static gboolean handle_expose_cb (GtkWidget *widget, GdkEventExpose *event, Player *self);
+
 
 static void
 player_finalize (GObject *object)
@@ -98,9 +120,8 @@ player_init (Player *self)
     self->priv->songtags = NULL;
     self->priv->state = PLAYER_STATE_NULL;
     self->priv->volume = 1.0;
-    self->priv->win = 0;
-
-    self->priv->widget = gtk_drawing_area_new ();
+    self->priv->fullscreen = FALSE;
+    self->priv->monitor = 0;
 }
 
 Player*
@@ -157,11 +178,14 @@ player_bus_call(GstBus *bus, GstMessage *msg, Player *self)
     GError *err;
 
     if (msg->structure && gst_structure_has_name (msg->structure, "prepare-xwindow-id")) {
-        gst_x_overlay_set_xwindow_id ((GstXOverlay*) msg->src, self->priv->win);
-        gdouble ratio = (gdouble) GST_VIDEO_SINK_WIDTH (self->priv->vsink) /
-            (gdouble) GST_VIDEO_SINK_HEIGHT (self->priv->vsink);
-        g_print ("ASPECT RATIO = %f\n", ratio);
-        return;
+        if (self->priv->fullscreen) {
+            gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (msg)),
+                GDK_WINDOW_XID (self->priv->fs_da->window));
+        } else {
+            gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (msg)),
+                GDK_WINDOW_XID (self->priv->em_da->window));
+        }
+        return TRUE;
     }
 
     switch (GST_MESSAGE_TYPE (msg)) {
@@ -376,14 +400,181 @@ gboolean
 player_activate (Player *self)
 {
     self->priv->shell = shell_new ();
-    shell_add_widget (self->priv->shell, self->priv->widget, "Now Playing", NULL);
 
-    gtk_widget_show_all (self->priv->widget);
-    self->priv->win = GDK_WINDOW_XID (self->priv->widget->window);
+    self->priv->em_da = gtk_drawing_area_new ();
+
+    GtkBuilder *builder = shell_get_builder (self->priv->shell);
+
+    GError *err = NULL;
+    gtk_builder_add_from_file (builder, SHARE_DIR "/ui/player.ui", &err);
+
+    if (err) {
+        g_print ("ERROR ADDING: %s", err->message);
+        g_error_free (err);
+    }
+
+    self->priv->fs_win = GTK_WIDGET (gtk_builder_get_object (builder, "player_win"));
+    self->priv->fs_da = GTK_WIDGET (gtk_builder_get_object (builder, "player_da"));
+    self->priv->fs_title = GTK_WIDGET (gtk_builder_get_object (builder, "player_title"));
+    self->priv->fs_vol = GTK_WIDGET (gtk_builder_get_object (builder, "player_vol"));
+    self->priv->fs_time = GTK_WIDGET (gtk_builder_get_object (builder, "player_time"));
+    self->priv->fs_prev = GTK_WIDGET (gtk_builder_get_object (builder, "player_prev"));
+    self->priv->fs_play = GTK_WIDGET (gtk_builder_get_object (builder, "player_play"));
+    self->priv->fs_pause = GTK_WIDGET (gtk_builder_get_object (builder, "player_pause"));
+    self->priv->fs_next = GTK_WIDGET (gtk_builder_get_object (builder, "player_next"));
+    self->priv->fs_vbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_vbox"));
+    self->priv->fs_hbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_hbox"));
+
+    gtk_widget_add_events (self->priv->em_da, GDK_BUTTON_PRESS_MASK);
+    gtk_widget_add_events (self->priv->fs_da, GDK_BUTTON_PRESS_MASK);
+
+    g_signal_connect (self->priv->em_da, "button-press-event",
+        G_CALLBACK (player_button_press), self);
+    g_signal_connect (self->priv->fs_da, "button-press-event",
+        G_CALLBACK (player_button_press), self);
+
+    g_signal_connect (self->priv->em_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
+    g_signal_connect (self->priv->fs_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
+
+//    g_signal_connect (self->priv->fs_win, "map", G_CALLBACK (on_win_show), self);
+    g_signal_connect (self->priv->fs_win, "window-state-event",
+        G_CALLBACK (on_window_state), self);
+
+    shell_add_widget (self->priv->shell, self->priv->em_da, "Now Playing", NULL);
+
+    gtk_widget_show_all (self->priv->em_da);
+    gtk_widget_show_all (self->priv->fs_vbox);
 }
 
 gboolean
 player_deactivate (Player *self)
 {
 
+}
+
+static void
+on_pick_screen (GtkWidget *item, Player *self)
+{
+    GdkRectangle rect;
+    gint num;
+
+    if (gtk_check_menu_item_get_active (GTK_CHECK_MENU_ITEM (item))) {
+        num = atoi (gtk_menu_item_get_label (GTK_MENU_ITEM (item))) - 1;
+
+        self->priv->monitor = num;
+
+        if (self->priv->fs_win) {
+            GdkScreen *screen = gdk_screen_get_default ();
+            gdk_screen_get_monitor_geometry (screen, num, &rect);
+
+            gtk_window_move (GTK_WINDOW (self->priv->fs_win), rect.x, rect.y);
+        }
+    }
+}
+
+static void
+toggle_fullscreen (GtkWidget *item, Player *self)
+{
+    GdkRectangle rect;
+    GdkScreen *screen = gdk_screen_get_default ();
+    gint num = gdk_screen_get_n_monitors (screen);
+
+    if (self->priv->monitor >= num) {
+        self->priv->monitor = num-1;
+    }
+
+    self->priv->t_pos = player_get_position (self);
+    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
+
+    if (!self->priv->fullscreen) {
+        gdk_screen_get_monitor_geometry (screen, self->priv->monitor, &rect);
+
+        gtk_widget_show_all (self->priv->fs_win);
+        self->priv->fullscreen = TRUE;
+        gtk_window_fullscreen (GTK_WINDOW (self->priv->fs_win));
+        gtk_window_move (GTK_WINDOW (self->priv->fs_win), rect.x, rect.y);
+    } else {
+        gtk_widget_hide (self->priv->fs_win);
+        self->priv->fullscreen = FALSE;
+    }
+}
+
+static void
+on_win_show (GtkWidget *widget, Player *self)
+{
+    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
+    gst_element_get_state (self->priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+    player_set_position (self, self->priv->t_pos);
+}
+
+static gboolean
+on_window_state (GtkWidget *widget,
+                 GdkEventWindowState *event,
+                 Player *self)
+{
+    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
+    gst_element_get_state (self->priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+    player_set_position (self, self->priv->t_pos);
+}
+
+static gboolean
+player_button_press (GtkWidget *da, GdkEventButton *event, Player *self)
+{
+    GdkRectangle rect;
+    GdkScreen *screen = gdk_screen_get_default ();
+    gint num = gdk_screen_get_n_monitors (screen);
+
+    if (self->priv->monitor >= num) {
+        self->priv->monitor = num-1;
+    }
+
+    if (event->button == 3) {
+        GtkWidget *item;
+        GtkWidget *menu = gtk_menu_new ();
+
+        item = gtk_menu_item_new_with_label ("Toggle Fullscreen");
+        gtk_menu_append (GTK_MENU (menu), item);
+        g_signal_connect (item, "activate", G_CALLBACK (toggle_fullscreen), self);
+
+        item = gtk_separator_menu_item_new ();
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        GSList *group = NULL;
+        gint i;
+
+        for (i = 0; i < num; i++) {
+            gdk_screen_get_monitor_geometry (screen, i, &rect);
+            gchar *str = g_strdup_printf ("%d: %dx%d", i+1, rect.width, rect.height);
+            item = gtk_radio_menu_item_new_with_label (group, str);
+            g_free (str);
+            group = gtk_radio_menu_item_get_group (GTK_RADIO_MENU_ITEM (item));
+
+            if (i == self->priv->monitor) {
+                gtk_check_menu_item_set_active (GTK_CHECK_MENU_ITEM (item), TRUE);
+            }
+
+            gtk_menu_append (GTK_MENU (menu), item);
+            g_signal_connect (item, "activate", G_CALLBACK (on_pick_screen), self);
+        }
+
+        gtk_widget_show_all (menu);
+
+        gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,
+                        event->button, event->time);
+    } else if (event->type == GDK_2BUTTON_PRESS) {
+        toggle_fullscreen (NULL, self);
+    }
+
+    return FALSE;
+}
+
+static gboolean
+handle_expose_cb (GtkWidget *widget, GdkEventExpose *event, Player *self)
+{
+//    if (gst_element_get_state (self->priv->pipeline) < GST_STATE_PAUSED) {
+        gdk_draw_rectangle (widget->window, widget->style->black_gc, TRUE,
+            0, 0, widget->allocation.width, widget->allocation.height);
+//    }
+
+    return FALSE;
 }
