@@ -550,7 +550,7 @@ PACKAGE_STRING='gmediamp 0.6'
 PACKAGE_BUGREPORT=''
 PACKAGE_URL=''
 
-ac_unique_file="src/gmediamp.c"
+ac_unique_file="src/shell.c"
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS

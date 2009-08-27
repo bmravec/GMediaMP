@@ -1,6 +1,6 @@
 AC_PREREQ(2.59)
 AC_INIT([gmediamp],[0.6])
-AC_CONFIG_SRCDIR([src/gmediamp.c])
+AC_CONFIG_SRCDIR([src/shell.c])
 AM_INIT_AUTOMAKE([dist-bzip2])
 
 AC_PROG_CC

@@ -18,7 +18,7 @@ gmediamp_SOURCES = \
     track-source.c track-source.h \
     media-store.c media-store.h
 
-EXTRA_DIST=
+EXTRA_DIST=gmediamp.schemas
 CLEANFILES=
 
 schemadir   = @GCONF_SCHEMA_FILE_DIR@
