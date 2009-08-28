@@ -90,7 +90,8 @@ static void next_cb (GtkWidget *widget, Shell *self);
 static void update_info_label (Shell *self);
 static gboolean on_pos_change_value (GtkWidget *range, GtkScrollType scroll,
     gdouble value, Shell *self);
-
+static void on_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
+static void on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
 
 static void
 on_destroy (GtkWidget *widget, Shell *self)
@@ -315,6 +316,12 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->tray, "next", G_CALLBACK (next_cb), self);
     g_signal_connect (self->priv->tray, "previous", G_CALLBACK (prev_cb), self);
 
+    g_signal_connect (self->priv->player, "play", G_CALLBACK (play_cb), self);
+    g_signal_connect (self->priv->player, "pause", G_CALLBACK (pause_cb), self);
+    g_signal_connect (self->priv->player, "next", G_CALLBACK (next_cb), self);
+    g_signal_connect (self->priv->player, "previous", G_CALLBACK (prev_cb), self);
+    g_signal_connect (self->priv->player, "volume-changed", G_CALLBACK (on_player_vol_changed), self);
+
     g_signal_connect (self->priv->music, "entry-play", G_CALLBACK (on_ts_play), self);
     g_signal_connect (self->priv->movies, "entry-play", G_CALLBACK (on_ts_play), self);
 
@@ -332,7 +339,7 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
 
     g_signal_connect (self->priv->play_pos, "change-value", G_CALLBACK (on_pos_change_value), self);
-
+    g_signal_connect (self->priv->tb_vol, "value-changed", G_CALLBACK (on_vol_changed), self);
 
     self->priv->playing_source = NULL;
     self->priv->playing_entry = NULL;
@@ -734,4 +741,16 @@ next_cb (GtkWidget *widget, Shell *self)
     }
 
     update_info_label (self);
+}
+
+static void
+on_vol_changed (GtkWidget *widget, gdouble val, Shell *self)
+{
+    player_set_volume (self->priv->player, val);
+}
+
+static void
+on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self)
+{
+    gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->tb_vol), val);
 }

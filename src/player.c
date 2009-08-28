@@ -51,6 +51,7 @@ struct _PlayerPrivate {
 
     GtkWidget *fs_win;
     GtkWidget *fs_da;
+    GtkWidget *fs_scale;
     GtkWidget *fs_title;
     GtkWidget *fs_vol;
     GtkWidget *fs_time;
@@ -66,6 +67,12 @@ guint signal_eos;
 guint signal_tag;
 guint signal_state;
 guint signal_ratio;
+guint signal_volume;
+
+guint signal_play;
+guint signal_pause;
+guint signal_next;
+guint signal_prev;
 
 static gboolean position_update (Player *self);
 static gboolean player_button_press (GtkWidget *da, GdkEventButton *event, Player *self);
@@ -75,6 +82,12 @@ static void on_win_show (GtkWidget *widget, Player *self);
 static gboolean on_window_state (GtkWidget *widget, GdkEventWindowState *event, Player *self);
 static gboolean handle_expose_cb (GtkWidget *widget, GdkEventExpose *event, Player *self);
 
+static void on_control_prev (GtkWidget *widget, Player *self);
+static void on_control_play (GtkWidget *widget, Player *self);
+static void on_control_pause (GtkWidget *widget, Player *self);
+static void on_control_next (GtkWidget *widget, Player *self);
+
+static gboolean on_pos_change_value (GtkWidget *range, GtkScrollType scroll, gdouble value, Player *self);
 
 static void
 player_finalize (GObject *object)
@@ -106,9 +119,29 @@ player_class_init (PlayerClass *klass)
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__UINT,
         G_TYPE_NONE, 1, G_TYPE_UINT);
 
+    signal_volume = g_signal_new ("volume-changed", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__DOUBLE,
+        G_TYPE_NONE, 1, G_TYPE_DOUBLE);
+
     signal_ratio = g_signal_new ("ratio-changed", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__DOUBLE,
         G_TYPE_NONE, 1, G_TYPE_DOUBLE);
+
+    signal_prev = g_signal_new ("previous", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
+        G_TYPE_NONE, 0);
+
+    signal_play = g_signal_new ("play", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
+        G_TYPE_NONE, 0);
+
+    signal_pause = g_signal_new ("pause", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
+        G_TYPE_NONE, 0);
+
+    signal_next = g_signal_new ("next", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
+        G_TYPE_NONE, 0);
 }
 
 static void
@@ -144,9 +177,13 @@ position_update (Player *self)
             case PLAYER_STATE_PLAYING:
             case PLAYER_STATE_PAUSED:
                 g_signal_emit (self, signal_ratio, 0, self->priv->prev_ratio);
+                gtk_range_set_range (GTK_RANGE (self->priv->fs_scale), 0, len);
+                gtk_range_set_value (GTK_RANGE (self->priv->fs_scale), pos);
                 break;
             default:
                 g_signal_emit (self, signal_ratio, 0, 0.0);
+                gtk_range_set_range (GTK_RANGE (self->priv->fs_scale), 0, 1);
+                gtk_range_set_value (GTK_RANGE (self->priv->fs_scale), 0);
         }
     }
 
@@ -170,13 +207,44 @@ player_get_entry (Player *self)
     return self->priv->entry;
 }
 
+static GstBusSyncReply
+bus_sync_handler (GstBus *bus, GstMessage *msg, Player *self)
+{
+    if ((GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ELEMENT) &&
+        gst_structure_has_name (msg->structure, "prepare-xwindow-id")) {
+//        GstElement *element = GST_ELEMENT (GST_MESSAGE_SRC (message));
+
+//        g_print ("got prepare-xwindow-id\n");
+//        if (!embed_xid) {
+//            embed_xid = GDK_WINDOW_XID (GDK_WINDOW (video_window->window));
+//        }
+
+//        if (g_object_class_find_property (G_OBJECT_GET_CLASS (element),
+//            "force-aspect-ratio")) {
+//            g_object_set (element, "force-aspect-ratio", TRUE, NULL);
+//        }
+        if (self->priv->fullscreen) {
+            gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (msg)),
+                GDK_WINDOW_XID (self->priv->fs_da->window));
+        } else {
+            gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (msg)),
+                GDK_WINDOW_XID (self->priv->em_da->window));
+        }
+
+//        gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (message)),
+//            embed_xid);
+    }
+
+    return GST_BUS_PASS;
+}
+
 static gboolean
 player_bus_call(GstBus *bus, GstMessage *msg, Player *self)
 {
     GstTagList *taglist;
     gchar *debug;
     GError *err;
-
+/*
     if (msg->structure && gst_structure_has_name (msg->structure, "prepare-xwindow-id")) {
         if (self->priv->fullscreen) {
             gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (msg)),
@@ -187,7 +255,7 @@ player_bus_call(GstBus *bus, GstMessage *msg, Player *self)
         }
         return TRUE;
     }
-
+*/
     switch (GST_MESSAGE_TYPE (msg)) {
         case GST_MESSAGE_EOS:
             player_stop (self);
@@ -258,6 +326,7 @@ player_load (Player *self, Entry *entry)
 
     GstBus *bus = gst_pipeline_get_bus (GST_PIPELINE (self->priv->pipeline));
     gst_bus_add_watch (bus, (GstBusFunc) player_bus_call, self);
+    gst_bus_set_sync_handler (bus, (GstBusSyncHandler) bus_sync_handler, self);
     gst_object_unref (bus);
 
     self->priv->songtags = gst_tag_list_new ();
@@ -298,7 +367,7 @@ player_play (Player *self)
 
         entry_set_state (self->priv->entry, ENTRY_STATE_PLAYING);
 
-        g_timeout_add (500, (GSourceFunc) position_update, self);
+        g_timeout_add (1000, (GSourceFunc) position_update, self);
     }
 }
 
@@ -386,14 +455,26 @@ player_get_volume (Player *self)
 void
 player_set_volume (Player *self, gdouble vol)
 {
-    self->priv->volume = vol;
+    if (self->priv->volume != vol) {
+        self->priv->volume = vol;
 
-    if (vol > 1.0) vol = 1.0;
-    if (vol < 0.0) vol = 0.0;
+        if (vol > 1.0) vol = 1.0;
+        if (vol < 0.0) vol = 0.0;
 
-    if (self->priv->pipeline) {
-        g_object_set (self->priv->pipeline, "volume", vol, NULL);
+        if (self->priv->pipeline) {
+            g_object_set (self->priv->pipeline, "volume", vol, NULL);
+        }
+
+        gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->fs_vol), self->priv->volume);
+
+        g_signal_emit (self, signal_volume, 0, vol);
     }
+}
+
+void
+on_vol_changed (GtkWidget *widget, gdouble val, Player *self)
+{
+    player_set_volume (self, val);
 }
 
 gboolean
@@ -413,9 +494,11 @@ player_activate (Player *self)
         g_error_free (err);
     }
 
+    // Get objects from gtkbuilder
     self->priv->fs_win = GTK_WIDGET (gtk_builder_get_object (builder, "player_win"));
     self->priv->fs_da = GTK_WIDGET (gtk_builder_get_object (builder, "player_da"));
     self->priv->fs_title = GTK_WIDGET (gtk_builder_get_object (builder, "player_title"));
+    self->priv->fs_scale = GTK_WIDGET (gtk_builder_get_object (builder, "player_scale"));
     self->priv->fs_vol = GTK_WIDGET (gtk_builder_get_object (builder, "player_vol"));
     self->priv->fs_time = GTK_WIDGET (gtk_builder_get_object (builder, "player_time"));
     self->priv->fs_prev = GTK_WIDGET (gtk_builder_get_object (builder, "player_prev"));
@@ -424,6 +507,9 @@ player_activate (Player *self)
     self->priv->fs_next = GTK_WIDGET (gtk_builder_get_object (builder, "player_next"));
     self->priv->fs_vbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_vbox"));
     self->priv->fs_hbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_hbox"));
+
+    // Set initial state
+    gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->fs_vol), self->priv->volume);
 
     gtk_widget_add_events (self->priv->em_da, GDK_BUTTON_PRESS_MASK);
     gtk_widget_add_events (self->priv->fs_da, GDK_BUTTON_PRESS_MASK);
@@ -436,6 +522,14 @@ player_activate (Player *self)
     g_signal_connect (self->priv->em_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
     g_signal_connect (self->priv->fs_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
 
+    g_signal_connect (self->priv->fs_prev, "clicked", G_CALLBACK (on_control_prev), self);
+    g_signal_connect (self->priv->fs_play, "clicked", G_CALLBACK (on_control_play), self);
+    g_signal_connect (self->priv->fs_pause, "clicked", G_CALLBACK (on_control_pause), self);
+    g_signal_connect (self->priv->fs_next, "clicked", G_CALLBACK (on_control_next), self);
+
+    g_signal_connect (self->priv->fs_vol, "value-changed", G_CALLBACK (on_vol_changed), self);
+    g_signal_connect (self->priv->fs_scale, "change-value", G_CALLBACK (on_pos_change_value), self);
+
 //    g_signal_connect (self->priv->fs_win, "map", G_CALLBACK (on_win_show), self);
     g_signal_connect (self->priv->fs_win, "window-state-event",
         G_CALLBACK (on_window_state), self);
@@ -443,7 +537,7 @@ player_activate (Player *self)
     shell_add_widget (self->priv->shell, self->priv->em_da, "Now Playing", NULL);
 
     gtk_widget_show_all (self->priv->em_da);
-    gtk_widget_show_all (self->priv->fs_vbox);
+//    gtk_widget_show_all (self->priv->fs_vbox);
 }
 
 gboolean
@@ -571,10 +665,50 @@ player_button_press (GtkWidget *da, GdkEventButton *event, Player *self)
 static gboolean
 handle_expose_cb (GtkWidget *widget, GdkEventExpose *event, Player *self)
 {
-//    if (gst_element_get_state (self->priv->pipeline) < GST_STATE_PAUSED) {
+//    if (gst_element_get_state (self->priv->pipeline, NULL, NULL, 0) < GST_STATE_PAUSED) {
         gdk_draw_rectangle (widget->window, widget->style->black_gc, TRUE,
             0, 0, widget->allocation.width, widget->allocation.height);
 //    }
+
+    return FALSE;
+}
+
+static void
+on_control_prev (GtkWidget *widget, Player *self)
+{
+    g_signal_emit (self, signal_prev, 0);
+}
+
+static void
+on_control_play (GtkWidget *widget, Player *self)
+{
+    g_signal_emit (self, signal_play, 0);
+}
+
+static void
+on_control_pause (GtkWidget *widget, Player *self)
+{
+    g_signal_emit (self, signal_pause, 0);
+}
+
+static void
+on_control_next (GtkWidget *widget, Player *self)
+{
+    g_signal_emit (self, signal_next, 0);
+}
+
+static gboolean
+on_pos_change_value (GtkWidget *range,
+                     GtkScrollType scroll,
+                     gdouble value,
+                     Player *self)
+{
+    gint len = player_get_length (self);
+
+    if (value > len) value = len;
+    if (value < 0.0) value = 0.0;
+
+    player_set_position (self,  value);
 
     return FALSE;
 }
