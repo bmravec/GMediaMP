@@ -133,10 +133,9 @@ time_to_string (gdouble time)
 }
 
 static void
-on_player_ratio (Player *player, gdouble ratio, Shell *self)
+on_player_ratio (Player *player, guint pos, Shell *self)
 {
-    gdouble pos = (gdouble) player_get_position (self->priv->player);
-    gdouble len = (gdouble) player_get_length (self->priv->player);
+    guint len = player_get_length (self->priv->player);
 
     if (len > 0.0) {
         gtk_range_set_range (GTK_RANGE (self->priv->play_pos), 0.0, len);
@@ -334,7 +333,7 @@ shell_init (Shell *self)
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->sidebar_view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
 
-    g_signal_connect (self->priv->player, "ratio-changed", G_CALLBACK (on_player_ratio), self);
+    g_signal_connect (self->priv->player, "pos-changed", G_CALLBACK (on_player_ratio), self);
     g_signal_connect (self->priv->player, "state-changed", G_CALLBACK (on_player_state_changed), self);
     g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
 
