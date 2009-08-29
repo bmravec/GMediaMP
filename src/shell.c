@@ -25,8 +25,11 @@
 #include "player.h"
 #include "progress.h"
 #include "playlist.h"
+
 #include "music.h"
 #include "movies.h"
+#include "shows.h"
+
 #include "tag-handler.h"
 #include "tray.h"
 #include "track-source.h"
@@ -39,6 +42,8 @@ struct _ShellPrivate {
 
     Music *music;
     Movies *movies;
+    Shows *shows;
+
     Playlist *playlist;
     Tray *tray;
     TagHandler *tag_handler;
@@ -255,6 +260,7 @@ shell_init (Shell *self)
     self->priv->player = player_new (0, NULL);
     self->priv->music = music_new ();
     self->priv->movies = movies_new ();
+    self->priv->shows = shows_new ();
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
@@ -537,6 +543,7 @@ main (int argc, char *argv[])
     playlist_activate (shell->priv->playlist);
     music_activate (shell->priv->music);
     movies_activate (shell->priv->movies);
+    shows_activate (shell->priv->shows);
     tag_handler_activate (shell->priv->tag_handler);
     tray_activate (shell->priv->tray);
 
