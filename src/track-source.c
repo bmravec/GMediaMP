@@ -32,8 +32,8 @@ track_source_base_init (gpointer g_iface)
         initialized = TRUE;
 
         signal_play = g_signal_new ("entry-play", TRACK_SOURCE_TYPE,
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
-        G_TYPE_NONE, 1, G_TYPE_POINTER);
+            G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+            G_TYPE_NONE, 1, G_TYPE_POINTER);
     }
 }
 
