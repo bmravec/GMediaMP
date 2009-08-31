@@ -31,7 +31,7 @@ media_store_base_init (gpointer g_iface)
     if (!initialized) {
         initialized = TRUE;
 
-        signal_play = g_signal_new ("entry-move", TRACK_SOURCE_TYPE,
+        signal_move = g_signal_new ("entry-move", MEDIA_STORE_TYPE,
             G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
             G_TYPE_NONE, 1, G_TYPE_POINTER);
     }
