@@ -17,7 +17,7 @@
             <property name="hscrollbar_policy">automatic</property>
             <property name="vscrollbar_policy">automatic</property>
             <child>
-              <object class="GtkTreeView" id="shows_artist">
+              <object class="GtkTreeView" id="shows_show">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
               </object>
@@ -34,7 +34,7 @@
             <property name="hscrollbar_policy">automatic</property>
             <property name="vscrollbar_policy">automatic</property>
             <child>
-              <object class="GtkTreeView" id="shows_album">
+              <object class="GtkTreeView" id="shows_season">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
               </object>
