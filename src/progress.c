@@ -19,8 +19,6 @@
  *      MA 02110-1301, USA.
  */
 
-#include <gst/gst.h>
-
 #include "progress.h"
 
 G_DEFINE_TYPE(Progress, progress, G_TYPE_OBJECT)
