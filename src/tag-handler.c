@@ -33,9 +33,6 @@ G_DEFINE_TYPE_WITH_CODE (TagHandler, tag_handler, G_TYPE_OBJECT,
     G_IMPLEMENT_INTERFACE (MEDIA_STORE_TYPE, media_store_init)
 )
 
-static guint signal_add_entry;
-static guint signal_add_movie;
-
 #define TAG_HANDLER_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), TAG_HANDLER_TYPE, TagHandlerPrivate))
 
 struct _TagHandlerPrivate
@@ -141,7 +138,8 @@ tag_handler_main (TagHandler *self)
                 !g_strcmp0 (ext, "avi") || !g_strcmp0 (ext, "mov") ||
                 !g_strcmp0 (ext, "mp4") || !g_strcmp0 (ext, "m4v") ||
                 !g_strcmp0 (ext, "mkv") || !g_strcmp0 (ext, "ogm")) {
-                g_signal_emit (self, signal_add_movie, 0, ne);
+                entry_set_media_type (ne, MEDIA_MOVIE);
+                media_store_emit_move (MEDIA_STORE (self), ne);
             }
 
             self->priv->done++;
@@ -173,8 +171,9 @@ tag_handler_main (TagHandler *self)
         g_free (duration);
 
         entry_set_tag_str (ne, "location", entry);
+        entry_set_media_type (ne, MEDIA_SONG);
 
-        g_signal_emit (self, signal_add_entry, 0, ne);
+        media_store_emit_move (MEDIA_STORE (self), ne);
 
         g_object_unref (ne);
         ne = NULL;
@@ -219,14 +218,6 @@ tag_handler_class_init (TagHandlerClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (TagHandlerPrivate));
 
     object_class->finalize = tag_handler_finalize;
-
-    signal_add_entry = g_signal_new ("add-entry", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__OBJECT,
-        G_TYPE_NONE, 1, ENTRY_TYPE);
-
-    signal_add_movie = g_signal_new ("add-movie", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__OBJECT,
-        G_TYPE_NONE, 1, ENTRY_TYPE);
 }
 
 static void

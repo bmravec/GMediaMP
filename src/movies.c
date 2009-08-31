@@ -247,7 +247,7 @@ movies_remove_entry (MediaStore *self, Entry *entry)
 static guint
 movies_get_mtype (MediaStore *self)
 {
-    return MEDIA_SONG;
+    return MEDIA_MOVIE;
 }
 
 static Entry*
