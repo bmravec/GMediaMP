@@ -58,19 +58,33 @@ media_store_get_type ()
 void
 media_store_add_entry (MediaStore *self, Entry *entry)
 {
-    MEDIA_STORE_GET_IFACE (self)->add_entry (self, entry);
+    MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
+
+    if (iface->add_entry) {
+        iface->add_entry (self, entry);
+    }
 }
 
 void
 media_store_remove_entry (MediaStore *self, Entry *entry)
 {
-    MEDIA_STORE_GET_IFACE (self)->rem_entry (self, entry);
+    MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
+
+    if (iface->rem_entry) {
+        iface->rem_entry (self, entry);
+    }
 }
 
 guint
 media_store_get_media_type (MediaStore *self)
 {
-    return MEDIA_STORE_GET_IFACE (self)->get_mtype (self);
+    MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
+
+    if (iface->get_mtype) {
+        return iface->get_mtype (self);
+    } else {
+        return MEDIA_NONE;
+    }
 }
 
 void

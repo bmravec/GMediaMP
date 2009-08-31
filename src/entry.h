@@ -39,7 +39,8 @@ enum {
 };
 
 enum {
-    MEDIA_SONG = 0,
+    MEDIA_NONE = 0,
+    MEDIA_SONG,
     MEDIA_MUSIC_VIDEO,
     MEDIA_MOVIE,
     MEDIA_TVSHOW,
