@@ -21,6 +21,8 @@
 
 #include "media-store.h"
 
+static guint signal_move;
+
 static void
 media_store_base_init (gpointer g_iface)
 {
@@ -29,6 +31,9 @@ media_store_base_init (gpointer g_iface)
     if (!initialized) {
         initialized = TRUE;
 
+        signal_play = g_signal_new ("entry-move", TRACK_SOURCE_TYPE,
+            G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+            G_TYPE_NONE, 1, G_TYPE_POINTER);
     }
 }
 
@@ -66,4 +71,10 @@ guint
 media_store_get_media_type (MediaStore *self)
 {
     return MEDIA_STORE_GET_IFACE (self)->get_mtype (self);
+}
+
+void
+media_store_emit_move (MediaStore *self, Entry *entry)
+{
+    g_signal_emit (G_OBJECT (self), signal_move, 0, entry);
 }

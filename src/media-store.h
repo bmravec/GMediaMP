@@ -51,6 +51,8 @@ void media_store_remove_entry (MediaStore *self, Entry *entry);
 
 guint media_store_get_media_type (MediaStore *self);
 
+void media_store_emit_move (MediaStore *self, Entry *entry);
+
 G_END_DECLS
 
 #endif /* __MEDIA_STORE_H__ */
