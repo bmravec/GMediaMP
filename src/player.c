@@ -19,21 +19,55 @@
  *      MA 02110-1301, USA.
  */
 
-#include <gst/gst.h>
 #include <gtk/gtk.h>
-
 #include <gdk/gdkx.h>
-#include <gst/interfaces/xoverlay.h>
-#include <gst/video/gstvideosink.h>
+
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
+#include <alsa/asoundlib.h>
+
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/extensions/Xv.h>
+#include <X11/extensions/Xvlib.h>
 
 #include "player.h"
 #include "shell.h"
 
 G_DEFINE_TYPE(Player, player, G_TYPE_OBJECT)
 
+static gboolean player_get_video_frame (Player *self, AVFrame *pFrame, double *pts);
+static gint player_get_audio_frame (Player *self, short *dest);
+
+static gpointer player_audio_loop (Player *self);
+static gpointer player_video_loop (Player *self);
+
+static gboolean on_timeout (Player *self);
+
+static void player_change_gdk_window (Player *self, GdkWindow *window);
+
+static int player_av_get_buffer (struct AVCodecContext *c, AVFrame *pic);
+static void player_av_release_buffer (struct AVCodecContext *c, AVFrame *pic);
+
 struct _PlayerPrivate {
-    GstElement *pipeline, *vsink;
-    GstTagList *songtags;
+    AVFormatContext *fctx;
+
+    AVCodec *vcodec;
+    AVCodecContext *vctx;
+
+    AVCodec *acodec;
+    AVCodecContext *actx;
+    AVFrame *vframe, *vframe_xv;
+    uint8_t *vbuffer_xv;
+    struct SwsContext *sws_ctx;
+
+    gint astream, vstream;
+    GAsyncQueue *apq, *vpq;
+
+    int64_t pos, dur;
+    double vpos;
+
     gdouble volume;
     guint state;
     gint t_pos;
@@ -45,6 +79,8 @@ struct _PlayerPrivate {
     gint monitor;
 
     gboolean fullscreen;
+
+    guint win_width, win_height;
 
     GtkWidget *em_da;
 
@@ -60,23 +96,32 @@ struct _PlayerPrivate {
     GtkWidget *fs_next;
     GtkWidget *fs_vbox;
     GtkWidget *fs_hbox;
+
+    XvImage *xvimage;
+    Window win;
+    Window root;
+    Display *display;
+    XvPortID xv_port_id;
+    GC xv_gc;
+    XGCValues values;
 };
 
-guint signal_eos;
-guint signal_tag;
-guint signal_state;
-guint signal_pos;
-guint signal_volume;
+static guint signal_eos;
+static guint signal_tag;
+static guint signal_state;
+static guint signal_pos;
+static guint signal_volume;
 
-guint signal_play;
-guint signal_pause;
-guint signal_next;
-guint signal_prev;
+static guint signal_play;
+static guint signal_pause;
+static guint signal_next;
+static guint signal_prev;
+
+static uint64_t global_video_pkt_pts = AV_NOPTS_VALUE;
 
 static gboolean position_update (Player *self);
 static gboolean player_button_press (GtkWidget *da, GdkEventButton *event, Player *self);
 static void player_set_state (Player *self, guint state);
-static gboolean player_bus_call (GstBus *bus, GstMessage *msg, Player *self);
 static gboolean on_window_state (GtkWidget *widget, GdkEventWindowState *event, Player *self);
 static gboolean handle_expose_cb (GtkWidget *widget, GdkEventExpose *event, Player *self);
 
@@ -140,6 +185,8 @@ player_class_init (PlayerClass *klass)
     signal_next = g_signal_new ("next", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
         G_TYPE_NONE, 0);
+
+    av_register_all();
 }
 
 static void
@@ -147,18 +194,18 @@ player_init (Player *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), PLAYER_TYPE, PlayerPrivate);
 
-    self->priv->pipeline = NULL;
-    self->priv->songtags = NULL;
     self->priv->state = PLAYER_STATE_NULL;
     self->priv->volume = 1.0;
     self->priv->fullscreen = FALSE;
     self->priv->monitor = 0;
+
+    self->priv->apq = g_async_queue_new ();
+    self->priv->vpq = g_async_queue_new ();
 }
 
 Player*
 player_new (int argc, char *argv[])
 {
-    gst_init (&argc, &argv);
     return g_object_new (PLAYER_TYPE, NULL);
 }
 
@@ -201,109 +248,132 @@ player_get_entry (Player *self)
     return self->priv->entry;
 }
 
-static GstBusSyncReply
-bus_sync_handler (GstBus *bus, GstMessage *msg, Player *self)
-{
-    if ((GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ELEMENT) &&
-        gst_structure_has_name (msg->structure, "prepare-xwindow-id")) {
-        if (self->priv->fullscreen) {
-            gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (msg)),
-                GDK_WINDOW_XID (self->priv->fs_da->window));
-        } else {
-            gst_x_overlay_set_xwindow_id (GST_X_OVERLAY (GST_MESSAGE_SRC (msg)),
-                GDK_WINDOW_XID (self->priv->em_da->window));
-        }
-    }
-
-    return GST_BUS_PASS;
-}
-
-static gboolean
-player_bus_call(GstBus *bus, GstMessage *msg, Player *self)
-{
-    GstTagList *taglist;
-    gchar *debug;
-    GError *err;
-
-    switch (GST_MESSAGE_TYPE (msg)) {
-        case GST_MESSAGE_EOS:
-            player_stop (self);
-
-            g_signal_emit (self, signal_eos, 0, NULL);
-            break;
-        case GST_MESSAGE_ERROR:
-            player_stop (self);
-            gst_message_parse_error (msg, &err, &debug);
-            g_free (debug);
-
-            g_print ("Error: %s\n", err->message);
-            g_error_free (err);
-
-            player_close (self);
-            break;
-        case GST_MESSAGE_TAG:
-            gst_message_parse_tag (msg,&taglist);
-            gst_tag_list_insert(self->priv->songtags, taglist,
-                GST_TAG_MERGE_REPLACE);
-
-            g_signal_emit (self, signal_tag, 0, NULL);
-
-            gst_tag_list_free(taglist);
-            break;
-        case GST_MESSAGE_BUFFERING:
-
-            break;
-        case GST_MESSAGE_ELEMENT:
-
-            break;
-        default:
-            break;
-    }
-
-    return TRUE;
-}
-
 void
 player_load (Player *self, Entry *entry)
 {
-    if (self->priv->pipeline)
-        player_close (self);
+    gint i;
 
     if (self->priv->entry) {
         g_object_unref (self->priv->entry);
         self->priv->entry = NULL;
     }
 
+    if (av_open_input_file (&self->priv->fctx, entry_get_location (entry), NULL, 0, NULL) != 0)
+        return;
+
+    if (av_find_stream_info (self->priv->fctx) < 0)
+        return;
+
+    dump_format(self->priv->fctx, 0, entry_get_location (entry), 0);
+
+    self->priv->dur = self->priv->fctx->duration;
+    self->priv->pos = 0;
+
+    self->priv->astream = self->priv->vstream = -1;
+    for (i = 0; i < self->priv->fctx->nb_streams; i++) {
+        if (self->priv->fctx->streams[i]->codec->codec_type == CODEC_TYPE_VIDEO) {
+            self->priv->vstream = i;
+        }
+
+        if (self->priv->fctx->streams[i]->codec->codec_type == CODEC_TYPE_AUDIO) {
+            self->priv->astream = i;
+        }
+
+        if (self->priv->vstream != -1 && self->priv->astream != -1)
+            break;
+    }
+
+    // Setup Audio Stream
+    if (self->priv->astream != -1) {
+        self->priv->actx = self->priv->fctx->streams[self->priv->astream]->codec;
+        self->priv->acodec = avcodec_find_decoder (self->priv->actx->codec_id);
+        if (self->priv->acodec && avcodec_open (self->priv->actx, self->priv->acodec) < 0)
+            return;
+    } else {
+        self->priv->actx = NULL;
+        self->priv->acodec = NULL;
+    }
+
+    // Setup Video Stream
+    if (self->priv->vstream != -1) {
+        self->priv->vctx = self->priv->fctx->streams[self->priv->vstream]->codec;
+        self->priv->vcodec = avcodec_find_decoder (self->priv->vctx->codec_id);
+        if(self->priv->vcodec && avcodec_open (self->priv->vctx, self->priv->vcodec) < 0)
+            return;
+    } else {
+        self->priv->vctx = NULL;
+        self->priv->vcodec = NULL;
+    }
+
+    if (self->priv->vctx) {
+        self->priv->vctx->get_buffer = player_av_get_buffer;
+        self->priv->vctx->release_buffer = player_av_release_buffer;
+
+        self->priv->vframe = avcodec_alloc_frame ();
+        self->priv->vframe_xv = avcodec_alloc_frame();
+
+        self->priv->win_height = self->priv->vctx->height;
+        self->priv->win_width = self->priv->vctx->width;
+
+        int numBytes = avpicture_get_size (PIX_FMT_YUV420P,
+            self->priv->vctx->width, self->priv->vctx->height);
+        self->priv->vbuffer_xv = (uint8_t*) malloc (numBytes * sizeof (uint8_t));
+
+        // Assign appropriate parts of buffer to image planes in pFrameRGB
+        avpicture_fill ((AVPicture*) self->priv->vframe_xv,
+            self->priv->vbuffer_xv, PIX_FMT_YUV420P,
+            self->priv->vctx->width, self->priv->vctx->height);
+
+        self->priv->sws_ctx = sws_getContext (
+            self->priv->vctx->width, self->priv->vctx->height, self->priv->vctx->pix_fmt,
+            self->priv->vctx->width, self->priv->vctx->height, PIX_FMT_YUV420P,
+            SWS_POINT, NULL, NULL, NULL);
+
+        self->priv->display = gdk_x11_display_get_xdisplay (gdk_display_get_default ());
+        self->priv->root = DefaultRootWindow (self->priv->display);
+
+        self->priv->win = GDK_WINDOW_XID (self->priv->em_da->window);
+        XSetWindowBackgroundPixmap (self->priv->display, self->priv->win, None);
+
+        int nb_adaptors;
+        XvAdaptorInfo *adaptors;
+        XvQueryAdaptors (self->priv->display, self->priv->root, &nb_adaptors, &adaptors);
+        int adaptor_no = 0, j, res;
+
+        self->priv->xv_port_id = 0;
+        for (i = 0; i < nb_adaptors && !self->priv->xv_port_id; i++) {
+            adaptor_no = i;
+            for (j = 0; j < adaptors[adaptor_no].num_ports && !self->priv->xv_port_id; j++) {
+                res = XvGrabPort (self->priv->display, adaptors[adaptor_no].base_id + j, 0);
+                if (Success == res) {
+                    g_print ("Grab Port Success\n");
+                    self->priv->xv_port_id = adaptors[adaptor_no].base_id + j;
+                }
+            }
+        }
+
+        XvFreeAdaptorInfo (adaptors);
+
+        int nb_formats, fmt;
+        XvImageFormatValues *formats = XvListImageFormats (self->priv->display,
+            self->priv->xv_port_id, &nb_formats);
+
+        self->priv->xvimage = XvCreateImage (
+            self->priv->display, self->priv->xv_port_id,
+            formats[2].id, self->priv->vbuffer_xv,
+            self->priv->vctx->width, self->priv->vctx->height);
+
+        self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
+    }
+
     self->priv->entry = entry;
     g_object_ref (entry);
-
-    self->priv->pipeline = gst_element_factory_make ("playbin", NULL);
-    self->priv->vsink = gst_element_factory_make ("xvimagesink", NULL);
-
-    g_object_set (self->priv->vsink, "force-aspect-ratio", TRUE, NULL);
-
-    gchar *ruri = g_strdup_printf ("file://%s", entry_get_location (entry));
-    g_object_set (G_OBJECT (self->priv->pipeline),
-        "video-sink", self->priv->vsink,
-        "uri", ruri,
-        "volume", self->priv->volume,
-        "subtitle-font-desc", "Sans 32",
-        NULL);
-    g_free (ruri);
-
-    gst_object_ref (self->priv->pipeline);
-
-    GstBus *bus = gst_pipeline_get_bus (GST_PIPELINE (self->priv->pipeline));
-    gst_bus_add_watch (bus, (GstBusFunc) player_bus_call, self);
-    gst_bus_set_sync_handler (bus, (GstBusSyncHandler) bus_sync_handler, self);
-    gst_object_unref (bus);
-
-    self->priv->songtags = gst_tag_list_new ();
 }
 
 void
 player_close (Player *self)
 {
+    /*
     player_stop (self);
 
     if (self->priv->pipeline) {
@@ -324,44 +394,52 @@ player_close (Player *self)
 
         g_object_unref (self->priv->entry);
         self->priv->entry = NULL;
-    }
+    } */
 }
 
 void
 player_play (Player *self)
 {
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
+    g_thread_create ((GThreadFunc) player_audio_loop, self, FALSE, NULL);
+    g_timeout_add (1.0 / 29.97 * 1000, (GSourceFunc) on_timeout, self);
+
+//    if (self->priv->pipeline) {
+//        gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
         player_set_state (self, PLAYER_STATE_PLAYING);
 
         entry_set_state (self->priv->entry, ENTRY_STATE_PLAYING);
 
         g_timeout_add (500, (GSourceFunc) position_update, self);
-    }
+//    }
+
 }
 
 void
 player_pause (Player *self)
 {
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_PAUSED);
+
+//    if (self->priv->pipeline) {
+//        gst_element_set_state (self->priv->pipeline, GST_STATE_PAUSED);
         player_set_state (self, PLAYER_STATE_PAUSED);
 
         entry_set_state (self->priv->entry, ENTRY_STATE_PAUSED);
-    }
+//    }
+
 }
 
 void
 player_stop (Player *self)
 {
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
+
+//    if (self->priv->pipeline) {
+//        gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
         player_set_state (self, PLAYER_STATE_STOPPED);
 
         if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
             entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
         }
-    }
+//    }
+
 
     g_signal_emit (self, signal_pos, 0, 0);
 }
@@ -375,6 +453,8 @@ player_get_state (Player *self)
 guint
 player_get_length (Player *self)
 {
+    return self->priv->dur / AV_TIME_BASE;
+    /*
     if (self->priv->pipeline) {
         GstFormat fmt = GST_FORMAT_TIME;
         gint64 len;
@@ -383,11 +463,14 @@ player_get_length (Player *self)
     } else {
         return 0;
     }
+    */
 }
 
 guint
 player_get_position (Player *self)
 {
+    return self->priv->pos / 4 / self->priv->actx->sample_rate;
+    /*
     if (self->priv->pipeline) {
         GstFormat fmt = GST_FORMAT_TIME;
         gint64 pos;
@@ -396,11 +479,13 @@ player_get_position (Player *self)
     } else {
         return 0;
     }
+    */
 }
 
 void
 player_set_position (Player *self, guint pos)
 {
+    /*
     if (!self->priv->pipeline) {
         g_signal_emit (self, signal_pos, 0, 0);
         return;
@@ -408,6 +493,8 @@ player_set_position (Player *self, guint pos)
 
     gst_element_seek_simple (self->priv->pipeline, GST_FORMAT_TIME,
         GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT, GST_SECOND * pos);
+
+    */
 
     guint new_pos = player_get_position (self);
 
@@ -429,9 +516,9 @@ player_set_volume (Player *self, gdouble vol)
         if (vol > 1.0) vol = 1.0;
         if (vol < 0.0) vol = 0.0;
 
-        if (self->priv->pipeline) {
-            g_object_set (self->priv->pipeline, "volume", vol, NULL);
-        }
+//        if (self->priv->pipeline) {
+//            g_object_set (self->priv->pipeline, "volume", vol, NULL);
+//        }
 
         gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->fs_vol), self->priv->volume);
 
@@ -443,6 +530,17 @@ void
 on_vol_changed (GtkWidget *widget, gdouble val, Player *self)
 {
     player_set_volume (self, val);
+}
+
+gboolean
+on_alloc_event (GtkWidget *widget, GtkAllocation *allocation, Player *self)
+{
+    if (widget == self->priv->fs_da && self->priv->fullscreen ||
+        widget == self->priv->em_da && !self->priv->fullscreen) {
+        g_print ("ON Alloc %dx%d\n", allocation->width, allocation->height);
+        self->priv->win_width = allocation->width;
+        self->priv->win_height = allocation->height;
+    }
 }
 
 gboolean
@@ -486,6 +584,10 @@ player_activate (Player *self)
         G_CALLBACK (player_button_press), self);
     g_signal_connect (self->priv->fs_da, "button-press-event",
         G_CALLBACK (player_button_press), self);
+    g_signal_connect (self->priv->em_da, "size-allocate",
+        G_CALLBACK (on_alloc_event), self);
+    g_signal_connect (self->priv->fs_da, "size-allocate",
+        G_CALLBACK (on_alloc_event), self);
 
     g_signal_connect (self->priv->em_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
     g_signal_connect (self->priv->fs_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
@@ -544,7 +646,7 @@ toggle_fullscreen (GtkWidget *item, Player *self)
     }
 
     self->priv->t_pos = player_get_position (self);
-    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
 
     if (!self->priv->fullscreen) {
         gdk_screen_get_monitor_geometry (screen, self->priv->monitor, &rect);
@@ -553,9 +655,11 @@ toggle_fullscreen (GtkWidget *item, Player *self)
         self->priv->fullscreen = TRUE;
         gtk_window_fullscreen (GTK_WINDOW (self->priv->fs_win));
         gtk_window_move (GTK_WINDOW (self->priv->fs_win), rect.x, rect.y);
+        player_change_gdk_window (self, self->priv->fs_win->window);
     } else {
         gtk_widget_hide (self->priv->fs_win);
         self->priv->fullscreen = FALSE;
+        player_change_gdk_window (self, self->priv->em_da->window);
     }
 }
 
@@ -564,8 +668,8 @@ on_window_state (GtkWidget *widget,
                  GdkEventWindowState *event,
                  Player *self)
 {
-    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
-    gst_element_get_state (self->priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
+//    gst_element_get_state (self->priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
     player_set_position (self, self->priv->t_pos);
 }
 
@@ -667,4 +771,287 @@ on_pos_change_value (GtkWidget *range,
     player_set_position (self,  value);
 
     return FALSE;
+}
+
+static gboolean
+player_get_video_frame (Player *self, AVFrame *pFrame, double *pts)
+{
+    static AVPacket *packet = NULL;
+    static int       bytesRemaining = 0;
+    static uint8_t  *rawData;
+    int              bytesDecoded;
+    int              frameFinished;
+
+    // Decode packets until we have decoded a complete frame
+    while (TRUE) {
+        // Work on the current packet until we have decoded all of it
+        while (bytesRemaining > 0) {
+            // Decode the next chunk of data
+            bytesDecoded = avcodec_decode_video (self->priv->vctx, pFrame,
+                &frameFinished, rawData, bytesRemaining);
+
+            if (packet->dts != AV_NOPTS_VALUE) {
+                *pts = packet->dts;
+            } else {
+                *pts = 0;
+            }
+
+            *pts *= av_q2d (self->priv->vctx->time_base);
+
+            // Was there an error?
+            if (bytesDecoded < 0) {
+                fprintf (stderr, "Error while decoding frame\n");
+                return FALSE;
+            }
+
+            bytesRemaining -= bytesDecoded;
+            rawData += bytesDecoded;
+
+            // Did we finish the current frame? Then we can return
+            if (frameFinished)
+                return TRUE;
+        }
+
+        // Read the next packet, skipping all packets that aren't for this
+        // stream
+        while (TRUE) {
+            // Free old packet
+            if (packet) {
+                if (packet->data != NULL)
+                    av_free_packet (packet);
+                g_free (packet);
+                packet = NULL;
+            }
+
+            if (g_async_queue_length (self->priv->vpq) > 0) {
+                packet = (AVPacket*) g_async_queue_pop (self->priv->vpq);
+                break;
+            } else {
+                packet = g_new0 (AVPacket, 1);
+                // Read new packet
+                if(av_read_frame (self->priv->fctx, packet) < 0)
+                    goto loop_exit;
+
+                if (packet->stream_index == self->priv->vstream) {
+                    break;
+                } else if (packet->stream_index == self->priv->astream) {
+                    g_async_queue_push (self->priv->apq, packet);
+                    packet = NULL;
+                }
+            }
+        }
+
+        bytesRemaining = packet->size;
+        rawData = packet->data;
+    }
+
+loop_exit:
+    // Decode the rest of the last frame
+    bytesDecoded = avcodec_decode_video (self->priv->vctx, pFrame,
+        &frameFinished, rawData, bytesRemaining);
+
+    // Free last packet
+    if (packet != NULL)
+        if (packet->data != NULL) {
+            av_free_packet (packet);
+        g_free (packet);
+        packet = NULL;
+    }
+
+    return frameFinished != 0;
+}
+
+static gint
+player_get_audio_frame (Player *self, short *dest)
+{
+    static AVPacket *packet = NULL;
+    static uint8_t *pkt_data = NULL;
+    static int pkt_size = 0;
+
+    int len1, data_size;
+
+    for (;;) {
+        while (pkt_size > 0) {
+            data_size = AVCODEC_MAX_AUDIO_FRAME_SIZE * 2;
+
+            len1 = avcodec_decode_audio2 (self->priv->actx, dest,
+                &data_size, pkt_data, pkt_size);
+
+            if (len1 < 0) {
+                pkt_size = 0;
+                break;
+            }
+
+            pkt_data += len1;
+            pkt_size -= len1;
+
+            if (data_size <= 0)
+                continue;
+
+            return data_size;
+        }
+
+        for (;;) {
+            // Free old packet
+            if (packet) {
+                if (packet->data != NULL)
+                    av_free_packet (packet);
+                g_free (packet);
+                packet = NULL;
+            }
+
+            if (g_async_queue_length (self->priv->apq) > 0) {
+                packet = (AVPacket*) g_async_queue_pop (self->priv->apq);
+                break;
+            } else {
+                packet = g_new0 (AVPacket, 1);
+                // Read new packet
+                if(av_read_frame (self->priv->fctx, packet) < 0)
+                    return -1;
+
+                if (packet->stream_index == self->priv->astream) {
+                    break;
+                } else if (packet->stream_index == self->priv->vstream) {
+                    g_async_queue_push (self->priv->vpq, packet);
+                    packet = NULL;
+                }
+            }
+        }
+
+        pkt_data = packet->data;
+        pkt_size = packet->size;
+    }
+}
+
+gpointer
+player_audio_loop (Player *self)
+{
+    g_print ("Started Audio Loop\n");
+    gint len, lcv;
+    short *abuffer = (short*) malloc (AVCODEC_MAX_AUDIO_FRAME_SIZE * 2 * sizeof (uint8_t));
+
+    snd_pcm_t *alsa_handle;
+    snd_pcm_hw_params_t *alsa_params;
+
+    int rc = snd_pcm_open (&alsa_handle, "default", SND_PCM_STREAM_PLAYBACK , 0);
+    if (rc < 0) {
+        g_print ("Unable to open pcm device: %s\n", snd_strerror (rc));
+        return NULL;
+    }
+
+    /* Allocate a hardware parameters object. */
+    snd_pcm_hw_params_alloca (&alsa_params);
+
+    /* Fill it in with default values. */
+    snd_pcm_hw_params_any (alsa_handle, alsa_params);
+
+    /* Set the desired hardware parameters. */
+
+    /* Interleaved mode */
+    snd_pcm_hw_params_set_access (alsa_handle, alsa_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+
+    /* Signed 16-bit little-endian format */
+    snd_pcm_hw_params_set_format (alsa_handle, alsa_params, SND_PCM_FORMAT_S16_LE);
+
+    /* Two channels (stereo) */
+    snd_pcm_hw_params_set_channels (alsa_handle, alsa_params, 2);
+
+    /* 44100 bits/second sampling rate (CD quality) */
+//    unsigned int val = 44100;
+    unsigned int val = self->priv->actx->sample_rate;
+    int dir;
+    snd_pcm_hw_params_set_rate_near (alsa_handle, alsa_params, &val, &dir);
+
+    /* Set period size to 32 frames. */
+    snd_pcm_uframes_t frames = 32;
+    snd_pcm_hw_params_set_period_size_near (alsa_handle, alsa_params, &frames, &dir);
+
+    /* Write the parameters to the driver */
+    rc = snd_pcm_hw_params(alsa_handle, alsa_params);
+    if (rc < 0) {
+        g_print ("unable to set hw parameters: %s\n", snd_strerror (rc));
+        return NULL;
+    }
+
+    g_print ("Done with SND Init\n");
+
+    while ((len = player_get_audio_frame (self, abuffer)) >= 0) {
+        self->priv->pos += len;
+//        g_print ("LEN: %d\n", len);
+        g_print ("TIME: %d::%d\n",
+            player_get_position (self), player_get_length (self));
+        int rc = snd_pcm_writei (alsa_handle, abuffer, len / 4);
+        if (rc == -EPIPE) {
+            /* EPIPE means underrun */
+            g_print ("underrun occurred\n");
+            snd_pcm_prepare (alsa_handle);
+        }
+    }
+
+    snd_pcm_drain (alsa_handle);
+    snd_pcm_close (alsa_handle);
+
+}
+
+gpointer
+player_video_loop (Player *self)
+{
+
+}
+
+gboolean
+on_timeout (Player *self)
+{
+    gint res;
+    double pts;
+
+    res = player_get_video_frame (self, self->priv->vframe, &pts);
+
+    double delta = pts - self->priv->vpos;
+
+    g_print ("PTS(%f) : %f\tDIFF = %f\n", pts, pts / 29.97, pts - self->priv->vpos);
+    self->priv->vpos = pts;
+
+    if (res >= 0) {
+        sws_scale (self->priv->sws_ctx, (uint8_t**) self->priv->vframe->data, (int *) self->priv->vframe->linesize,
+            0, self->priv->vctx->height, self->priv->vframe_xv->data, self->priv->vframe_xv->linesize);
+
+        XvPutImage (self->priv->display, self->priv->xv_port_id,
+            self->priv->win, self->priv->xv_gc, self->priv->xvimage,
+            0, 0, self->priv->vctx->width, self->priv->vctx->height,
+//            0, 0, self->priv->vctx->width, self->priv->vctx->height);
+            0, 0, self->priv->win_width, self->priv->win_height);
+    }
+
+    if (res) {
+        g_timeout_add (delta * 1000,(GSourceFunc) on_timeout, self);
+    }
+
+    return FALSE;
+}
+
+static void
+player_change_gdk_window (Player *self, GdkWindow *window)
+{
+    self->priv->win = GDK_WINDOW_XID (self->priv->fs_da->window);
+
+    self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
+}
+
+static int
+player_av_get_buffer (struct AVCodecContext *c, AVFrame *pic)
+{
+    int ret = avcodec_default_get_buffer (c, pic);
+    uint64_t *pts = av_malloc (sizeof (uint64_t));
+    *pts = global_video_pkt_pts;
+    pic->opaque = pts;
+    return ret;
+}
+
+static void
+player_av_release_buffer (struct AVCodecContext *c, AVFrame *pic)
+{
+    if (pic)
+        av_freep (&pic->opaque);
+    avcodec_default_release_buffer (c, pic);
 }
