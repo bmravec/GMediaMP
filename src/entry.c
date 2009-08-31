@@ -83,8 +83,10 @@ entry_new (guint id)
 const gchar*
 entry_get_location (Entry *self)
 {
-    return self->priv->location;
+//    return self->priv->location;
+    return entry_get_tag_str (self, "location");
 }
+
 
 gchar*
 entry_get_art (Entry *self)
@@ -119,6 +121,8 @@ entry_get_art (Entry *self)
 void
 entry_set_location (Entry *self, const gchar *location)
 {
+    entry_set_tag_str (self, "location", location);
+/*
     if (self->priv->location && strlen (self->priv->location) != 0) {
         g_free (self->priv->location);
     }
@@ -130,6 +134,7 @@ entry_set_location (Entry *self, const gchar *location)
     }
 
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
+*/
 }
 
 guint
