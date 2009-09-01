@@ -51,6 +51,14 @@ struct _ShowsPrivate {
     GtkTreeModel *title_store;
     GtkTreeModel *title_filter;
 
+    GtkWidget *info_dialog;
+    GtkWidget *info_title;
+    GtkWidget *info_show;
+    GtkWidget *info_season;
+    GtkWidget *info_track;
+    GtkWidget *info_save;
+    GtkWidget *info_cancel;
+
     gchar *s_show;
     gchar *s_season;
     Entry *s_entry;
@@ -84,11 +92,17 @@ static gboolean on_season_click (GtkWidget *view, GdkEventButton *event, Shows *
 static gboolean on_title_click (GtkWidget *view, GdkEventButton *event, Shows *self);
 
 static void on_title_remove (GtkWidget *item, Shows *self);
+static void on_title_info (GtkWidget *item, Shows *self);
 
 static gpointer initial_import (Shows *self);
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
     gpointer ne, ShowsCompareFunc cmp, gint l, gboolean create);
 static void entry_changed (Entry *entry, Shows *self);
+
+static void on_info_save (GtkWidget *widget, Shows *self);
+static void on_info_cancel (GtkWidget *widget, Shows *self);
+
+static gint show_entry_cmp (Entry *e1, Entry *e2);
 
 // Interface methods
 static Entry *shows_get_next (TrackSource *self);
@@ -190,6 +204,14 @@ shows_activate (Shows *self)
     self->priv->season = GTK_WIDGET (gtk_builder_get_object (builder, "shows_season"));
     self->priv->title = GTK_WIDGET (gtk_builder_get_object (builder, "shows_title"));
 
+    self->priv->info_dialog = GTK_WIDGET (gtk_builder_get_object (builder, "shows_info_dialog"));
+    self->priv->info_title = GTK_WIDGET (gtk_builder_get_object (builder, "shows_title_field"));
+    self->priv->info_show = GTK_WIDGET (gtk_builder_get_object (builder, "shows_show_field"));
+    self->priv->info_season = GTK_WIDGET (gtk_builder_get_object (builder, "shows_season_field"));
+    self->priv->info_track = GTK_WIDGET (gtk_builder_get_object (builder, "shows_track_field"));
+    self->priv->info_save = GTK_WIDGET (gtk_builder_get_object (builder, "shows_save"));
+    self->priv->info_cancel = GTK_WIDGET (gtk_builder_get_object (builder, "shows_cancel"));
+
     self->priv->show_store = GTK_TREE_MODEL (gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_UINT));
     self->priv->season_store = GTK_TREE_MODEL (gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_UINT));
     self->priv->title_store = GTK_TREE_MODEL (gtk_list_store_new (2, G_TYPE_OBJECT, G_TYPE_BOOLEAN));
@@ -233,7 +255,7 @@ shows_activate (Shows *self)
     gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->season), column);
 
     gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->season_store),
-        NULL, 0, 0, "All 0 Seasons", 1, 0, -1);
+        NULL, 0, 0, "Select a show...", 1, 0, -1);
 
     // Select All for both show and season
     GtkTreePath *root = gtk_tree_path_new_from_string ("0");
@@ -284,6 +306,11 @@ shows_activate (Shows *self)
         (GtkTreeCellDataFunc) time_column_func, "duration", NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->title), column);
 
+    // Make dialog modal and have it stay above parent
+    gtk_window_set_modal (GTK_WINDOW (self->priv->info_dialog), TRUE);
+    gtk_window_set_transient_for (GTK_WINDOW (self->priv->info_dialog),
+        GTK_WINDOW (gtk_builder_get_object (builder, "main_win")));
+
     // Connect Signals
     g_signal_connect (G_OBJECT (self->priv->show), "cursor-changed", G_CALLBACK (show_cursor_changed), self);
     g_signal_connect (G_OBJECT (self->priv->season), "cursor-changed", G_CALLBACK (season_cursor_changed), self);
@@ -299,6 +326,9 @@ shows_activate (Shows *self)
     g_signal_connect (self->priv->db, "add-entry", G_CALLBACK (shows_gmediadb_add), self);
     g_signal_connect (self->priv->db, "remove-entry", G_CALLBACK (shows_gmediadb_remove), self);
     g_signal_connect (self->priv->db, "update-entry", G_CALLBACK (shows_gmediadb_update), self);
+
+    g_signal_connect (self->priv->info_save, "clicked", G_CALLBACK (on_info_save), self);
+    g_signal_connect (self->priv->info_cancel, "clicked", G_CALLBACK (on_info_cancel), self);
 
     shell_add_widget (self->priv->shell, gtk_label_new ("Library"), "Library", NULL);
     shell_add_widget (self->priv->shell, self->priv->widget, "Library/TV Shows", NULL);
@@ -320,6 +350,14 @@ shows_add_entry (MediaStore *self, Entry *entry)
 {
     ShowsPrivate *priv = SHOWS (self)->priv;
 
+    if (entry_get_tag_str (entry, "show") == NULL) {
+        entry_set_tag_str (entry, "show", "Unknown Show");
+    }
+
+    if (entry_get_tag_str (entry, "season") == NULL) {
+        entry_set_tag_str (entry, "season", "Unknown Season");
+    }
+
     gchar **keys, **vals;
 
     guint size = entry_get_key_value_pairs (entry, &keys, &vals);
@@ -339,27 +377,26 @@ shows_insert_entry (Shows *self, Entry *entry)
     gchar *new_str;
     gboolean res;
 
-    const gchar *artist = entry_get_tag_str (entry, "artist");
-    const gchar *album = entry_get_tag_str (entry, "album");
+    const gchar *show = entry_get_tag_str (entry, "show");
+    const gchar *season = entry_get_tag_str (entry, "season");
 
-    gboolean visible = (priv->s_show == NULL ||
-                       !g_strcmp0 (priv->s_show, artist)) &&
-                       (priv->s_season == NULL ||
-                       !g_strcmp0 (priv->s_season, album));
+    gboolean sev = !g_strcmp0 (priv->s_show, show);
+    gboolean tv = (priv->s_show == NULL || sev) &&
+        (priv->s_season == NULL || !g_strcmp0 (priv->s_season, season));
 
-    // Add artist to view
+    // Add show to view
     res = insert_iter (GTK_LIST_STORE (priv->show_store), &iter,
-        (gpointer) artist, (ShowsCompareFunc) g_strcmp0, 1, FALSE);
+        (gpointer) show, (ShowsCompareFunc) g_strcmp0, 1, FALSE);
 
     gtk_tree_model_get (priv->show_store, &iter, 1, &cnt, -1);
     gtk_list_store_set (GTK_LIST_STORE (priv->show_store), &iter,
-        0, artist, 1, cnt + 1, -1);
+        0, show, 1, cnt + 1, -1);
 
     gtk_tree_model_get_iter_first (priv->show_store, &first);
     gtk_tree_model_get (priv->show_store, &first, 1, &cnt, -1);
 
     if (res) {
-        new_str = g_strdup_printf ("All %d Artists", ++priv->num_shows);
+        new_str = g_strdup_printf ("All %d Shows", ++priv->num_shows);
         gtk_list_store_set (GTK_LIST_STORE (priv->show_store), &first,
             0, new_str, 1, cnt + 1, -1);
         g_free (new_str);
@@ -368,20 +405,20 @@ shows_insert_entry (Shows *self, Entry *entry)
             1, cnt + 1, -1);
     }
 
-    // Add album to view
-    res = insert_iter (GTK_LIST_STORE (priv->season_store), &iter,
-        (gpointer) album, (ShowsCompareFunc) g_strcmp0, 1, FALSE);
+    // Add season to view
+    if (sev) {
+        res = insert_iter (GTK_LIST_STORE (priv->season_store), &iter,
+            (gpointer) season, (ShowsCompareFunc) g_strcmp0, 1, FALSE);
 
-    gtk_tree_model_get (priv->season_store, &iter, 1, &cnt, -1);
-    gtk_list_store_set (GTK_LIST_STORE (priv->season_store), &iter,
-        0, album, 1, cnt + 1, 2, visible, 3, artist, -1);
+        gtk_tree_model_get (priv->season_store, &iter, 1, &cnt, -1);
+        gtk_list_store_set (GTK_LIST_STORE (priv->season_store), &iter,
+            0, season, 1, cnt + 1, -1);
 
-    if (visible) {
         gtk_tree_model_get_iter_first (priv->season_store, &first);
         gtk_tree_model_get (priv->season_store, &first, 1, &cnt, -1);
 
         if (res) {
-            new_str = g_strdup_printf ("All %d Albums", ++priv->num_seasons);
+            new_str = g_strdup_printf ("All %d Seasons", ++priv->num_seasons);
             gtk_list_store_set (GTK_LIST_STORE (priv->season_store), &first,
                 0, new_str, 1, cnt + 1, -1);
             g_free (new_str);
@@ -392,10 +429,10 @@ shows_insert_entry (Shows *self, Entry *entry)
     }
 
     insert_iter (GTK_LIST_STORE (priv->title_store), &iter, entry,
-        (ShowsCompareFunc) entry_cmp, 0, TRUE);
+        (ShowsCompareFunc) show_entry_cmp, 0, TRUE);
 
     gtk_list_store_set (GTK_LIST_STORE (priv->title_store), &iter,
-        0, entry, 1, visible, -1);
+        0, entry, 1, tv, -1);
 
     g_signal_connect (G_OBJECT (entry), "entry-changed",
         G_CALLBACK (entry_changed), SHOWS (self));
@@ -404,10 +441,7 @@ shows_insert_entry (Shows *self, Entry *entry)
 static void
 shows_remove_entry (MediaStore *self, Entry *entry)
 {
-    ShowsPrivate *priv = SHOWS (self)->priv;
-    g_print ("SHOWS REMOVE ENTRY: %s\n", entry_get_location (entry));
-
-    gmediadb_remove_entry (priv->db, entry_get_id (entry));
+    gmediadb_remove_entry (SHOWS (self)->priv->db, entry_get_id (entry));
 }
 
 static void
@@ -419,13 +453,12 @@ shows_deinsert_entry (Shows *self, Entry *entry)
     gint cnt;
     gchar *new_str;
 
-    const gchar *artist = entry_get_tag_str (entry, "artist");
-    const gchar *album = entry_get_tag_str (entry, "album");
+    const gchar *show = entry_get_tag_str (entry, "show");
+    const gchar *season = entry_get_tag_str (entry, "season");
 
-    gboolean visible = (priv->s_show == NULL ||
-                       !g_strcmp0 (priv->s_show, artist));
+    gboolean visible = !g_strcmp0 (priv->s_show, show);
 
-    insert_iter (GTK_LIST_STORE (priv->show_store), &iter, (gpointer) artist,
+    insert_iter (GTK_LIST_STORE (priv->show_store), &iter, (gpointer) show,
                  (ShowsCompareFunc) g_strcmp0, 1, FALSE);
 
     gtk_tree_model_get (priv->show_store, &iter, 1, &cnt, -1);
@@ -436,37 +469,46 @@ shows_deinsert_entry (Shows *self, Entry *entry)
         gtk_tree_model_get_iter_first (priv->show_store, &first);
         gtk_tree_model_get (priv->show_store, &first, 1, &cnt, -1);
 
-        new_str = g_strdup_printf ("All %d Artists", --priv->num_shows);
+        new_str = g_strdup_printf ("All %d Shows", --priv->num_shows);
         gtk_list_store_set (GTK_LIST_STORE (priv->show_store), &first,
             0, new_str, 1, cnt - 1, -1);
         g_free (new_str);
     } else {
         gtk_list_store_set (GTK_LIST_STORE (priv->show_store), &iter, 1, cnt - 1, -1);
+
+        gtk_tree_model_get_iter_first (priv->show_store, &first);
+        gtk_tree_model_get (priv->show_store, &first, 1, &cnt, -1);
+        gtk_list_store_set (GTK_LIST_STORE (priv->show_store), &first, 1, cnt - 1, -1);
     }
 
-    insert_iter (GTK_LIST_STORE (priv->season_store), &iter, (gpointer) album,
+    if (visible) {
+        insert_iter (GTK_LIST_STORE (priv->season_store), &iter, (gpointer) season,
                  (ShowsCompareFunc) g_strcmp0, 1, FALSE);
 
-    gtk_tree_model_get (priv->season_store, &iter, 1, &cnt, -1);
+        gtk_tree_model_get (priv->season_store, &iter, 1, &cnt, -1);
 
-    if (cnt == 1) {
-        gtk_list_store_remove (GTK_LIST_STORE (priv->season_store), &iter);
+        if (cnt == 1) {
+            gtk_list_store_remove (GTK_LIST_STORE (priv->season_store), &iter);
 
-        if (visible) {
             gtk_tree_model_get_iter_first (priv->season_store, &first);
             gtk_tree_model_get (priv->season_store, &first, 1, &cnt, -1);
 
-            new_str = g_strdup_printf ("All %d Albums", --priv->num_seasons);
+            new_str = g_strdup_printf ("All %d Season", --priv->num_seasons);
             gtk_list_store_set (GTK_LIST_STORE (priv->season_store), &first,
                 0, new_str, 1, cnt - 1, -1);
             g_free (new_str);
+        } else {
+            gtk_list_store_set (GTK_LIST_STORE (priv->season_store), &iter, 1, cnt - 1, -1);
+
+            gtk_tree_model_get_iter_first (priv->season_store, &first);
+            gtk_tree_model_get (priv->season_store, &first, 1, &cnt, -1);
+            gtk_list_store_set (GTK_LIST_STORE (priv->season_store), &first,
+                1, cnt - 1, -1);
         }
-    } else {
-        gtk_list_store_set (GTK_LIST_STORE (priv->season_store), &iter, 1, cnt - 1, -1);
     }
 
     insert_iter (GTK_LIST_STORE (priv->title_store), &iter, entry,
-        (ShowsCompareFunc) entry_cmp, 0, FALSE);
+        (ShowsCompareFunc) show_entry_cmp, 0, FALSE);
 
     gtk_list_store_remove (GTK_LIST_STORE (priv->title_store), &iter);
 
@@ -636,21 +678,21 @@ entry_changed (Entry *entry, Shows *self)
 static gpointer
 initial_import (Shows *self)
 {
-    gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
+    gchar *tags[] = { "id", "show", "season", "title", "duration", "track", "location", NULL };
     GPtrArray *entries = gmediadb_get_all_entries (self->priv->db, tags);
 
     int i;
     for (i = 0; i < entries->len; i++) {
         gchar **entry = g_ptr_array_index (entries, i);
         Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
-        entry_set_tag_str (e, "artist", entry[1] ? entry[1] : "");
-        entry_set_tag_str (e, "album", entry[2] ? entry[2] : "");
+        entry_set_tag_str (e, "show", entry[1] ? entry[1] : "");
+        entry_set_tag_str (e, "season", entry[2] ? entry[2] : "");
         entry_set_tag_str (e, "title", entry[3] ? entry[3] : "");
 
         entry_set_tag_int (e, "duration", entry[4] ? atoi (entry[4]) : 0);
         entry_set_tag_int (e, "track", entry[5] ? atoi (entry[5]) : 0);
 
-        entry_set_media_type (e, MEDIA_SONG);
+        entry_set_media_type (e, MEDIA_TVSHOW);
         entry_set_location (e, entry[6]);
 
         shows_insert_entry (self, e);
@@ -665,11 +707,11 @@ static void
 show_cursor_changed (GtkTreeView *view, Shows *self)
 {
     GtkTreePath *path;
-    GtkTreeIter iter;
-    gchar *art, *artist, *path_str = NULL;
-    gboolean changed = FALSE;
-
-    gint albums = 0, tracks = 0, cnt;
+    GtkTreeIter iter, siter;
+    gchar *show, *path_str = NULL;
+    const gchar *season = NULL;
+    Entry *e;
+    gint seasons, tracks, cnt;
 
     gtk_tree_view_get_cursor (GTK_TREE_VIEW (self->priv->show), &path, NULL);
 
@@ -679,71 +721,93 @@ show_cursor_changed (GtkTreeView *view, Shows *self)
 
     if (path == NULL || !g_strcmp0 (path_str, "0")) {
         if (self->priv->s_show) {
-            changed = TRUE;
             g_free (self->priv->s_show);
             self->priv->s_show = NULL;
 
+            // Clear view
             gtk_tree_model_get_iter_first (self->priv->season_store, &iter);
-            while (gtk_tree_model_iter_next (self->priv->season_store, &iter)) {
-                gtk_tree_model_get (self->priv->season_store, &iter, 1, &cnt, -1);
+            while (gtk_list_store_remove (GTK_LIST_STORE (self->priv->season_store), &iter));
 
-                albums++;
-                tracks += cnt;
+            gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->season_store),
+                NULL, 0, 0, "Select a show...", 1, 0, -1);
 
-                gtk_list_store_set (GTK_LIST_STORE (self->priv->season_store),
-                    &iter, 2, TRUE, -1);
-            }
-
-            gchar *new_str = g_strdup_printf ("All %d Albums", albums);
-            gtk_tree_model_get_iter_first (self->priv->season_store, &iter);
-            gtk_list_store_set (GTK_LIST_STORE (self->priv->season_store), &iter,
-                0, new_str, 1, tracks, -1);
-            g_free (new_str);
+            gtk_tree_model_get_iter_first (self->priv->title_store, &iter);
+            do {
+                gtk_list_store_set (GTK_LIST_STORE (self->priv->title_store),
+                    &iter, 1, TRUE, -1);
+            } while (gtk_tree_model_iter_next (self->priv->title_store, &iter));
         }
     } else {
         gtk_tree_model_get_iter (self->priv->show_store, &iter, path);
-        gtk_tree_model_get (self->priv->show_store, &iter, 0, &art, -1);
+        gtk_tree_model_get (self->priv->show_store, &iter, 0, &show, -1);
 
-        if (g_strcmp0 (self->priv->s_show, art)) {
-            changed = TRUE;
-            if (self->priv->s_show)
+        if (g_strcmp0 (self->priv->s_show, show)) {
+            if (self->priv->s_show) {
                 g_free (self->priv->s_show);
-            self->priv->s_show = g_strdup (art);
-
-            gtk_tree_model_get_iter_first (self->priv->season_store, &iter);
-            while (gtk_tree_model_iter_next (self->priv->season_store, &iter)) {
-                gtk_tree_model_get (self->priv->season_store, &iter,
-                    1, &cnt, 3, &artist, -1);
-
-                gboolean visible = !g_strcmp0 (self->priv->s_show, artist);
-                if (visible) {
-                    albums++;
-                    tracks += cnt;
-                }
-
-                gtk_list_store_set (GTK_LIST_STORE (self->priv->season_store),
-                    &iter, 2, !g_strcmp0 (self->priv->s_show, artist), -1);
-                g_free (artist);
             }
 
-            gchar *new_str = g_strdup_printf ("All %d Albums", albums);
-            gtk_tree_model_get_iter_first (self->priv->season_store, &iter);
-            gtk_list_store_set (GTK_LIST_STORE (self->priv->season_store), &iter,
-                0, new_str, 1, tracks, -1);
-            g_free (new_str);
-        }
+            self->priv->s_show = g_strdup (show);
 
-        g_free (art);
+            // Clear view
+            gtk_tree_model_get_iter_first (self->priv->season_store, &iter);
+            while (gtk_list_store_remove (GTK_LIST_STORE (self->priv->season_store), &iter));
+
+            gtk_tree_model_get_iter_first (self->priv->title_store, &iter);
+            gtk_list_store_append (GTK_LIST_STORE (self->priv->season_store), &siter);
+            cnt = 0;
+            seasons = 0;
+            gboolean started = FALSE;
+            do {
+                gtk_tree_model_get (self->priv->title_store, &iter, 0, &e, -1);
+                if (!g_strcmp0 (self->priv->s_show, entry_get_tag_str (e, "show"))) {
+                    if (season) {
+                        if (!g_strcmp0 (season, entry_get_tag_str (e, "season"))) {
+                            tracks++;
+                            cnt++;
+                        } else {
+                            gtk_list_store_set (GTK_LIST_STORE (self->priv->season_store),
+                                &siter, 0, season, 1, tracks, -1);
+                            seasons++;
+                            gtk_list_store_append (GTK_LIST_STORE (self->priv->season_store),
+                                &siter);
+
+                            tracks = 1;
+                            cnt++;
+
+                            season = entry_get_tag_str (e, "season");
+                        }
+                    } else {
+                        tracks = 1;
+                        cnt++;
+
+                        season = entry_get_tag_str (e, "season");
+                    }
+
+                    gtk_list_store_set (GTK_LIST_STORE (self->priv->title_store),
+                        &iter, 1, TRUE, -1);
+                } else {
+                    gtk_list_store_set (GTK_LIST_STORE (self->priv->title_store),
+                        &iter, 1, FALSE, -1);
+                }
+            } while (gtk_tree_model_iter_next (self->priv->title_store, &iter));
+
+            gtk_list_store_set (GTK_LIST_STORE (self->priv->season_store),
+                &siter, 0, season, 1, tracks, -1);
+            seasons++;
+
+            gchar *str = g_strdup_printf ("All %d seasons", seasons);
+            gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->season_store),
+                NULL, 0, 0, str, 1, cnt, -1);
+            g_free (str);
+        }
     }
 
-    if (path_str)
+    if (path_str) {
         g_free (path_str);
+    }
 
-    if (path)
+    if (path) {
         gtk_tree_path_free (path);
-
-    if (changed) {
-        season_cursor_changed (view, self);
     }
 }
 
@@ -752,7 +816,7 @@ season_cursor_changed (GtkTreeView *view, Shows *self)
 {
     GtkTreePath *path;
     GtkTreeIter iter;
-    gchar *alb, *path_str = NULL;
+    gchar *season, *path_str = NULL;
     Entry *e;
 
     gtk_tree_view_get_cursor (GTK_TREE_VIEW (self->priv->season), &path, NULL);
@@ -761,7 +825,7 @@ season_cursor_changed (GtkTreeView *view, Shows *self)
         path_str = gtk_tree_path_to_string (path);
 
     if (path == NULL || !g_strcmp0 (path_str, "0")) {
-        if (self->priv->s_season || GTK_WIDGET (view) == self->priv->show) {
+        if (self->priv->s_season) {
             g_free (self->priv->s_season);
             self->priv->s_season = NULL;
 
@@ -770,7 +834,7 @@ season_cursor_changed (GtkTreeView *view, Shows *self)
                 gtk_tree_model_get (self->priv->title_store, &iter, 0, &e, -1);
 
                 gboolean visible = self->priv->s_show == NULL ||
-                                   !g_strcmp0 (self->priv->s_show, entry_get_tag_str (e, "artist"));
+                    !g_strcmp0 (self->priv->s_show, entry_get_tag_str (e, "show"));
 
                 gtk_list_store_set (GTK_LIST_STORE (self->priv->title_store),
                     &iter, 1, visible, -1);
@@ -778,35 +842,39 @@ season_cursor_changed (GtkTreeView *view, Shows *self)
         }
     } else {
         gtk_tree_model_get_iter (self->priv->season_store, &iter, path);
-        gtk_tree_model_get (self->priv->season_store, &iter, 0, &alb, -1);
+        gtk_tree_model_get (self->priv->season_store, &iter, 0, &season, -1);
 
-        if (g_strcmp0 (self->priv->s_season, alb) || GTK_WIDGET (view) == self->priv->show) {
-            if (self->priv->s_season)
+        if (g_strcmp0 (self->priv->s_season, season)) {
+            if (self->priv->s_season) {
                 g_free (self->priv->s_season);
-            self->priv->s_season = g_strdup (alb);
+            }
+
+            self->priv->s_season = g_strdup (season);
 
             gtk_tree_model_get_iter_first (self->priv->title_store, &iter);
             do {
                 gtk_tree_model_get (self->priv->title_store, &iter, 0, &e, -1);
 
                 gboolean visible = (self->priv->s_show == NULL ||
-                                   !g_strcmp0 (self->priv->s_show, entry_get_tag_str (e, "artist"))) &&
+                                   !g_strcmp0 (self->priv->s_show, entry_get_tag_str (e, "show"))) &&
                                    (self->priv->s_season == NULL ||
-                                   !g_strcmp0 (self->priv->s_season, entry_get_tag_str (e, "album")));
+                                   !g_strcmp0 (self->priv->s_season, entry_get_tag_str (e, "season")));
 
                 gtk_list_store_set (GTK_LIST_STORE (self->priv->title_store),
                     &iter, 1, visible, -1);
             } while (gtk_tree_model_iter_next (self->priv->title_store, &iter));
         }
 
-        g_free (alb);
+        g_free (season);
     }
 
-    if (path_str)
+    if (path_str) {
         g_free (path_str);
+    }
 
-    if (path)
+    if (path) {
         gtk_tree_path_free (path);
+    }
 }
 
 static void
@@ -926,18 +994,18 @@ insert_iter (GtkListStore *store,
 static void
 shows_gmediadb_add (GMediaDB *db, guint id, Shows *self)
 {
-    gchar *tags[] = { "id", "artist", "album", "title", "duration", "track", "location", NULL };
+    gchar *tags[] = { "id", "show", "season", "title", "duration", "track", "location", NULL };
     gchar **entry = gmediadb_get_entry (self->priv->db, id, tags);
 
     Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
-    entry_set_tag_str (e, "artist", entry[1] ? entry[1] : "");
-    entry_set_tag_str (e, "album", entry[2] ? entry[2] : "");
+    entry_set_tag_str (e, "show", entry[1] ? entry[1] : "");
+    entry_set_tag_str (e, "season", entry[2] ? entry[2] : "");
     entry_set_tag_str (e, "title", entry[3] ? entry[3] : "");
 
     entry_set_tag_int (e, "duration", entry[4] ? atoi (entry[4]) : 0);
     entry_set_tag_int (e, "track", entry[5] ? atoi (entry[5]) : 0);
 
-    entry_set_media_type (e, MEDIA_SONG);
+    entry_set_media_type (e, MEDIA_TVSHOW);
     entry_set_location (e, entry[6]);
 
     gdk_threads_enter ();
@@ -970,7 +1038,37 @@ shows_gmediadb_remove (GMediaDB *db, guint id, Shows *self)
 static void
 shows_gmediadb_update (GMediaDB *db, guint id, Shows *self)
 {
+    Entry *oe;
 
+    gchar *tags[] = { "id", "show", "season", "title", "duration", "track", "location", NULL };
+    gchar **entry = gmediadb_get_entry (self->priv->db, id, tags);
+
+    Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
+    entry_set_tag_str (e, "show", entry[1] ? entry[1] : "");
+    entry_set_tag_str (e, "season", entry[2] ? entry[2] : "");
+    entry_set_tag_str (e, "title", entry[3] ? entry[3] : "");
+
+    entry_set_tag_int (e, "duration", entry[4] ? atoi (entry[4]) : 0);
+    entry_set_tag_int (e, "track", entry[5] ? atoi (entry[5]) : 0);
+
+    entry_set_media_type (e, MEDIA_TVSHOW);
+    entry_set_location (e, entry[6]);
+
+    GtkTreeIter iter;
+    gtk_tree_model_get_iter_first (self->priv->title_store, &iter);
+    do {
+        gtk_tree_model_get (self->priv->title_store, &iter, 0, &oe, -1);
+        if (entry_get_id (oe) == id) {
+            break;
+        }
+        oe = NULL;
+    } while (gtk_tree_model_iter_next (self->priv->title_store, &iter));
+
+    if (oe) {
+        shows_deinsert_entry (self, oe);
+    }
+
+    shows_insert_entry (self, e);
 }
 
 static gboolean
@@ -1014,7 +1112,14 @@ on_title_click (GtkWidget *view, GdkEventButton *event, Shows *self)
 
         GtkWidget *menu = gtk_menu_new ();
 
-        GtkWidget *item = gtk_image_menu_item_new_from_stock (GTK_STOCK_REMOVE, NULL);
+        GtkWidget *item = gtk_image_menu_item_new_from_stock (GTK_STOCK_INFO, NULL);
+        gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Get Info");
+        gtk_menu_append (GTK_MENU (menu), item);
+        g_signal_connect (item, "activate", G_CALLBACK (on_title_info), self);
+
+        gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_REMOVE, NULL);
         gtk_menu_append (GTK_MENU (menu), item);
         g_signal_connect (item, "activate", G_CALLBACK (on_title_remove), self);
 
@@ -1043,8 +1148,8 @@ on_title_remove (GtkWidget *item, Shows *self)
 
     entries = g_new0 (Entry*, size);
     for (i = 0; i < size; i++) {
-        gtk_tree_model_get_iter (self->priv->title_store, &iter, g_list_nth_data (rows, i));
-        gtk_tree_model_get (self->priv->title_store, &iter, 0, &entries[i], -1);
+        gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->title_filter, &iter, 0, &entries[i], -1);
     }
 
     g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
@@ -1055,4 +1160,186 @@ on_title_remove (GtkWidget *item, Shows *self)
     }
 
     g_free (entries);
+}
+
+static void
+on_title_info (GtkWidget *item, Shows *self)
+{
+    Entry *e;
+    GtkTreeIter iter;
+    guint size, i;
+
+    const gchar *show = NULL, *season = NULL, *title = NULL, *track = NULL;
+
+    GList *rows = gtk_tree_selection_get_selected_rows (self->priv->title_sel, NULL);
+    size = g_list_length (rows);
+    if (size <= 0)
+        return;
+
+    gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, 0));
+    gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
+
+    show = entry_get_tag_str (e, "show");
+    season = entry_get_tag_str (e, "season");
+
+    if (size > 1) {
+        for (i = 1; i < size; i++) {
+            gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
+            gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
+            if (g_strcmp0 (show, entry_get_tag_str (e, "show"))) {
+                show = NULL;
+            }
+
+            if (g_strcmp0 (season, entry_get_tag_str (e, "season"))) {
+                season = NULL;
+            }
+        }
+    } else {
+        title = entry_get_tag_str (e, "title");
+        track = entry_get_tag_str (e, "track");
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    if (title) {
+        gtk_widget_set_state (self->priv->info_title, GTK_STATE_NORMAL);
+        gtk_entry_set_text (GTK_ENTRY (self->priv->info_title), title);
+    } else {
+        gtk_widget_set_state (self->priv->info_title, GTK_STATE_INSENSITIVE);
+        gtk_entry_set_text (GTK_ENTRY (self->priv->info_title), "");
+    }
+
+    if (track) {
+        gtk_widget_set_state (self->priv->info_track, GTK_STATE_NORMAL);
+        gtk_entry_set_text (GTK_ENTRY (self->priv->info_track), title);
+    } else {
+        gtk_widget_set_state (self->priv->info_track, GTK_STATE_INSENSITIVE);
+        gtk_entry_set_text (GTK_ENTRY (self->priv->info_track), "");
+    }
+
+    gtk_entry_set_text (GTK_ENTRY (self->priv->info_show), show ? show : "");
+    gtk_entry_set_text (GTK_ENTRY (self->priv->info_season), season ? season : "");
+
+    gtk_widget_show_all (self->priv->info_dialog);
+}
+
+static void
+on_info_save (GtkWidget *widget, Shows *self)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i, j;
+    gchar **keys, **vals;
+
+    GList *rows = gtk_tree_selection_get_selected_rows (self->priv->title_sel, NULL);
+    size = g_list_length (rows);
+
+    if (size > 1) {
+        const gchar *show = gtk_entry_get_text (GTK_ENTRY (self->priv->info_show));
+        const gchar *season = gtk_entry_get_text (GTK_ENTRY (self->priv->info_season));
+
+        entries = g_new0 (Entry*, size);
+        for (i = 0; i < size; i++) {
+            gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
+            gtk_tree_model_get (self->priv->title_filter, &iter, 0, &entries[i], -1);
+        }
+
+        g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+        g_list_free (rows);
+
+        for (i = 0; i < size; i++) {
+            entry_get_key_value_pairs (entries[i], &keys, &vals);
+
+            for (j = 0; keys[j]; j++) {
+                if (!g_strcmp0 (keys[j], "show")) {
+                    g_free (vals[j]);
+                    vals[j] = g_strdup (show);
+                }
+
+                if (!g_strcmp0 (keys[j], "season")) {
+                    g_free (vals[j]);
+                    vals[j] = g_strdup (season);
+                }
+            }
+
+            gmediadb_update_entry (self->priv->db, entry_get_id (entries[i]), keys, vals);
+
+            g_strfreev (keys);
+            g_strfreev (vals);
+        }
+
+        g_free (entries);
+    } else {
+        Entry *e;
+        gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, 0));
+        gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
+
+        const gchar *title = gtk_entry_get_text (GTK_ENTRY (self->priv->info_title));
+        const gchar *show = gtk_entry_get_text (GTK_ENTRY (self->priv->info_show));
+        const gchar *season = gtk_entry_get_text (GTK_ENTRY (self->priv->info_season));
+        const gchar *track = gtk_entry_get_text (GTK_ENTRY (self->priv->info_track));
+
+        entry_get_key_value_pairs (e, &keys, &vals);
+
+        for (i = 0; keys[i]; i++) {
+            if (!g_strcmp0 (keys[i], "title")) {
+                g_free (vals[i]);
+                vals[i] = g_strdup (title);
+            }
+
+            if (!g_strcmp0 (keys[i], "show")) {
+                g_free (vals[i]);
+                vals[i] = g_strdup (show);
+            }
+
+            if (!g_strcmp0 (keys[i], "season")) {
+                g_free (vals[i]);
+                vals[i] = g_strdup (season);
+            }
+
+            if (!g_strcmp0 (keys[i], "track")) {
+                g_free (vals[i]);
+                vals[i] = g_strdup (track);
+            }
+        }
+
+        gmediadb_update_entry (self->priv->db, entry_get_id (e), keys, vals);
+
+        g_strfreev (keys);
+        g_strfreev (vals);
+    }
+
+    gtk_widget_hide (self->priv->info_dialog);
+}
+
+static void
+on_info_cancel (GtkWidget *widget, Shows *self)
+{
+    gtk_widget_hide (self->priv->info_dialog);
+}
+
+static gint
+show_entry_cmp (Entry *e1, Entry *e2)
+{
+    gint res;
+    if (entry_get_id (e1) == entry_get_id (e2))
+        return 0;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "show"), entry_get_tag_str (e2, "show"));
+    if (res != 0)
+        return res;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "season"), entry_get_tag_str (e2, "season"));
+    if (res != 0)
+        return res;
+
+    if (entry_get_tag_int (e2, "track") != entry_get_tag_int (e1, "track"))
+        return entry_get_tag_int (e1, "track") - entry_get_tag_int (e2, "track");
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
+    if (res != 0)
+        return res;
+
+    return -1;
 }
