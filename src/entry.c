@@ -83,7 +83,6 @@ entry_new (guint id)
 const gchar*
 entry_get_location (Entry *self)
 {
-//    return self->priv->location;
     return entry_get_tag_str (self, "location");
 }
 
@@ -122,19 +121,6 @@ void
 entry_set_location (Entry *self, const gchar *location)
 {
     entry_set_tag_str (self, "location", location);
-/*
-    if (self->priv->location && strlen (self->priv->location) != 0) {
-        g_free (self->priv->location);
-    }
-
-    if (!location || strlen (location) == 0) {
-        self->priv->location = "";
-    } else {
-        self->priv->location = g_strdup (location);
-    }
-
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
-*/
 }
 
 guint
@@ -214,8 +200,11 @@ entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
 void
 entry_set_tag_int (Entry *self, const gchar *tag, gint value)
 {
+/*
     gint *val = g_new0 (gint, 1);
     *val = value;
+*/
+    gchar *val = g_strdup_printf ("%d", value);
 
     g_hash_table_insert (self->priv->table, g_strdup (tag), val);
 
@@ -231,11 +220,15 @@ entry_get_tag_str (Entry *self, const gchar *tag)
 gint
 entry_get_tag_int (Entry *self, const gchar *tag)
 {
+/*
     gint *val = (gint*) g_hash_table_lookup (self->priv->table, tag);
     if (val) {
         return *(val);
     }
     return 0;
+*/
+    gchar *val = (gchar*) g_hash_table_lookup (self->priv->table, tag);
+    return val ? atoi (val) : 0;
 }
 
 guint
