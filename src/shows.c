@@ -1212,7 +1212,7 @@ on_title_info (GtkWidget *item, Shows *self)
 
     if (track) {
         gtk_widget_set_state (self->priv->info_track, GTK_STATE_NORMAL);
-        gtk_entry_set_text (GTK_ENTRY (self->priv->info_track), title);
+        gtk_entry_set_text (GTK_ENTRY (self->priv->info_track), track);
     } else {
         gtk_widget_set_state (self->priv->info_track, GTK_STATE_INSENSITIVE);
         gtk_entry_set_text (GTK_ENTRY (self->priv->info_track), "");
