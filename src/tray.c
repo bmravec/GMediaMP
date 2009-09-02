@@ -45,6 +45,12 @@ static guint signal_prev;
 static guint signal_quit;
 
 static void tray_state_changed (Player *player, gint state, Tray *self);
+static gboolean tray_query_tooltip (GtkStatusIcon *icon, gint x, gint y,
+    gboolean keyboard_mode, GtkTooltip *tooltip, Tray *self);
+static gboolean tray_button_press (GtkStatusIcon *icon, GdkEventButton *event,
+    Tray *self);
+static gboolean tray_scroll_event (GtkStatusIcon *icon, GdkEventScroll *event,
+    Tray *self);
 
 static void
 tray_icon_activate (GtkStatusIcon *icon, Tray *self)
@@ -154,8 +160,16 @@ tray_activate (Tray *self)
     self->priv->icon = gtk_status_icon_new ();
     gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon.svg");
 
-    g_signal_connect (self->priv->icon, "activate", G_CALLBACK (tray_icon_activate), self);
-    g_signal_connect (self->priv->icon, "popup-menu", G_CALLBACK (tray_popup), self);
+    g_signal_connect (self->priv->icon, "activate",
+        G_CALLBACK (tray_icon_activate), self);
+    g_signal_connect (self->priv->icon, "popup-menu",
+        G_CALLBACK (tray_popup), self);
+    g_signal_connect (self->priv->icon, "scroll-event",
+        G_CALLBACK (tray_scroll_event), self);
+    g_signal_connect (self->priv->icon, "query-tooltip",
+        G_CALLBACK (tray_query_tooltip), self);
+    g_signal_connect (self->priv->icon, "button-press-event",
+        G_CALLBACK (tray_button_press), self);
 
     self->priv->menu = gtk_menu_new ();
 
@@ -196,4 +210,53 @@ void
 tray_deactivate (Tray *self)
 {
     gtk_widget_hide (GTK_WIDGET (self->priv->icon));
+}
+
+static gboolean
+tray_query_tooltip (GtkStatusIcon *icon,
+                    gint x,
+                    gint y,
+                    gboolean keyboard_mode,
+                    GtkTooltip *tooltip,
+                    Tray *self)
+{
+    g_print ("Query Tooltip\n");
+}
+
+static gboolean
+tray_button_press (GtkStatusIcon *icon,
+                   GdkEventButton *event,
+                   Tray *self)
+{
+    if (event->button == 2) {
+        Player *p = shell_get_player (self->priv->shell);
+
+        guint state = player_get_state (p);
+
+        if (state == PLAYER_STATE_PLAYING) {
+            g_signal_emit (G_OBJECT (self), signal_pause, 0);
+        } else {
+            g_signal_emit (G_OBJECT (self), signal_play, 0);
+        }
+
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+static gboolean
+tray_scroll_event (GtkStatusIcon *icon,
+                   GdkEventScroll *event,
+                   Tray *self)
+{
+    Player *p = shell_get_player (self->priv->shell);
+
+    gdouble vol = player_get_volume (p);
+
+    if (event->direction == GDK_SCROLL_UP) {
+        player_set_volume (p, vol + 0.05);
+    } else if (event->direction == GDK_SCROLL_DOWN) {
+        player_set_volume (p, vol - 0.05);
+    }
 }
