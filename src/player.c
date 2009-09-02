@@ -424,10 +424,10 @@ void
 player_set_volume (Player *self, gdouble vol)
 {
     if (self->priv->volume != vol) {
-        self->priv->volume = vol;
-
         if (vol > 1.0) vol = 1.0;
         if (vol < 0.0) vol = 0.0;
+
+        self->priv->volume = vol;
 
         if (self->priv->pipeline) {
             g_object_set (self->priv->pipeline, "volume", vol, NULL);
