@@ -45,6 +45,7 @@ static guint signal_prev;
 static guint signal_quit;
 
 static void tray_state_changed (Player *player, gint state, Tray *self);
+static void tray_pos_changed (Player *player, guint pos, Tray *self);
 static gboolean tray_query_tooltip (GtkStatusIcon *icon, gint x, gint y,
     gboolean keyboard_mode, GtkTooltip *tooltip, Tray *self);
 static gboolean tray_button_press (GtkStatusIcon *icon, GdkEventButton *event,
@@ -160,6 +161,8 @@ tray_activate (Tray *self)
     self->priv->icon = gtk_status_icon_new ();
     gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon.svg");
 
+    gtk_status_icon_set_has_tooltip (self->priv->icon, TRUE);
+
     g_signal_connect (self->priv->icon, "activate",
         G_CALLBACK (tray_icon_activate), self);
     g_signal_connect (self->priv->icon, "popup-menu",
@@ -204,6 +207,7 @@ tray_activate (Tray *self)
 
     Player *p = shell_get_player (self->priv->shell);
     g_signal_connect (p, "state-changed", G_CALLBACK (tray_state_changed), self);
+    g_signal_connect (p, "pos-changed", G_CALLBACK (tray_pos_changed), self);
 }
 
 void
@@ -220,7 +224,42 @@ tray_query_tooltip (GtkStatusIcon *icon,
                     GtkTooltip *tooltip,
                     Tray *self)
 {
-    g_print ("Query Tooltip\n");
+    Player *p = shell_get_player (self->priv->shell);
+    guint state = player_get_state (p);
+    if (state == PLAYER_STATE_PLAYING || state == PLAYER_STATE_PAUSED) {
+        GtkWidget *image = gtk_image_new_from_file (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg");
+        gtk_tooltip_set_icon (tooltip, gtk_image_get_pixbuf (GTK_IMAGE (image)));
+
+        Entry *e = player_get_entry (p);
+
+        const gchar *title = entry_get_tag_str (e, "title");
+        const gchar *artist = entry_get_tag_str (e, "artist");
+        const gchar *album = entry_get_tag_str (e, "album");
+        gchar *str;
+
+        gchar *pos = time_to_string (player_get_position (p));
+        gchar *len = time_to_string (player_get_length (p));
+
+        if (artist && album) {
+            str = g_strdup_printf ("%s\n\nby %s from %s\n%s of %s", title, artist, album, pos, len);
+        } else if (artist) {
+            str = g_strdup_printf ("%s\n\nby %s\n%s of %s", title, artist, pos, len);
+        } else if (album) {
+            str = g_strdup_printf ("%s\n\nfrom %s\n%s of %s", title, album, pos, len);
+        } else {
+            str = g_strdup_printf ("%s\n\n%s of %s", title, pos, len);
+        }
+
+        gtk_tooltip_set_text (tooltip, str);
+
+        g_free (pos);
+        g_free (len);
+        g_free (str);
+
+        return TRUE;
+    } else {
+        return FALSE;
+    }
 }
 
 static gboolean
@@ -259,4 +298,10 @@ tray_scroll_event (GtkStatusIcon *icon,
     } else if (event->direction == GDK_SCROLL_DOWN) {
         player_set_volume (p, vol - 0.05);
     }
+}
+
+static void
+tray_pos_changed (Player *player, guint pos, Tray *self)
+{
+    gtk_tooltip_trigger_tooltip_query (gdk_display_get_default ());
 }
