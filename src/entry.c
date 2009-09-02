@@ -90,7 +90,7 @@ entry_get_location (Entry *self)
 gchar*
 entry_get_art (Entry *self)
 {
-    GFile *location = g_file_new_for_path (self->priv->location);
+    GFile *location = g_file_new_for_path (entry_get_location (self));
     GFile *parent = g_file_get_parent (location);
     gchar *ppath = g_file_get_path (parent);
     GDir *dir = g_dir_open (ppath, 0, NULL);
@@ -98,7 +98,7 @@ entry_get_art (Entry *self)
     gchar *ret = NULL;
 
     while (dir && (file = g_dir_read_name (dir))) {
-        if (g_str_has_suffix (file, ".png"))
+        if (g_str_has_suffix (file, ".jpg"))
             ret = g_strdup_printf ("%s/%s", ppath, file);
         if (g_str_has_suffix (file, ".bmp"))
             ret = g_strdup_printf ("%s/%s", ppath, file);

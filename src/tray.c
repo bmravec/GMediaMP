@@ -20,6 +20,7 @@
  */
 
 #include <gtk/gtk.h>
+#include <libnotify/notify.h>
 
 #include "tray.h"
 
@@ -36,6 +37,9 @@ struct _TrayPrivate {
 
     GtkWidget *play_item;
     GtkWidget *paused_item;
+
+    NotifyNotification *note;
+    GdkPixbuf *img;
 };
 
 static guint signal_play;
@@ -125,6 +129,8 @@ tray_class_init (TrayClass *klass)
     signal_prev = g_signal_new ("previous", G_TYPE_FROM_CLASS (klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
         G_TYPE_NONE, 0);
+
+    notify_init ("GMediaDB");
 }
 
 static void
@@ -139,6 +145,12 @@ tray_new ()
     return g_object_new (TRAY_TYPE, NULL);
 }
 
+void
+on_notify_next (NotifyNotification *note, gchar *action, Tray *self)
+{
+    g_signal_emit (G_OBJECT (self), signal_next, 0);
+}
+
 static void
 tray_state_changed (Player *player, gint state, Tray *self)
 {
@@ -151,6 +163,59 @@ tray_state_changed (Player *player, gint state, Tray *self)
         gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
         gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon.svg");
     }
+
+    if (state == PLAYER_STATE_PLAYING && self->priv->note == NULL) {
+        Entry *e = player_get_entry (player);
+
+        const gchar *title = entry_get_tag_str (e, "title");
+        const gchar *artist = entry_get_tag_str (e, "artist");
+        const gchar *album = entry_get_tag_str (e, "album");
+        const gchar *art = entry_get_art (e);
+
+        gchar *body = g_strdup_printf ("%s\n%s\n%s", title, artist, album);
+
+        self->priv->note = notify_notification_new_with_status_icon (
+            "Now Playing", body, NULL, self->priv->icon);
+
+        if (art != NULL) {
+            self->priv->img = gdk_pixbuf_new_from_file_at_scale (entry_get_art (e), 50, 50, TRUE, NULL);
+        } else {
+            self->priv->img = gdk_pixbuf_new_from_file_at_scale (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg", 50, 50, TRUE, NULL);
+        }
+
+        notify_notification_set_icon_from_pixbuf (self->priv->note, self->priv->img);
+
+        notify_notification_add_action (self->priv->note, GTK_STOCK_MEDIA_NEXT, "Next",
+            NOTIFY_ACTION_CALLBACK (on_notify_next), self, NULL);
+
+        notify_notification_show (self->priv->note, NULL);
+    }
+
+    if ((state == PLAYER_STATE_STOPPED || state == PLAYER_STATE_NULL) &&
+        self->priv->note != NULL) {
+        notify_notification_close (self->priv->note, NULL);
+        g_object_unref (self->priv->note);
+        self->priv->note = NULL;
+
+        g_object_unref (self->priv->img);
+        self->priv->img = NULL;
+    }
+/*
+    g_print ("STATE CHANGED: ");
+    switch (state) {
+        case PLAYER_STATE_PLAYING:
+            g_print ("PLAYING\n");
+            break;
+        case PLAYER_STATE_PAUSED:
+            g_print ("PAUSED\n");
+            break;
+        case PLAYER_STATE_STOPPED:
+            g_print ("STOPPED\n");
+            break;
+        case PLAYER_STATE_NULL:
+            g_print ("NULL\n");
+    }
+    */
 }
 
 void
@@ -227,10 +292,15 @@ tray_query_tooltip (GtkStatusIcon *icon,
     Player *p = shell_get_player (self->priv->shell);
     guint state = player_get_state (p);
     if (state == PLAYER_STATE_PLAYING || state == PLAYER_STATE_PAUSED) {
-        GtkWidget *image = gtk_image_new_from_file (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg");
-        gtk_tooltip_set_icon (tooltip, gtk_image_get_pixbuf (GTK_IMAGE (image)));
-
         Entry *e = player_get_entry (p);
+
+//        GdkPixbuf *img = gdk_pixbuf_new_from_file_at_scale (entry_get_art (e), 50, 50, TRUE, NULL);
+//        if (img == NULL) {
+//            img = gdk_pixbuf_new_from_file_at_scale (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg", 50, 50, TRUE, NULL);
+//        }
+
+        gtk_tooltip_set_icon (tooltip, self->priv->img);
+//        g_object_unref (img);
 
         const gchar *title = entry_get_tag_str (e, "title");
         const gchar *artist = entry_get_tag_str (e, "artist");
