@@ -121,24 +121,6 @@ on_ts_play (TrackSource *ts, Entry *entry, Shell *self)
     update_info_label (self);
 }
 
-gchar*
-time_to_string (gdouble time)
-{
-    gint hr, min, sec;
-
-    hr = time;
-    sec = hr % 60;
-    hr /= 60;
-    min = hr % 60;
-    hr /= 60;
-
-    if (hr > 0) {
-        return g_strdup_printf ("%d:%02d:%02d", hr, min, sec);
-    }
-
-    return g_strdup_printf ("%02d:%02d", min, sec);
-}
-
 static void
 on_player_ratio (Player *player, guint pos, Shell *self)
 {

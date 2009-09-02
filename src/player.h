@@ -79,6 +79,8 @@ void player_set_volume (Player *self, gdouble vol);
 gboolean player_activate (Player *self);
 gboolean player_deactivate (Player *self);
 
+gchar *time_to_string (gdouble time);
+
 G_END_DECLS
 
 #endif /* __PLAYER_H__ */

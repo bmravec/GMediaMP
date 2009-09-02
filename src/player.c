@@ -336,7 +336,7 @@ player_play (Player *self)
 
         entry_set_state (self->priv->entry, ENTRY_STATE_PLAYING);
 
-        g_timeout_add (500, (GSourceFunc) position_update, self);
+        g_timeout_add (1000, (GSourceFunc) position_update, self);
     }
 }
 
@@ -667,4 +667,22 @@ on_pos_change_value (GtkWidget *range,
     player_set_position (self,  value);
 
     return FALSE;
+}
+
+gchar*
+time_to_string (gdouble time)
+{
+    gint hr, min, sec;
+
+    hr = time;
+    sec = hr % 60;
+    hr /= 60;
+    min = hr % 60;
+    hr /= 60;
+
+    if (hr > 0) {
+        return g_strdup_printf ("%d:%02d:%02d", hr, min, sec);
+    }
+
+    return g_strdup_printf ("%02d:%02d", min, sec);
 }

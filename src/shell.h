@@ -72,8 +72,6 @@ void shell_toggle_visibility (Shell *self);
 void shell_hide (Shell *self);
 void shell_show (Shell *self);
 
-gchar *time_to_string (gdouble time);
-
 G_END_DECLS
 
 #endif /* __SHELL_H__ */
