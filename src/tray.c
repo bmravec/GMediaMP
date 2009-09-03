@@ -170,18 +170,13 @@ tray_state_changed (Player *player, gint state, Tray *self)
         const gchar *title = entry_get_tag_str (e, "title");
         const gchar *artist = entry_get_tag_str (e, "artist");
         const gchar *album = entry_get_tag_str (e, "album");
-        const gchar *art = entry_get_art (e);
 
         gchar *body = g_strdup_printf ("%s\n%s\n%s", title, artist, album);
 
         self->priv->note = notify_notification_new_with_status_icon (
             "Now Playing", body, NULL, self->priv->icon);
 
-        if (art != NULL) {
-            self->priv->img = gdk_pixbuf_new_from_file_at_scale (entry_get_art (e), 50, 50, TRUE, NULL);
-        } else {
-            self->priv->img = gdk_pixbuf_new_from_file_at_scale (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg", 50, 50, TRUE, NULL);
-        }
+        self->priv->img = gdk_pixbuf_new_from_file_at_scale (entry_get_art (e), 50, 50, TRUE, NULL);
 
         notify_notification_set_icon_from_pixbuf (self->priv->note, self->priv->img);
 

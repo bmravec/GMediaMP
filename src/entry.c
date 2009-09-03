@@ -98,12 +98,20 @@ entry_get_art (Entry *self)
     gchar *ret = NULL;
 
     while (dir && (file = g_dir_read_name (dir))) {
-        if (g_str_has_suffix (file, ".jpg"))
+        if (g_str_has_suffix (file, ".jpg")) {
             ret = g_strdup_printf ("%s/%s", ppath, file);
-        if (g_str_has_suffix (file, ".bmp"))
+            break;
+        }
+
+        if (g_str_has_suffix (file, ".bmp")) {
             ret = g_strdup_printf ("%s/%s", ppath, file);
-        if (g_str_has_suffix (file, ".png"))
+            break;
+        }
+
+        if (g_str_has_suffix (file, ".png")) {
             ret = g_strdup_printf ("%s/%s", ppath, file);
+            break;
+        }
     }
 
     if (dir) {
@@ -114,7 +122,11 @@ entry_get_art (Entry *self)
     g_object_unref (G_OBJECT (parent));
     g_free (ppath);
 
-    return ret;
+    if (ret) {
+        return ret;
+    } else {
+        return g_strdup (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg");
+    }
 }
 
 void
