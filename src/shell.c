@@ -32,6 +32,8 @@
 
 #include "tag-handler.h"
 #include "tray.h"
+#include "mini-pane.h"
+
 #include "track-source.h"
 #include "media-store.h"
 
@@ -61,6 +63,7 @@ struct _ShellPrivate {
 
     gboolean visible;
 
+    GtkWidget *mini_pane;
     GtkWidget *window;
     GtkWidget *sidebar;
     GtkWidget *sidebar_view;
@@ -250,6 +253,7 @@ shell_init (Shell *self)
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
+    self->priv->mini_pane = mini_pane_new ();
 
     g_ptr_array_add (self->priv->stores, self->priv->music);
     g_ptr_array_add (self->priv->stores, self->priv->movies);
@@ -541,6 +545,12 @@ main (int argc, char *argv[])
     shows_activate (shell->priv->shows);
     tag_handler_activate (shell->priv->tag_handler);
     tray_activate (shell->priv->tray);
+
+    mini_pane_activate (MINI_PANE (shell->priv->mini_pane));
+
+    gtk_widget_show (shell->priv->mini_pane);
+
+    gtk_box_pack_start (GTK_BOX (shell->priv->sidebar), shell->priv->mini_pane, FALSE, FALSE, 0);
 
     shell_run (shell);
 }
