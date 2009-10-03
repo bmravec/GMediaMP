@@ -64,7 +64,7 @@ entry_init (Entry *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), ENTRY_TYPE, EntryPrivate);
 
-    self->priv->table = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    self->priv->table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, NULL);
 
     self->priv->location = "";
     self->priv->state = ENTRY_STATE_NONE;
@@ -83,13 +83,14 @@ entry_new (guint id)
 const gchar*
 entry_get_location (Entry *self)
 {
-    return self->priv->location;
+    return entry_get_tag_str (self, "location");
 }
+
 
 gchar*
 entry_get_art (Entry *self)
 {
-    GFile *location = g_file_new_for_path (self->priv->location);
+    GFile *location = g_file_new_for_path (entry_get_location (self));
     GFile *parent = g_file_get_parent (location);
     gchar *ppath = g_file_get_path (parent);
     GDir *dir = g_dir_open (ppath, 0, NULL);
@@ -97,12 +98,20 @@ entry_get_art (Entry *self)
     gchar *ret = NULL;
 
     while (dir && (file = g_dir_read_name (dir))) {
-        if (g_str_has_suffix (file, ".png"))
+        if (g_str_has_suffix (file, ".jpg")) {
             ret = g_strdup_printf ("%s/%s", ppath, file);
-        if (g_str_has_suffix (file, ".bmp"))
+            break;
+        }
+
+        if (g_str_has_suffix (file, ".bmp")) {
             ret = g_strdup_printf ("%s/%s", ppath, file);
-        if (g_str_has_suffix (file, ".png"))
+            break;
+        }
+
+        if (g_str_has_suffix (file, ".png")) {
             ret = g_strdup_printf ("%s/%s", ppath, file);
+            break;
+        }
     }
 
     if (dir) {
@@ -113,23 +122,17 @@ entry_get_art (Entry *self)
     g_object_unref (G_OBJECT (parent));
     g_free (ppath);
 
-    return ret;
+    if (ret) {
+        return ret;
+    } else {
+        return g_strdup (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg");
+    }
 }
 
 void
 entry_set_location (Entry *self, const gchar *location)
 {
-    if (self->priv->location && strlen (self->priv->location) != 0) {
-        g_free (self->priv->location);
-    }
-
-    if (!location || strlen (location) == 0) {
-        self->priv->location = "";
-    } else {
-        self->priv->location = g_strdup (location);
-    }
-
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+    entry_set_tag_str (self, "location", location);
 }
 
 guint
@@ -201,7 +204,7 @@ entry_cmp (Entry *self, Entry *e)
 void
 entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
 {
-    g_hash_table_insert (self->priv->table, g_strdup (tag), g_strdup (value));
+    g_hash_table_insert (self->priv->table, tag, value);
 
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
@@ -209,10 +212,13 @@ entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
 void
 entry_set_tag_int (Entry *self, const gchar *tag, gint value)
 {
+/*
     gint *val = g_new0 (gint, 1);
     *val = value;
+*/
+    gchar *val = g_strdup_printf ("%d", value);
 
-    g_hash_table_insert (self->priv->table, g_strdup (tag), val);
+    g_hash_table_insert (self->priv->table, tag, val);
 
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
@@ -226,11 +232,15 @@ entry_get_tag_str (Entry *self, const gchar *tag)
 gint
 entry_get_tag_int (Entry *self, const gchar *tag)
 {
+/*
     gint *val = (gint*) g_hash_table_lookup (self->priv->table, tag);
     if (val) {
         return *(val);
     }
     return 0;
+*/
+    gchar *val = (gchar*) g_hash_table_lookup (self->priv->table, tag);
+    return val ? atoi (val) : 0;
 }
 
 guint

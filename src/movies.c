@@ -64,6 +64,7 @@ static void title_row_activated (GtkTreeView *view, GtkTreePath *path,
 
 static gboolean on_title_click (GtkWidget *view, GdkEventButton *event, Movies *self);
 static void on_title_remove (GtkWidget *item, Movies *self);
+static void on_title_move (GtkWidget *item, Movies *self);
 
 static gpointer initial_import (Movies *self);
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
@@ -247,7 +248,7 @@ movies_remove_entry (MediaStore *self, Entry *entry)
 static guint
 movies_get_mtype (MediaStore *self)
 {
-    return MEDIA_SONG;
+    return MEDIA_MOVIE;
 }
 
 static Entry*
@@ -549,6 +550,10 @@ on_title_click (GtkWidget *view, GdkEventButton *event, Movies *self)
         item = gtk_image_menu_item_new_from_stock (GTK_STOCK_DELETE, NULL);
         gtk_menu_append (GTK_MENU (menu), item);
 
+        item = gtk_image_menu_item_new_with_label ("Move to TV Shows");
+        g_signal_connect (item, "activate", G_CALLBACK (on_title_move), self);
+        gtk_menu_append (GTK_MENU (menu), item);
+
         gtk_widget_show_all (menu);
 
         gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,
@@ -586,6 +591,35 @@ on_title_remove (GtkWidget *item, Movies *self)
 }
 
 static void
+on_title_move (GtkWidget *item, Movies *self)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i;
+
+    GList *rows = gtk_tree_selection_get_selected_rows (self->priv->title_sel, NULL);
+    size = g_list_length (rows);
+
+    entries = g_new0 (Entry*, size);
+    for (i = 0; i < size; i++) {
+        gtk_tree_model_get_iter (self->priv->title_store, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->title_store, &iter, 0, &entries[i], -1);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    for (i = 0; i < size; i++) {
+        media_store_remove_entry (MEDIA_STORE (self), entries[i]);
+        entry_set_media_type (entries[i], MEDIA_TVSHOW);
+
+        media_store_emit_move (MEDIA_STORE (self), entries[i]);
+    }
+
+    g_free (entries);
+}
+
+static void
 movies_gmediadb_add (GMediaDB *db, guint id, Movies *self)
 {
     gchar *tags[] = { "id", "title", "duration", "location", NULL };
@@ -593,11 +627,10 @@ movies_gmediadb_add (GMediaDB *db, guint id, Movies *self)
 
     Entry *e = entry_new (entry[0] ? atoi (entry[0]) : 0);
     entry_set_tag_str (e, "title", entry[1] ? entry[1] : "");
-
     entry_set_tag_int (e, "duration", entry[2] ? atoi (entry[2]) : 0);
+    entry_set_tag_str (e, "location", entry[3] ? entry[3] : "");
 
     entry_set_media_type (e, MEDIA_MOVIE);
-    entry_set_location (e, entry[3]);
 
     gdk_threads_enter ();
     movies_insert_entry (self, e);

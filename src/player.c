@@ -401,7 +401,10 @@ void
 player_play (Player *self)
 {
     g_thread_create ((GThreadFunc) player_audio_loop, self, FALSE, NULL);
-    g_timeout_add (1.0 / 29.97 * 1000, (GSourceFunc) on_timeout, self);
+
+    if (self->priv->vctx) {
+        g_timeout_add (1.0 / 29.97 * 1000, (GSourceFunc) on_timeout, self);
+    }
 
 //    if (self->priv->pipeline) {
 //        gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
@@ -511,8 +514,6 @@ void
 player_set_volume (Player *self, gdouble vol)
 {
     if (self->priv->volume != vol) {
-        self->priv->volume = vol;
-
         if (vol > 1.0) vol = 1.0;
         if (vol < 0.0) vol = 0.0;
 
@@ -1054,4 +1055,22 @@ player_av_release_buffer (struct AVCodecContext *c, AVFrame *pic)
     if (pic)
         av_freep (&pic->opaque);
     avcodec_default_release_buffer (c, pic);
+}
+
+gchar*
+time_to_string (gdouble time)
+{
+    gint hr, min, sec;
+
+    hr = time;
+    sec = hr % 60;
+    hr /= 60;
+    min = hr % 60;
+    hr /= 60;
+
+    if (hr > 0) {
+        return g_strdup_printf ("%d:%02d:%02d", hr, min, sec);
+    }
+
+    return g_strdup_printf ("%02d:%02d", min, sec);
 }

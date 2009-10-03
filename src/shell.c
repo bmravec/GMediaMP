@@ -32,6 +32,8 @@
 
 #include "tag-handler.h"
 #include "tray.h"
+#include "mini-pane.h"
+
 #include "track-source.h"
 #include "media-store.h"
 
@@ -57,8 +59,11 @@ struct _ShellPrivate {
     TrackSource *playing_source;
     Entry *playing_entry;
 
+    GPtrArray *stores;
+
     gboolean visible;
 
+    GtkWidget *mini_pane;
     GtkWidget *window;
     GtkWidget *sidebar;
     GtkWidget *sidebar_view;
@@ -85,8 +90,6 @@ static Shell *instance = NULL;
 static void selector_changed_cb (GtkTreeSelection *selection, Shell *self);
 static void import_file_cb (GtkMenuItem *item, Shell *self);
 static void import_dir_cb (GtkMenuItem *item, Shell *self);
-static void import_music_tag_cb (TagHandler *th, Entry *ne, Shell *self);
-static void import_movie_tag_cb (TagHandler *th, Entry *ne, Shell *self);
 
 static void play_cb (GtkWidget *widget, Shell *self);
 static void pause_cb (GtkWidget *widget, Shell *self);
@@ -97,6 +100,8 @@ static gboolean on_pos_change_value (GtkWidget *range, GtkScrollType scroll,
     gdouble value, Shell *self);
 static void on_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
 static void on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
+
+static void on_entry_move (MediaStore *ms, Entry *entry, Shell *self);
 
 static void
 on_destroy (GtkWidget *widget, Shell *self)
@@ -117,24 +122,6 @@ on_ts_play (TrackSource *ts, Entry *entry, Shell *self)
     player_play (self->priv->player);
 
     update_info_label (self);
-}
-
-gchar*
-time_to_string (gdouble time)
-{
-    gint hr, min, sec;
-
-    hr = time;
-    sec = hr % 60;
-    hr /= 60;
-    min = hr % 60;
-    hr /= 60;
-
-    if (hr > 0) {
-        return g_strdup_printf ("%d:%02d:%02d", hr, min, sec);
-    }
-
-    return g_strdup_printf ("%02d:%02d", min, sec);
 }
 
 static void
@@ -255,6 +242,8 @@ shell_init (Shell *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), SHELL_TYPE, ShellPrivate);
 
+    self->priv->stores = g_ptr_array_new ();
+
     self->priv->builder = gtk_builder_new ();
 
     self->priv->player = player_new (0, NULL);
@@ -264,6 +253,11 @@ shell_init (Shell *self)
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
+    self->priv->mini_pane = mini_pane_new ();
+
+    g_ptr_array_add (self->priv->stores, self->priv->music);
+    g_ptr_array_add (self->priv->stores, self->priv->movies);
+    g_ptr_array_add (self->priv->stores, self->priv->shows);
 
     // Load objects from main.ui
     gtk_builder_add_from_file (self->priv->builder, SHARE_DIR "/ui/main.ui", NULL);
@@ -327,11 +321,16 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->player, "previous", G_CALLBACK (prev_cb), self);
     g_signal_connect (self->priv->player, "volume-changed", G_CALLBACK (on_player_vol_changed), self);
 
+    // Hook up TrackSource signals
     g_signal_connect (self->priv->music, "entry-play", G_CALLBACK (on_ts_play), self);
     g_signal_connect (self->priv->movies, "entry-play", G_CALLBACK (on_ts_play), self);
+    g_signal_connect (self->priv->shows, "entry-play", G_CALLBACK (on_ts_play), self);
 
-    g_signal_connect (self->priv->tag_handler, "add-entry", G_CALLBACK (import_music_tag_cb), self);
-    g_signal_connect (self->priv->tag_handler, "add-movie", G_CALLBACK (import_movie_tag_cb), self);
+    // Hook up MediaStore signals
+    g_signal_connect (self->priv->tag_handler, "entry-move", G_CALLBACK (on_entry_move), self);
+    g_signal_connect (self->priv->music, "entry-move", G_CALLBACK (on_entry_move), self);
+    g_signal_connect (self->priv->movies, "entry-move", G_CALLBACK (on_entry_move), self);
+    g_signal_connect (self->priv->shows, "entry-move", G_CALLBACK (on_entry_move), self);
 
     self->priv->visible = TRUE;
     gtk_widget_show (self->priv->window);
@@ -547,6 +546,12 @@ main (int argc, char *argv[])
     tag_handler_activate (shell->priv->tag_handler);
     tray_activate (shell->priv->tray);
 
+    mini_pane_activate (MINI_PANE (shell->priv->mini_pane));
+
+    gtk_widget_show (shell->priv->mini_pane);
+
+    gtk_box_pack_start (GTK_BOX (shell->priv->sidebar), shell->priv->mini_pane, FALSE, FALSE, 0);
+
     shell_run (shell);
 }
 
@@ -631,18 +636,6 @@ shell_import_path (Shell *self, const gchar *path)
     g_print ("IMPORTING: %s\n", path);
 
     g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) g_strdup (path), FALSE, NULL);
-}
-
-static void
-import_music_tag_cb (TagHandler *th, Entry *entry, Shell *self)
-{
-    media_store_add_entry (MEDIA_STORE (self->priv->music), entry);
-}
-
-static void
-import_movie_tag_cb (TagHandler *th, Entry *entry, Shell *self)
-{
-    media_store_add_entry (MEDIA_STORE (self->priv->movies), entry);
 }
 
 static void
@@ -759,4 +752,17 @@ static void
 on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self)
 {
     gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->tb_vol), val);
+}
+
+static void
+on_entry_move (MediaStore *ms, Entry *entry, Shell *self)
+{
+    gint i;
+
+    for (i = 0; i < self->priv->stores->len; i++) {
+        MediaStore *nms = MEDIA_STORE (g_ptr_array_index (self->priv->stores, i));
+        if (entry_get_media_type (entry) == media_store_get_media_type (nms)) {
+            media_store_add_entry (nms, entry);
+        }
+    }
 }

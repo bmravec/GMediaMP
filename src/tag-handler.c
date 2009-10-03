@@ -23,15 +23,15 @@
 #include "progress.h"
 
 #include "tag-handler.h"
+#include "media-store.h"
 #include "entry.h"
 
 #include <tag_c.h>
-//#include <vorbis/vorbisfile.h>
 
-G_DEFINE_TYPE(TagHandler, tag_handler, G_TYPE_OBJECT)
-
-static guint signal_add_entry;
-static guint signal_add_movie;
+static void media_store_init (MediaStoreInterface *iface);
+G_DEFINE_TYPE_WITH_CODE (TagHandler, tag_handler, G_TYPE_OBJECT,
+    G_IMPLEMENT_INTERFACE (MEDIA_STORE_TYPE, media_store_init)
+)
 
 #define TAG_HANDLER_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), TAG_HANDLER_TYPE, TagHandlerPrivate))
 
@@ -48,6 +48,14 @@ struct _TagHandlerPrivate
     gboolean run;
 };
 
+static void
+media_store_init (MediaStoreInterface *iface)
+{
+    iface->add_entry = NULL;
+    iface->rem_entry = NULL;
+    iface->get_mtype = NULL;
+}
+
 gchar *
 g_strdup0 (gchar *str)
 {
@@ -60,7 +68,6 @@ tag_handler_main (TagHandler *self)
     const TagLib_AudioProperties *properties;
     TagLib_File *file;
     TagLib_Tag *tag;
-//    GHashTable *info;
     Entry *ne;
 
     gboolean has_ref = FALSE;
@@ -102,13 +109,11 @@ tag_handler_main (TagHandler *self)
             g_free (new_str);
         }
 
-//        info = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
         ne = entry_new (-1);
 
         file = taglib_file_new(entry);
         if (!file) {
             entry_set_tag_str (ne, "location", entry);
-//            g_hash_table_insert (info, g_strdup ("location"), g_strdup0 (entry));
             gchar *title = g_path_get_basename (entry);
             gint i = 0;
             while (title[i++]);
@@ -121,12 +126,10 @@ tag_handler_main (TagHandler *self)
 
             if (i == 0) {
                 g_free (title);
-//                g_hash_table_unref (info);
                 g_object_unref (ne);
                 continue;
             }
 
-//            g_hash_table_insert (info, g_strdup ("title"), title);
             entry_set_tag_str (ne, "title", title);
 
             gchar *ext = &title[i+1];
@@ -135,54 +138,19 @@ tag_handler_main (TagHandler *self)
                 !g_strcmp0 (ext, "avi") || !g_strcmp0 (ext, "mov") ||
                 !g_strcmp0 (ext, "mp4") || !g_strcmp0 (ext, "m4v") ||
                 !g_strcmp0 (ext, "mkv") || !g_strcmp0 (ext, "ogm")) {
-//                g_signal_emit (self, signal_add_movie, 0, info);
-                g_signal_emit (self, signal_add_movie, 0, ne);
+                entry_set_media_type (ne, MEDIA_MOVIE);
+                media_store_emit_move (MEDIA_STORE (self), ne);
             }
 
             self->priv->done++;
 
             g_object_unref (ne);
-//            g_hash_table_unref (info);
-//            info = NULL;
             ne = NULL;
             continue;
         }
 
-/*
-        OggVorbis_File vf;
-        ov_fopen (entry, &vf);
-
-        vorbis_comment *vc = ov_comment (&vf, -1);
-        if (vc) {
-            gint num;
-            for (num = 0; num < vc->comments; num++) {
-                gchar **strs = g_strsplit (vc->user_comments[num], "=", 2);
-                g_hash_table_insert (info,
-                    g_strdup (strs[0]),
-                    g_strdup (strs[1]));
-                g_strfreev (strs);
-            }
-        }
-*/
         tag = taglib_file_tag(file);
         properties = taglib_file_audioproperties(file);
-
-/*
-        g_hash_table_insert (info, g_strdup ("artist"), g_strdup0 (taglib_tag_artist (tag)));
-        g_hash_table_insert (info, g_strdup ("title"), g_strdup0 (taglib_tag_title (tag)));
-        g_hash_table_insert (info, g_strdup ("album"), g_strdup0 (taglib_tag_album (tag)));
-        g_hash_table_insert (info, g_strdup ("comment"), g_strdup0 (taglib_tag_comment (tag)));
-        g_hash_table_insert (info, g_strdup ("genre"), g_strdup0 (taglib_tag_genre (tag)));
-        g_hash_table_insert (info, g_strdup ("year"), g_strdup_printf ("%d",taglib_tag_year (tag)));
-        g_hash_table_insert (info, g_strdup ("track"), g_strdup_printf ("%d",taglib_tag_track (tag)));
-        g_hash_table_insert (info, g_strdup ("duration"), g_strdup_printf ("%d", taglib_audioproperties_length (properties)));
-        g_hash_table_insert (info, g_strdup ("location"), g_strdup0 (entry));
-
-        g_signal_emit (self, signal_add_entry, 0, info);
-
-        g_hash_table_unref (info);
-        info = NULL;
-*/
 
         entry_set_tag_str (ne, "artist", taglib_tag_artist (tag));
         entry_set_tag_str (ne, "title", taglib_tag_title (tag));
@@ -203,10 +171,10 @@ tag_handler_main (TagHandler *self)
         g_free (duration);
 
         entry_set_tag_str (ne, "location", entry);
+        entry_set_media_type (ne, MEDIA_SONG);
 
-        g_signal_emit (self, signal_add_entry, 0, ne);
+        media_store_emit_move (MEDIA_STORE (self), ne);
 
-//        g_hash_table_unref (ne);
         g_object_unref (ne);
         ne = NULL;
 
@@ -250,14 +218,6 @@ tag_handler_class_init (TagHandlerClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (TagHandlerPrivate));
 
     object_class->finalize = tag_handler_finalize;
-
-    signal_add_entry = g_signal_new ("add-entry", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__OBJECT,
-        G_TYPE_NONE, 1, ENTRY_TYPE);
-
-    signal_add_movie = g_signal_new ("add-movie", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__OBJECT,
-        G_TYPE_NONE, 1, ENTRY_TYPE);
 }
 
 static void

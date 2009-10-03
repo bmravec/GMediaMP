@@ -286,6 +286,7 @@ audio-volume-medium</property>
               <object class="GtkVBox" id="sidebar">
                 <property name="visible">True</property>
                 <property name="orientation">vertical</property>
+                <property name="spacing">2</property>
                 <child>
                   <object class="GtkScrolledWindow" id="scrolledwindow1">
                     <property name="visible">True</property>

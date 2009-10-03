@@ -10,6 +10,7 @@ gmediamp_SOURCES = \
     player.c player.h \
     entry.c entry.h \
     tray.c tray.h \
+    mini-pane.c mini-pane.h \
     tag-handler.c tag-handler.h \
     progress.c progress.h \
     playlist.c playlist.h \
