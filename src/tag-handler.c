@@ -157,20 +157,11 @@ tag_handler_main (TagHandler *self)
         entry_set_tag_str (ne, "album", taglib_tag_album (tag));
         entry_set_tag_str (ne, "comment", taglib_tag_comment (tag));
         entry_set_tag_str (ne, "genre", taglib_tag_genre (tag));
-
-        gchar *year = g_strdup_printf ("%d", taglib_tag_year (tag));
-        entry_set_tag_str (ne, "year", year);
-        g_free (year);
-
-        gchar *track = g_strdup_printf ("%d",taglib_tag_track (tag));
-        entry_set_tag_str (ne, "track", track);
-        g_free (track);
-
-        gchar *duration = g_strdup_printf ("%d", taglib_audioproperties_length (properties));
-        entry_set_tag_str (ne, "duration", duration);
-        g_free (duration);
-
+        entry_set_tag_int (ne, "year", taglib_tag_year (tag));
+        entry_set_tag_int (ne, "track", taglib_tag_track (tag));
+        entry_set_tag_int (ne, "duration", taglib_audioproperties_length (properties));
         entry_set_tag_str (ne, "location", entry);
+
         entry_set_media_type (ne, MEDIA_SONG);
 
         media_store_emit_move (MEDIA_STORE (self), ne);
