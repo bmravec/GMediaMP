@@ -553,6 +553,10 @@ main (int argc, char *argv[])
     gtk_box_pack_start (GTK_BOX (shell->priv->sidebar), shell->priv->mini_pane, FALSE, FALSE, 0);
 
     shell_run (shell);
+
+    g_object_unref (shell->priv->music);
+    g_object_unref (shell->priv->movies);
+    g_object_unref (shell->priv->shows);
 }
 
 static void
@@ -607,7 +611,7 @@ shell_import_thread_rec (Shell *self, const gchar *path)
 {
     if (g_file_test (path, G_FILE_TEST_IS_REGULAR)) {
         tag_handler_add_entry (self->priv->tag_handler, path);
-        g_print ("IMPORTING: %s\n", path);
+//        g_print ("IMPORTING: %s\n", path);
     } else if (g_file_test (path, G_FILE_TEST_IS_DIR)) {
         GDir *dir = g_dir_open (path, 0, NULL);
         const gchar *entry;
@@ -633,7 +637,7 @@ shell_import_thread (gchar *path)
 gboolean
 shell_import_path (Shell *self, const gchar *path)
 {
-    g_print ("IMPORTING: %s\n", path);
+//    g_print ("IMPORTING: %s\n", path);
 
     g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) g_strdup (path), FALSE, NULL);
 }

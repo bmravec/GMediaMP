@@ -137,6 +137,10 @@ music_finalize (GObject *object)
 {
     Music *self = MUSIC (object);
 
+    if (self->priv->db) {
+        g_object_unref (self->priv->db);
+    }
+
     G_OBJECT_CLASS (music_parent_class)->finalize (object);
 }
 

@@ -117,6 +117,10 @@ movies_finalize (GObject *object)
 {
     Movies *self = MOVIES (object);
 
+    if (self->priv->db) {
+        g_object_unref (self->priv->db);
+    }
+
     G_OBJECT_CLASS (movies_parent_class)->finalize (object);
 }
 

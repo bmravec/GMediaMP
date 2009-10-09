@@ -150,6 +150,10 @@ shows_finalize (GObject *object)
 {
     Shows *self = SHOWS (object);
 
+    if (self->priv->db) {
+        g_object_unref (self->priv->db);
+    }
+
     G_OBJECT_CLASS (shows_parent_class)->finalize (object);
 }
 
