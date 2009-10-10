@@ -64,7 +64,7 @@ entry_init (Entry *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), ENTRY_TYPE, EntryPrivate);
 
-    self->priv->table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, NULL);
+    self->priv->table = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
 
     self->priv->location = "";
     self->priv->state = ENTRY_STATE_NONE;
@@ -204,7 +204,7 @@ entry_cmp (Entry *self, Entry *e)
 void
 entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
 {
-    g_hash_table_insert (self->priv->table, tag, value);
+    g_hash_table_insert (self->priv->table, g_strdup (tag), g_strdup (value));
 
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
@@ -218,7 +218,7 @@ entry_set_tag_int (Entry *self, const gchar *tag, gint value)
 */
     gchar *val = g_strdup_printf ("%d", value);
 
-    g_hash_table_insert (self->priv->table, tag, val);
+    g_hash_table_insert (self->priv->table, g_strdup (tag), val);
 
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
