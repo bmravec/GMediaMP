@@ -617,7 +617,9 @@ on_title_move (GtkWidget *item, Movies *self)
         media_store_remove_entry (MEDIA_STORE (self), entries[i]);
         entry_set_media_type (entries[i], MEDIA_TVSHOW);
 
+        gdk_threads_leave ();
         media_store_emit_move (MEDIA_STORE (self), entries[i]);
+        gdk_threads_enter ();
     }
 
     g_free (entries);
