@@ -396,7 +396,9 @@ entry_changed (Entry *entry, Movies *self)
     GtkTreeIter iter;
     Entry *e;
 
-    gtk_tree_model_get_iter_first (self->priv->title_store, &iter);
+    if (!gtk_tree_model_get_iter_first (self->priv->title_store, &iter)) {
+        return;
+    }
 
     do {
         gtk_tree_model_get (self->priv->title_store, &iter, 0, &e, -1);
