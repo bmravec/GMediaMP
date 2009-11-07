@@ -18,7 +18,8 @@ gmediamp_SOURCES = \
     movies.c movies.h \
     shows.c shows.h \
     track-source.c track-source.h \
-    media-store.c media-store.h
+    media-store.c media-store.h \
+    tag-dialog.c tag-dialog.h
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=
