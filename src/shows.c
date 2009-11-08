@@ -28,6 +28,8 @@
 #include "track-source.h"
 #include "media-store.h"
 
+#include "tag-dialog.h"
+
 static void track_source_init (TrackSourceInterface *iface);
 static void media_store_init (MediaStoreInterface *iface);
 G_DEFINE_TYPE_WITH_CODE (Shows, shows, G_TYPE_OBJECT,
@@ -50,14 +52,6 @@ struct _ShowsPrivate {
     GtkTreeModel *season_store;
     GtkTreeModel *title_store;
     GtkTreeModel *title_filter;
-
-    GtkWidget *info_dialog;
-    GtkWidget *info_title;
-    GtkWidget *info_show;
-    GtkWidget *info_season;
-    GtkWidget *info_track;
-    GtkWidget *info_save;
-    GtkWidget *info_cancel;
 
     gchar *s_show;
     gchar *s_season;
@@ -99,6 +93,7 @@ static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
     gpointer ne, ShowsCompareFunc cmp, gint l, gboolean create);
 static void entry_changed (Entry *entry, Shows *self);
 
+static void on_info_completed (Shows *self, GPtrArray *changes, TagDialog *td);
 static void on_info_save (GtkWidget *widget, Shows *self);
 static void on_info_cancel (GtkWidget *widget, Shows *self);
 
@@ -208,14 +203,6 @@ shows_activate (Shows *self)
     self->priv->season = GTK_WIDGET (gtk_builder_get_object (builder, "shows_season"));
     self->priv->title = GTK_WIDGET (gtk_builder_get_object (builder, "shows_title"));
 
-    self->priv->info_dialog = GTK_WIDGET (gtk_builder_get_object (builder, "shows_info_dialog"));
-    self->priv->info_title = GTK_WIDGET (gtk_builder_get_object (builder, "shows_title_field"));
-    self->priv->info_show = GTK_WIDGET (gtk_builder_get_object (builder, "shows_show_field"));
-    self->priv->info_season = GTK_WIDGET (gtk_builder_get_object (builder, "shows_season_field"));
-    self->priv->info_track = GTK_WIDGET (gtk_builder_get_object (builder, "shows_track_field"));
-    self->priv->info_save = GTK_WIDGET (gtk_builder_get_object (builder, "shows_save"));
-    self->priv->info_cancel = GTK_WIDGET (gtk_builder_get_object (builder, "shows_cancel"));
-
     self->priv->show_store = GTK_TREE_MODEL (gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_UINT));
     self->priv->season_store = GTK_TREE_MODEL (gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_UINT));
     self->priv->title_store = GTK_TREE_MODEL (gtk_list_store_new (2, G_TYPE_OBJECT, G_TYPE_BOOLEAN));
@@ -310,11 +297,6 @@ shows_activate (Shows *self)
         (GtkTreeCellDataFunc) time_column_func, "duration", NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->title), column);
 
-    // Make dialog modal and have it stay above parent
-    gtk_window_set_modal (GTK_WINDOW (self->priv->info_dialog), TRUE);
-    gtk_window_set_transient_for (GTK_WINDOW (self->priv->info_dialog),
-        GTK_WINDOW (gtk_builder_get_object (builder, "main_win")));
-
     // Connect Signals
     g_signal_connect (G_OBJECT (self->priv->show), "cursor-changed", G_CALLBACK (show_cursor_changed), self);
     g_signal_connect (G_OBJECT (self->priv->season), "cursor-changed", G_CALLBACK (season_cursor_changed), self);
@@ -330,9 +312,6 @@ shows_activate (Shows *self)
     g_signal_connect (self->priv->db, "add-entry", G_CALLBACK (shows_gmediadb_add), self);
     g_signal_connect (self->priv->db, "remove-entry", G_CALLBACK (shows_gmediadb_remove), self);
     g_signal_connect (self->priv->db, "update-entry", G_CALLBACK (shows_gmediadb_update), self);
-
-    g_signal_connect (self->priv->info_save, "clicked", G_CALLBACK (on_info_save), self);
-    g_signal_connect (self->priv->info_cancel, "clicked", G_CALLBACK (on_info_cancel), self);
 
     shell_add_widget (self->priv->shell, gtk_label_new ("Library"), "Library", NULL);
     shell_add_widget (self->priv->shell, self->priv->widget, "Library/TV Shows", NULL);
@@ -1170,67 +1149,53 @@ static void
 on_title_info (GtkWidget *item, Shows *self)
 {
     Entry *e;
-    GtkTreeIter iter;
     guint size, i;
+    gchar **keys, **vals;
+    GtkTreeIter iter;
 
-    const gchar *show = NULL, *season = NULL, *title = NULL, *track = NULL;
+    TagDialog *td = tag_dialog_new ();
+    g_signal_connect_swapped (td, "completed", G_CALLBACK (on_info_completed), self);
 
     GList *rows = gtk_tree_selection_get_selected_rows (self->priv->title_sel, NULL);
     size = g_list_length (rows);
-    if (size <= 0)
+
+    if (size <= 0) {
         return;
+    }
 
-    gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, 0));
-    gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
+    for (i = 0; i < size; i++) {
+        gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
 
-    show = entry_get_tag_str (e, "show");
-    season = entry_get_tag_str (e, "season");
+        entry_get_key_value_pairs (e, &keys, &vals);
 
-    if (size > 1) {
-        for (i = 1; i < size; i++) {
-            gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
-            gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
-            if (g_strcmp0 (show, entry_get_tag_str (e, "show"))) {
-                show = NULL;
-            }
-
-            if (g_strcmp0 (season, entry_get_tag_str (e, "season"))) {
-                season = NULL;
-            }
-        }
-    } else {
-        title = entry_get_tag_str (e, "title");
-        track = entry_get_tag_str (e, "track");
+        tag_dialog_add_entry (td, keys, vals);
     }
 
     g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
     g_list_free (rows);
 
-    if (title) {
-        gtk_widget_set_state (self->priv->info_title, GTK_STATE_NORMAL);
-        gtk_entry_set_text (GTK_ENTRY (self->priv->info_title), title);
-    } else {
-        gtk_widget_set_state (self->priv->info_title, GTK_STATE_INSENSITIVE);
-        gtk_entry_set_text (GTK_ENTRY (self->priv->info_title), "");
-    }
-
-    if (track) {
-        gtk_widget_set_state (self->priv->info_track, GTK_STATE_NORMAL);
-        gtk_entry_set_text (GTK_ENTRY (self->priv->info_track), track);
-    } else {
-        gtk_widget_set_state (self->priv->info_track, GTK_STATE_INSENSITIVE);
-        gtk_entry_set_text (GTK_ENTRY (self->priv->info_track), "");
-    }
-
-    gtk_entry_set_text (GTK_ENTRY (self->priv->info_show), show ? show : "");
-    gtk_entry_set_text (GTK_ENTRY (self->priv->info_season), season ? season : "");
-
-    gtk_widget_show_all (self->priv->info_dialog);
+    tag_dialog_show (td);
 }
 
 static void
-on_info_save (GtkWidget *widget, Shows *self)
+on_info_completed (Shows *self, GPtrArray *changes, TagDialog *td)
 {
+    g_print ("on_td_completed: ");
+    if (changes && changes->len > 0) {
+        gint i;
+        g_print ("%d changes\n", changes->len / 2);
+        for (i = 0; i < changes->len; i += 2) {
+            g_print ("%s :: %s\n",
+                changes->pdata[i],
+                changes->pdata[i+1]);
+        }
+        g_print ("----------------------\n");
+    } else {
+        g_print ("No changes recorded\n");
+        return;
+    }
+
     Entry **entries;
     GtkTreeIter iter;
     guint size, i, j;
@@ -1239,88 +1204,31 @@ on_info_save (GtkWidget *widget, Shows *self)
     GList *rows = gtk_tree_selection_get_selected_rows (self->priv->title_sel, NULL);
     size = g_list_length (rows);
 
-    if (size > 1) {
-        const gchar *show = gtk_entry_get_text (GTK_ENTRY (self->priv->info_show));
-        const gchar *season = gtk_entry_get_text (GTK_ENTRY (self->priv->info_season));
-
-        entries = g_new0 (Entry*, size);
-        for (i = 0; i < size; i++) {
-            gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
-            gtk_tree_model_get (self->priv->title_filter, &iter, 0, &entries[i], -1);
-        }
-
-        g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
-        g_list_free (rows);
-
-        for (i = 0; i < size; i++) {
-            entry_get_key_value_pairs (entries[i], &keys, &vals);
-
-            for (j = 0; keys[j]; j++) {
-                if (!g_strcmp0 (keys[j], "show")) {
-                    g_free (vals[j]);
-                    vals[j] = g_strdup (show);
-                }
-
-                if (!g_strcmp0 (keys[j], "season")) {
-                    g_free (vals[j]);
-                    vals[j] = g_strdup (season);
-                }
-            }
-
-            gmediadb_update_entry (self->priv->db, entry_get_id (entries[i]), keys, vals);
-
-            g_strfreev (keys);
-            g_strfreev (vals);
-        }
-
-        g_free (entries);
-    } else {
-        Entry *e;
-        gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, 0));
-        gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
-
-        const gchar *title = gtk_entry_get_text (GTK_ENTRY (self->priv->info_title));
-        const gchar *show = gtk_entry_get_text (GTK_ENTRY (self->priv->info_show));
-        const gchar *season = gtk_entry_get_text (GTK_ENTRY (self->priv->info_season));
-        const gchar *track = gtk_entry_get_text (GTK_ENTRY (self->priv->info_track));
-
-        entry_get_key_value_pairs (e, &keys, &vals);
-
-        for (i = 0; keys[i]; i++) {
-            if (!g_strcmp0 (keys[i], "title")) {
-                g_free (vals[i]);
-                vals[i] = g_strdup (title);
-            }
-
-            if (!g_strcmp0 (keys[i], "show")) {
-                g_free (vals[i]);
-                vals[i] = g_strdup (show);
-            }
-
-            if (!g_strcmp0 (keys[i], "season")) {
-                g_free (vals[i]);
-                vals[i] = g_strdup (season);
-            }
-
-            if (!g_strcmp0 (keys[i], "track")) {
-                g_free (vals[i]);
-                vals[i] = g_strdup (track);
-            }
-        }
-
-        gmediadb_update_entry (self->priv->db, entry_get_id (e), keys, vals);
-
-        g_strfreev (keys);
-        g_strfreev (vals);
+    entries = g_new0 (Entry*, size);
+    for (i = 0; i < size; i++) {
+        gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->title_filter, &iter, 0, &entries[i], -1);
     }
 
-    gtk_widget_hide (self->priv->info_dialog);
-}
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
 
-static void
-on_info_cancel (GtkWidget *widget, Shows *self)
-{
-    gtk_widget_hide (self->priv->info_dialog);
+    keys = g_new0 (gchar*, changes->len / 2 + 1);
+    vals = g_new0 (gchar*, changes->len / 2 + 1);
+
+    for (i = 0; i < changes->len / 2; i++) {
+        keys[i] = changes->pdata[2*i];
+        vals[i] = changes->pdata[2*i+1];
+    }
+
+    for (i = 0; i < size; i++) {
+        gmediadb_update_entry (self->priv->db, entry_get_id (entries[i]), keys, vals);
+    }
+
+    g_strfreev (keys);
+    g_strfreev (vals);
+
+    g_free (entries);
 }
 
 static gint
