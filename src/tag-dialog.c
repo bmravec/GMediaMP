@@ -31,6 +31,7 @@ struct _TagDialogPrivate {
     GtkWidget *dialog;
     GtkWidget *view;
     GtkTreeModel *store;
+    gint count;
 };
 
 static guint signal_completed;
@@ -85,7 +86,7 @@ tag_dialog_init (TagDialog *self)
 
     gtk_window_set_default_size (GTK_WINDOW (self->priv->dialog), 350, 300);
 
-    self->priv->store = GTK_TREE_MODEL (gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_STRING));
+    self->priv->store = GTK_TREE_MODEL (gtk_list_store_new (3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT));
     self->priv->view = gtk_tree_view_new_with_model (self->priv->store);
 
     GtkCellRenderer *renderer;
@@ -128,6 +129,8 @@ tag_dialog_init (TagDialog *self)
 
     g_signal_connect_swapped (self->priv->dialog, "response",
                               G_CALLBACK (on_response), self);
+
+    self->priv->count = 0;
 }
 
 TagDialog*
@@ -137,33 +140,39 @@ tag_dialog_new ()
 }
 
 gboolean
-tag_dialog_add_entry (TagDialog *self, gchar **keys, gchar **vals)
+tag_dialog_add_entry (TagDialog *self, gchar **kvs)
 {
+    GtkTreeIter iter;
     gint i;
-    for (i = 0; keys[i] && vals[i]; i++) {
-        GtkTreeIter iter;
+
+    self->priv->count++;
+
+    for (i = 0; kvs[i]; i += 2) {
         gboolean isnew = TRUE;
 
-        if (!g_strcmp0 (keys[i], "location") ||
-            !g_strcmp0 (keys[i], "duration")) {
+        if (!g_strcmp0 (kvs[i], "location") ||
+            !g_strcmp0 (kvs[i], "id")) {
             continue;
         }
 
         if (gtk_tree_model_get_iter_first (self->priv->store, &iter)) {
             do {
                 gchar *key;
+                gint cnt;
 
                 gtk_tree_model_get (self->priv->store, &iter, 0, &key, -1);
 
-                if (!g_strcmp0 (key, keys[i])) {
+                if (!g_strcmp0 (key, kvs[i])) {
                     g_free (key);
 
                     gchar *val;
-                    gtk_tree_model_get (self->priv->store, &iter, 1, &val, -1);
-                    if (g_strcmp0 (val, vals[i])) {
+                    gtk_tree_model_get (self->priv->store, &iter, 1, &val, 2, &cnt, -1);
+                    if (g_strcmp0 (val, kvs[i+1])) {
                         gtk_list_store_set (GTK_LIST_STORE (self->priv->store), &iter,
                             1, "(Different for multiple entries)", -1);
                     }
+
+                    gtk_list_store_set (GTK_LIST_STORE (self->priv->store), &iter, 2, cnt+1, -1);
 
                     g_free (val);
 
@@ -178,8 +187,19 @@ tag_dialog_add_entry (TagDialog *self, gchar **keys, gchar **vals)
         if (isnew) {
             gtk_list_store_append (GTK_LIST_STORE (self->priv->store), &iter);
             gtk_list_store_set (GTK_LIST_STORE (self->priv->store), &iter,
-                0, keys[i], 1, vals[i], -1);
+                0, kvs[i], 1, kvs[i+1], 2, 1, -1);
         }
+    }
+
+    if (gtk_tree_model_get_iter_first (self->priv->store, &iter)) {
+        do {
+            gint cnt;
+            gtk_tree_model_get (self->priv->store, &iter, 2, &cnt, -1);
+            if (cnt != self->priv->count) {
+                gtk_list_store_set (GTK_LIST_STORE (self->priv->store), &iter,
+                    1, "(Different for multiple entries)", -1);
+            }
+        } while (gtk_tree_model_iter_next (self->priv->store, &iter));
     }
 }
 

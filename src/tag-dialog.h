@@ -52,7 +52,7 @@ struct _TagDialogClass {
 TagDialog *tag_dialog_new ();
 GType tag_dialog_get_type (void);
 
-gboolean tag_dialog_add_tags (TagDialog *self, gchar **keys, gchar **vals);
+gboolean tag_dialog_add_tags (TagDialog *self, gchar **kvs);
 
 gboolean tag_dialog_show (TagDialog *self);
 gboolean tag_dialog_close (TagDialog *self);
