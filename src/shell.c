@@ -84,6 +84,8 @@ guint signal_tag;
 guint signal_state;
 guint signal_ratio;
 
+GStaticRecMutex rmutex;
+
 static gdouble prev_ratio;
 static Shell *instance = NULL;
 
@@ -528,9 +530,26 @@ shell_show (Shell *self)
     gtk_widget_show (self->priv->window);
 }
 
+void
+lock_function () {
+    g_static_rec_mutex_lock (&rmutex);
+}
+
+void
+unlock_function () {
+    g_static_rec_mutex_unlock (&rmutex);
+}
+
 int
 main (int argc, char *argv[])
 {
+    g_type_init ();
+
+    g_static_rec_mutex_init (&rmutex);
+
+    gdk_threads_set_lock_functions (G_CALLBACK (lock_function),
+        G_CALLBACK (unlock_function));
+
     g_thread_init (NULL);
     gdk_threads_init ();
 
