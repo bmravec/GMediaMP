@@ -282,7 +282,7 @@ player_load (Player *self, Entry *entry)
 
     g_object_set (self->priv->vsink, "force-aspect-ratio", TRUE, NULL);
 
-    gchar *ruri = g_strdup_printf ("file://%s", entry_get_location (entry));
+    gchar *ruri = g_strdup_printf ("file://%s", entry_get_tag_str (entry, "location"));
     g_object_set (G_OBJECT (self->priv->pipeline),
         "video-sink", self->priv->vsink,
         "uri", ruri,

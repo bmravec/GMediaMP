@@ -1062,7 +1062,9 @@ on_title_remove (GtkWidget *item, Music *self)
     g_list_free (rows);
 
     for (i = 0; i < size; i++) {
+        gdk_threads_leave ();
         media_store_remove_entry (MEDIA_STORE (self), entries[i]);
+        gdk_threads_enter ();
     }
 
     g_free (entries);
