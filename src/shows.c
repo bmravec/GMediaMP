@@ -1139,7 +1139,9 @@ on_title_remove (GtkWidget *item, Shows *self)
     g_list_free (rows);
 
     for (i = 0; i < size; i++) {
+        gdk_threads_leave ();
         media_store_remove_entry (MEDIA_STORE (self), entries[i]);
+        gdk_threads_enter ();
     }
 
     g_free (entries);
@@ -1149,7 +1151,7 @@ static void
 on_title_info (GtkWidget *item, Shows *self)
 {
     Entry *e;
-    guint size, i;
+    guint size, i, j;
     gchar **keys, **vals;
     GtkTreeIter iter;
 
@@ -1167,9 +1169,11 @@ on_title_info (GtkWidget *item, Shows *self)
         gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
         gtk_tree_model_get (self->priv->title_filter, &iter, 0, &e, -1);
 
-        entry_get_key_value_pairs (e, &keys, &vals);
+        gchar **kvs = gmediadb_get_entry (self->priv->db, entry_get_id (e), NULL);
 
-        tag_dialog_add_entry (td, keys, vals);
+        tag_dialog_add_entry (td, kvs);
+
+        g_free (kvs);
     }
 
     g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
