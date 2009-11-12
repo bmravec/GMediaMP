@@ -26,6 +26,8 @@
 
 #include "progress.h"
 #include "player.h"
+#include "track-source.h"
+#include "media-store.h"
 
 #define SHELL_TYPE (shell_get_type ())
 #define SHELL(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), SHELL_TYPE, Shell))
@@ -60,6 +62,9 @@ GtkBuilder *shell_get_builder (Shell *self);
 
 gboolean shell_add_progress (Shell *self, Progress *p);
 gboolean shell_remove_progress (Shell *self, Progress *p);
+
+gboolean shell_register_track_source (Shell *self, TrackSource *ts);
+gboolean shell_register_media_store (Shell *self, MediaStore *ms);
 
 gboolean shell_import_path (Shell *self, const gchar *path);
 

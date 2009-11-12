@@ -29,22 +29,18 @@
 #include "music.h"
 #include "movies.h"
 #include "shows.h"
+#include "browser.h"
 
 #include "tag-handler.h"
 #include "tray.h"
 #include "mini-pane.h"
-
-#include "track-source.h"
-#include "media-store.h"
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
 struct _ShellPrivate {
     Player *player;
 
-    Music *music;
-    Movies *movies;
-    Shows *shows;
+    Browser *music, *movies, *shows;
 
     Playlist *playlist;
     Tray *tray;
@@ -103,7 +99,7 @@ static gboolean on_pos_change_value (GtkWidget *range, GtkScrollType scroll,
 static void on_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
 static void on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
 
-static void on_entry_move (MediaStore *ms, Entry *entry, Shell *self);
+static void on_entry_move (Shell *self, Entry *entry, MediaStore *ms);
 
 static void
 on_destroy (GtkWidget *widget, Shell *self)
@@ -112,7 +108,7 @@ on_destroy (GtkWidget *widget, Shell *self)
 }
 
 static void
-on_ts_play (TrackSource *ts, Entry *entry, Shell *self)
+on_ts_play (Shell *self, Entry *entry, TrackSource *ts)
 {
     self->priv->playing_source = ts;
     g_object_ref (self->priv->playing_source);
@@ -249,9 +245,6 @@ shell_init (Shell *self)
     self->priv->builder = gtk_builder_new ();
 
     self->priv->player = player_new (0, NULL);
-    self->priv->music = music_new ();
-    self->priv->movies = movies_new ();
-    self->priv->shows = shows_new ();
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
@@ -323,16 +316,8 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->player, "previous", G_CALLBACK (prev_cb), self);
     g_signal_connect (self->priv->player, "volume-changed", G_CALLBACK (on_player_vol_changed), self);
 
-    // Hook up TrackSource signals
-    g_signal_connect (self->priv->music, "entry-play", G_CALLBACK (on_ts_play), self);
-    g_signal_connect (self->priv->movies, "entry-play", G_CALLBACK (on_ts_play), self);
-    g_signal_connect (self->priv->shows, "entry-play", G_CALLBACK (on_ts_play), self);
-
     // Hook up MediaStore signals
-    g_signal_connect (self->priv->tag_handler, "entry-move", G_CALLBACK (on_entry_move), self);
-    g_signal_connect (self->priv->music, "entry-move", G_CALLBACK (on_entry_move), self);
-    g_signal_connect (self->priv->movies, "entry-move", G_CALLBACK (on_entry_move), self);
-    g_signal_connect (self->priv->shows, "entry-move", G_CALLBACK (on_entry_move), self);
+    g_signal_connect_swapped (self->priv->tag_handler, "entry-move", G_CALLBACK (on_entry_move), self);
 
     self->priv->visible = TRUE;
     gtk_widget_show (self->priv->window);
@@ -359,6 +344,18 @@ shell_new ()
     }
 
     return instance;
+}
+
+gboolean
+shell_register_track_source (Shell *self, TrackSource *ts)
+{
+    g_signal_connect_swapped (ts, "entry-play", G_CALLBACK (on_ts_play), self);
+}
+
+gboolean
+shell_register_media_store (Shell *self, MediaStore *ms)
+{
+    g_signal_connect_swapped (ms, "entry-move", G_CALLBACK (on_entry_move), self);
 }
 
 Player*
@@ -540,6 +537,121 @@ unlock_function () {
     g_static_rec_mutex_unlock (&rmutex);
 }
 
+static void
+str_column_func (GtkTreeViewColumn *column,
+                 GtkCellRenderer *cell,
+                 GtkTreeModel *model,
+                 GtkTreeIter *iter,
+                 gchar *data)
+{
+    Entry *entry;
+
+    gtk_tree_model_get (model, iter, 0, &entry, -1);
+    if (entry) {
+        g_object_set (G_OBJECT (cell), "text", entry_get_tag_str (entry, data), NULL);
+    } else {
+        g_object_set (G_OBJECT (cell), "text", "", NULL);
+    }
+}
+
+static void
+int_column_func (GtkTreeViewColumn *column,
+                 GtkCellRenderer *cell,
+                 GtkTreeModel *model,
+                 GtkTreeIter *iter,
+                 gchar *data)
+{
+    Entry *entry;
+
+    gtk_tree_model_get (model, iter, 0, &entry, -1);
+    if (entry) {
+        gchar *str = g_strdup_printf ("%d", entry_get_tag_int (entry, data));
+        g_object_set (G_OBJECT (cell), "text", str, NULL);
+        g_free (str);
+    } else {
+        g_object_set (G_OBJECT (cell), "text", "", NULL);
+    }
+}
+
+static void
+time_column_func (GtkTreeViewColumn *column,
+                  GtkCellRenderer *cell,
+                  GtkTreeModel *model,
+                  GtkTreeIter *iter,
+                  gchar *data)
+{
+    Entry *entry;
+
+    gtk_tree_model_get (model, iter, 0, &entry, -1);
+    if (entry) {
+        gchar *str = time_to_string ((gdouble) entry_get_tag_int (entry, data));
+        g_object_set (G_OBJECT (cell), "text", str, NULL);
+        g_free (str);
+    } else {
+        g_object_set (G_OBJECT (cell), "text", "", NULL);
+    }
+}
+
+static gint
+tvshow_entry_cmp (Entry *e1, Entry *e2)
+{
+    gint res;
+    if (entry_get_id (e1) == entry_get_id (e2))
+        return 0;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "show"), entry_get_tag_str (e2, "show"));
+    if (res != 0)
+        return res;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "season"), entry_get_tag_str (e2, "season"));
+    if (res != 0)
+        return res;
+
+    if (entry_get_tag_int (e2, "track") != entry_get_tag_int (e1, "track"))
+        return entry_get_tag_int (e1, "track") - entry_get_tag_int (e2, "track");
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
+    if (res != 0)
+        return res;
+
+    return -1;
+}
+
+static gint
+music_entry_cmp (Entry *e1, Entry *e2)
+{
+    gint res;
+    if (entry_get_id (e1) == entry_get_id (e2))
+        return 0;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "artist"), entry_get_tag_str (e2, "artist"));
+    if (res != 0)
+        return res;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "album"), entry_get_tag_str (e2, "album"));
+    if (res != 0)
+        return res;
+
+    if (entry_get_tag_int (e2, "track") != entry_get_tag_int (e1, "track"))
+        return entry_get_tag_int (e1, "track") - entry_get_tag_int (e2, "track");
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
+    if (res != 0)
+        return res;
+
+    return -1;
+}
+
+static gint
+movie_entry_cmp (Entry *e1, Entry *e2)
+{
+    gint res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
+    if (res != 0)
+        return res;
+
+    return -1;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -559,13 +671,44 @@ main (int argc, char *argv[])
 
     player_activate (shell->priv->player);
     playlist_activate (shell->priv->playlist);
-    music_activate (shell->priv->music);
-    movies_activate (shell->priv->movies);
-    shows_activate (shell->priv->shows);
     tag_handler_activate (shell->priv->tag_handler);
     tray_activate (shell->priv->tray);
 
     mini_pane_activate (MINI_PANE (shell->priv->mini_pane));
+
+    shell_add_widget (shell, gtk_label_new ("Library"), "Library", NULL);
+
+    Browser *b;
+
+    b = browser_new ("Music", MEDIA_SONG, "Artist", "Album",
+        (BrowserCompareFunc) music_entry_cmp,
+        "Track", "track", FALSE, int_column_func,
+        "Title", "title", TRUE, str_column_func,
+        "Artist", "artist", TRUE, str_column_func,
+        "Album", "album", TRUE, str_column_func,
+        "Duration", "duration", FALSE, time_column_func,
+        NULL);
+
+    shell_add_widget (shell, browser_get_widget (b), "Library/Music", NULL);
+
+    b = browser_new ("Movies", MEDIA_MOVIE, NULL, NULL,
+        (BrowserCompareFunc) movie_entry_cmp,
+        "Title", "title", TRUE, str_column_func,
+        "Duration", "duration", FALSE, time_column_func,
+        NULL);
+
+    shell_add_widget (shell, browser_get_widget (b), "Library/Movies", NULL);
+
+    b = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season",
+        (BrowserCompareFunc) tvshow_entry_cmp,
+        "Track", "track", FALSE, int_column_func,
+        "Title", "title", TRUE, str_column_func,
+        "Show", "show", TRUE, str_column_func,
+        "Season", "season", TRUE, str_column_func,
+        "Duration", "duration", FALSE, time_column_func,
+        NULL);
+
+    shell_add_widget (shell, browser_get_widget (b), "Library/TV Shows", NULL);
 
     gtk_widget_show (shell->priv->mini_pane);
 
@@ -778,7 +921,7 @@ on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self)
 }
 
 static void
-on_entry_move (MediaStore *ms, Entry *entry, Shell *self)
+on_entry_move (Shell *self, Entry *entry, MediaStore *ms)
 {
     gint i;
 

@@ -204,7 +204,7 @@ entry_cmp (Entry *self, Entry *e)
 void
 entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
 {
-    g_hash_table_insert (self->priv->table, g_strdup (tag), g_strdup (value));
+    g_hash_table_insert (self->priv->table, g_strdup (tag), value ? g_strdup (value) : g_strdup (""));
 
     g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }

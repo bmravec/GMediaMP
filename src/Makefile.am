@@ -19,7 +19,8 @@ gmediamp_SOURCES = \
     shows.c shows.h \
     track-source.c track-source.h \
     media-store.c media-store.h \
-    tag-dialog.c tag-dialog.h
+    tag-dialog.c tag-dialog.h \
+    browser.c browser.h
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=
