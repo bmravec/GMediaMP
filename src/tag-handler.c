@@ -68,7 +68,6 @@ tag_handler_main (TagHandler *self)
     const TagLib_AudioProperties *properties;
     TagLib_File *file;
     TagLib_Tag *tag;
-    Entry *ne;
 
     gboolean has_ref = FALSE;
 
@@ -128,7 +127,7 @@ tag_handler_main (TagHandler *self)
 
             if (i == 0) {
                 g_free (title);
-                g_object_unref (ne);
+                g_free (tags);
                 continue;
             }
 
@@ -147,9 +146,7 @@ tag_handler_main (TagHandler *self)
 
             self->priv->done++;
 
-            g_object_unref (ne);
             g_free (tags);
-            ne = NULL;
             continue;
         }
 
