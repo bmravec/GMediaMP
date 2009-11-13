@@ -641,11 +641,7 @@ music_entry_cmp (Entry *e1, Entry *e2)
 static gint
 movie_entry_cmp (Entry *e1, Entry *e2)
 {
-    gint res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
-    if (res != 0)
-        return res;
-
-    return -1;
+    return g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
 }
 
 int

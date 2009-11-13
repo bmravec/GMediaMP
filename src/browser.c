@@ -539,6 +539,83 @@ browser_deinsert_entry (Browser *self, Entry *entry)
     g_object_unref (entry);
 }
 
+static gboolean
+insert_iter (GtkListStore *store,
+             GtkTreeIter *iter,
+             gpointer ne,
+             BrowserCompareFunc cmp,
+             gint l,
+             gboolean create)
+{
+    GtkTreeIter new_iter;
+    gpointer e;
+    gint m, res;
+    gint r = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (store), NULL);
+
+    if (r == l) {
+        gtk_list_store_append (store, iter);
+        return TRUE;
+    }
+
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, l);
+    gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
+
+    res = cmp (ne, e);
+    if (res == 0 && !create) {
+        return FALSE;
+    } else if (res <= 0) {
+        gtk_list_store_insert (store, iter, l);
+        return TRUE;
+    }
+
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, r - 1);
+    gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
+
+    res = cmp (ne, e);
+    if (res == 0 && !create) {
+        return FALSE;
+    } else if (res >= 0) {
+        gtk_list_store_append (store, iter);
+        return TRUE;
+    }
+
+    while (l+1 != r) {
+        m = (l + r) / 2;
+
+        gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, m);
+        gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
+
+        gint res = cmp (ne, e);
+        if (!res && !create) {
+            return FALSE;
+        } else if (!res && create) {
+            gtk_list_store_insert_before (store, &new_iter, iter);
+            *iter = new_iter;
+            return TRUE;
+        } else if (res < 0) {
+            r = m;
+        } else {
+            l = m;
+        }
+    }
+
+    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, m);
+    gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
+
+    res = cmp (ne, e);
+    if (res > 0) {
+        gtk_list_store_insert_after (store, &new_iter, iter);
+        *iter = new_iter;
+        return TRUE;
+    } else if (res < 0 || create) {
+        gtk_list_store_insert_before (store, &new_iter, iter);
+        *iter = new_iter;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 static guint
 browser_get_mtype (MediaStore *self)
 {
@@ -886,83 +963,6 @@ pane3_row_activated (GtkTreeView *view,
 
     self->priv->s_entry = entry;
     track_source_emit_play (TRACK_SOURCE (self), entry);
-}
-
-static gboolean
-insert_iter (GtkListStore *store,
-             GtkTreeIter *iter,
-             gpointer ne,
-             BrowserCompareFunc cmp,
-             gint l,
-             gboolean create)
-{
-    GtkTreeIter new_iter;
-    gpointer e;
-    gint m, res;
-    gint r = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (store), NULL);
-
-    if (r == l) {
-        gtk_list_store_append (store, iter);
-        return TRUE;
-    }
-
-    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, l);
-    gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
-
-    res = cmp (ne, e);
-    if (res == 0 && !create) {
-        return FALSE;
-    } else if (res <= 0) {
-        gtk_list_store_insert (store, iter, l);
-        return TRUE;
-    }
-
-    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, r - 1);
-    gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
-
-    res = cmp (ne, e);
-    if (res == 0 && !create) {
-        return FALSE;
-    } else if (res >= 0) {
-        gtk_list_store_append (store, iter);
-        return TRUE;
-    }
-
-    while (l+1 != r) {
-        m = (l + r) / 2;
-
-        gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, m);
-        gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
-
-        gint res = cmp (ne, e);
-        if (!res && !create) {
-            return FALSE;
-        } else if (!res && create) {
-            gtk_list_store_insert_before (store, &new_iter, iter);
-            *iter = new_iter;
-            return TRUE;
-        } else if (res < 0) {
-            r = m;
-        } else {
-            l = m;
-        }
-    }
-
-    gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (store), iter, NULL, m);
-    gtk_tree_model_get (GTK_TREE_MODEL (store), iter, 0, &e, -1);
-
-    res = cmp (ne, e);
-    if (res > 0) {
-        gtk_list_store_insert_after (store, &new_iter, iter);
-        *iter = new_iter;
-        return TRUE;
-    } else if (res < 0 || create) {
-        gtk_list_store_insert_before (store, &new_iter, iter);
-        *iter = new_iter;
-        return TRUE;
-    }
-
-    return FALSE;
 }
 
 static void
