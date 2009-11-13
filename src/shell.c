@@ -99,8 +99,6 @@ static gboolean on_pos_change_value (GtkWidget *range, GtkScrollType scroll,
 static void on_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
 static void on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self);
 
-static void on_entry_move (Shell *self, Entry *entry, MediaStore *ms);
-
 static void
 on_destroy (GtkWidget *widget, Shell *self)
 {
@@ -250,10 +248,6 @@ shell_init (Shell *self)
     self->priv->tag_handler = tag_handler_new ();
     self->priv->mini_pane = mini_pane_new ();
 
-    g_ptr_array_add (self->priv->stores, self->priv->music);
-    g_ptr_array_add (self->priv->stores, self->priv->movies);
-    g_ptr_array_add (self->priv->stores, self->priv->shows);
-
     // Load objects from main.ui
     gtk_builder_add_from_file (self->priv->builder, SHARE_DIR "/ui/main.ui", NULL);
     self->priv->window = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "main_win"));
@@ -317,7 +311,7 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->player, "volume-changed", G_CALLBACK (on_player_vol_changed), self);
 
     // Hook up MediaStore signals
-    g_signal_connect_swapped (self->priv->tag_handler, "entry-move", G_CALLBACK (on_entry_move), self);
+    //g_signal_connect_swapped (self->priv->tag_handler, "entry-move", G_CALLBACK (on_entry_move), self);
 
     self->priv->visible = TRUE;
     gtk_widget_show (self->priv->window);
@@ -355,7 +349,9 @@ shell_register_track_source (Shell *self, TrackSource *ts)
 gboolean
 shell_register_media_store (Shell *self, MediaStore *ms)
 {
-    g_signal_connect_swapped (ms, "entry-move", G_CALLBACK (on_entry_move), self);
+//    g_signal_connect_swapped (ms, "entry-move", G_CALLBACK (on_entry_move), self);
+
+    g_ptr_array_add (self->priv->stores, ms);
 }
 
 Player*
@@ -678,9 +674,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, gtk_label_new ("Library"), "Library", NULL);
 
-    Browser *b;
-
-    b = browser_new ("Music", MEDIA_SONG, "Artist", "Album",
+    shell->priv->music = browser_new ("Music", MEDIA_SONG, "Artist", "Album",
         (BrowserCompareFunc) music_entry_cmp,
         "Track", "track", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
@@ -689,17 +683,17 @@ main (int argc, char *argv[])
         "Duration", "duration", FALSE, time_column_func,
         NULL);
 
-    shell_add_widget (shell, browser_get_widget (b), "Library/Music", NULL);
+    shell_add_widget (shell, browser_get_widget (shell->priv->music), "Library/Music", NULL);
 
-    b = browser_new ("Movies", MEDIA_MOVIE, NULL, NULL,
+    shell->priv->movies = browser_new ("Movies", MEDIA_MOVIE, NULL, NULL,
         (BrowserCompareFunc) movie_entry_cmp,
         "Title", "title", TRUE, str_column_func,
         "Duration", "duration", FALSE, time_column_func,
         NULL);
 
-    shell_add_widget (shell, browser_get_widget (b), "Library/Movies", NULL);
+    shell_add_widget (shell, browser_get_widget (shell->priv->movies), "Library/Movies", NULL);
 
-    b = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season",
+    shell->priv->shows = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season",
         (BrowserCompareFunc) tvshow_entry_cmp,
         "Track", "track", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
@@ -708,7 +702,7 @@ main (int argc, char *argv[])
         "Duration", "duration", FALSE, time_column_func,
         NULL);
 
-    shell_add_widget (shell, browser_get_widget (b), "Library/TV Shows", NULL);
+    shell_add_widget (shell, browser_get_widget (shell->priv->shows), "Library/TV Shows", NULL);
 
     gtk_widget_show (shell->priv->mini_pane);
 
@@ -920,15 +914,28 @@ on_player_vol_changed (GtkWidget *widget, gdouble val, Shell *self)
     gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->tb_vol), val);
 }
 
-static void
-on_entry_move (Shell *self, Entry *entry, MediaStore *ms)
+gchar**
+shell_get_media_stores (Shell *self)
+{
+    gchar **list = g_new0 (gchar*, self->priv->stores->len+1);
+
+    gint i;
+    for (i = 0; i < self->priv->stores->len; i++) {
+        MediaStore *ms = MEDIA_STORE (g_ptr_array_index (self->priv->stores, i));
+        list[i] = media_store_get_name (ms);
+    }
+
+    return list;
+}
+
+gboolean
+shell_move_to (Shell *self, gchar **e, const gchar *ms_name)
 {
     gint i;
-
     for (i = 0; i < self->priv->stores->len; i++) {
-        MediaStore *nms = MEDIA_STORE (g_ptr_array_index (self->priv->stores, i));
-        if (entry_get_media_type (entry) == media_store_get_media_type (nms)) {
-            media_store_add_entry (nms, entry);
+        MediaStore *ms = MEDIA_STORE (g_ptr_array_index (self->priv->stores, i));
+        if (!g_strcmp0 (media_store_get_name (ms), ms_name)) {
+            media_store_add_entry (ms, e);
         }
     }
 }

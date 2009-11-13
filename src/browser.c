@@ -92,6 +92,7 @@ static gboolean on_pane3_click (GtkWidget *view, GdkEventButton *event, Browser 
 
 static void on_pane3_remove (GtkWidget *item, Browser *self);
 static void on_pane3_info (GtkWidget *item, Browser *self);
+static void on_pane3_move (Browser *self, GtkWidget *item);
 
 static gpointer initial_import (Browser *self);
 static gboolean insert_iter (GtkListStore *store, GtkTreeIter *iter,
@@ -102,17 +103,17 @@ static void on_info_completed (Browser *self, GPtrArray *changes, TagDialog *td)
 static void on_info_save (GtkWidget *widget, Browser *self);
 static void on_info_cancel (GtkWidget *widget, Browser *self);
 
-static gint pane1_entry_cmp (Entry *e1, Entry *e2);
+static void browser_insert_entry (Browser *self, Entry *entry);
+static void browser_deinsert_entry (Browser *self, Entry *entry);
 
 // Interface methods
 static Entry *browser_get_next (TrackSource *self);
 static Entry *browser_get_prev (TrackSource *self);
 
-static void browser_add_entry (MediaStore *self, Entry *entry);
-static void browser_insert_entry (Browser *self, Entry *entry);
+static void browser_add_entry (MediaStore *self, gchar **entry);
 static void browser_remove_entry (MediaStore *self, Entry *entry);
-static void browser_deinsert_entry (Browser *self, Entry *entry);
 static guint browser_get_mtype (MediaStore *self);
+static gchar *browser_get_name (MediaStore *self);
 
 // Signals from GMediaDB
 static void browser_gmediadb_add (GMediaDB *db, guint id, Browser *self);
@@ -143,6 +144,7 @@ media_store_init (MediaStoreInterface *iface)
     iface->add_entry = browser_add_entry;
     iface->rem_entry = browser_remove_entry;
     iface->get_mtype = browser_get_mtype;
+    iface->get_name  = browser_get_name;
 }
 
 static void
@@ -366,7 +368,7 @@ browser_get_widget (Browser *self)
 }
 
 static void
-browser_add_entry (MediaStore *self, Entry *entry)
+browser_add_entry (MediaStore *self, gchar **entry)
 {
     BrowserPrivate *priv = BROWSER (self)->priv;
 /*TODO: Fix
@@ -378,14 +380,7 @@ browser_add_entry (MediaStore *self, Entry *entry)
         entry_set_tag_str (entry, "pane2", "Unknown Season");
     }
 */
-    gchar **keys, **vals;
-
-    guint size = entry_get_key_value_pairs (entry, &keys, &vals);
-
-    gmediadb_add_entry (priv->db, keys, vals);
-
-    g_strfreev (keys);
-    g_strfreev (vals);
+    gmediadb_add_entry (priv->db, entry);
 }
 
 static void
@@ -476,8 +471,8 @@ browser_deinsert_entry (Browser *self, Entry *entry)
     gchar *new_str;
 
     if (self->priv->p1_tag) {
-        const gchar *pane1 = entry_get_tag_str (entry, "pane1");
-        const gchar *pane2 = entry_get_tag_str (entry, "pane2");
+        const gchar *pane1 = entry_get_tag_str (entry, self->priv->p1_tag);
+        const gchar *pane2 = entry_get_tag_str (entry, self->priv->p2_tag);
 
         gboolean visible = !g_strcmp0 (priv->s_p1, pane1);
 
@@ -532,7 +527,7 @@ browser_deinsert_entry (Browser *self, Entry *entry)
     }
 
     insert_iter (GTK_LIST_STORE (priv->p3_store), &iter, entry,
-        (BrowserCompareFunc) pane1_entry_cmp, 0, FALSE);
+        self->priv->cmp_func, 0, FALSE);
 
     gtk_list_store_remove (GTK_LIST_STORE (priv->p3_store), &iter);
 
@@ -543,6 +538,12 @@ static guint
 browser_get_mtype (MediaStore *self)
 {
     return BROWSER (self)->priv->mtype;
+}
+
+static gchar*
+browser_get_name (MediaStore *self)
+{
+    return BROWSER (self)->priv->media_type;
 }
 
 static Entry*
@@ -1056,6 +1057,25 @@ on_pane2_click (GtkWidget *view, GdkEventButton *event, Browser *self)
     return FALSE;
 }
 
+static GtkWidget*
+browser_get_move_submenu (Browser *self)
+{
+    GtkWidget *menu = gtk_menu_new ();
+
+    gchar **dests = shell_get_media_stores (self->priv->shell);
+
+    gint i;
+    for (i = 0; dests[i]; i++) {
+        if (g_strcmp0 (self->priv->media_type, dests[i])) {
+            GtkWidget *item = gtk_menu_item_new_with_label (dests[i]);
+            gtk_menu_append (GTK_MENU (menu), item);
+            g_signal_connect_swapped (item, "activate", G_CALLBACK (on_pane3_move), self);
+        }
+    }
+
+    return menu;
+}
+
 static gboolean
 on_pane3_click (GtkWidget *view, GdkEventButton *event, Browser *self)
 {
@@ -1083,6 +1103,15 @@ on_pane3_click (GtkWidget *view, GdkEventButton *event, Browser *self)
 
         gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
 
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_CONVERT, NULL);
+        gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Move");
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_menu_item_set_submenu (GTK_MENU_ITEM (item),
+            browser_get_move_submenu (self));
+
+        gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
+
         item = gtk_image_menu_item_new_from_stock (GTK_STOCK_REMOVE, NULL);
         gtk_menu_append (GTK_MENU (menu), item);
         g_signal_connect (item, "activate", G_CALLBACK (on_pane3_remove), self);
@@ -1097,7 +1126,46 @@ on_pane3_click (GtkWidget *view, GdkEventButton *event, Browser *self)
 
         return retval;
     }
+
     return FALSE;
+}
+
+static void
+on_pane3_move (Browser *self, GtkWidget *item)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i;
+
+    const gchar *label = gtk_menu_item_get_label (GTK_MENU_ITEM (item));
+
+    GList *rows = gtk_tree_selection_get_selected_rows (self->priv->p3_sel, NULL);
+    size = g_list_length (rows);
+
+    entries = g_new0 (Entry*, size);
+    for (i = 0; i < size; i++) {
+        gtk_tree_model_get_iter (self->priv->p3_filter, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->p3_filter, &iter, 0, &entries[i], -1);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    for (i = 0; i < size; i++) {
+        gchar **kvs = gmediadb_get_entry (self->priv->db, entry_get_id (entries[i]), NULL);
+
+        media_store_remove_entry (MEDIA_STORE (self), entries[i]);
+        entry_set_media_type (entries[i], MEDIA_TVSHOW);
+
+        gint j;
+        for (j = 0; kvs[j]; j += 2) {
+            entry_set_tag_str (entries[i], kvs[j], kvs[j+1]);
+        }
+
+        shell_move_to (self->priv->shell, kvs, label);
+    }
+
+    g_free (entries);
 }
 
 static void
@@ -1196,45 +1264,9 @@ on_info_completed (Browser *self, GPtrArray *changes, TagDialog *td)
     g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
     g_list_free (rows);
 
-    keys = g_new0 (gchar*, changes->len / 2 + 1);
-    vals = g_new0 (gchar*, changes->len / 2 + 1);
-
-    for (i = 0; i < changes->len / 2; i++) {
-        keys[i] = changes->pdata[2*i];
-        vals[i] = changes->pdata[2*i+1];
-    }
-
     for (i = 0; i < size; i++) {
-        gmediadb_update_entry (self->priv->db, entry_get_id (entries[i]), keys, vals);
+        gmediadb_update_entry (self->priv->db, entry_get_id (entries[i]), (gchar**) changes->pdata);
     }
-
-    g_strfreev (keys);
-    g_strfreev (vals);
 
     g_free (entries);
-}
-
-static gint
-pane1_entry_cmp (Entry *e1, Entry *e2)
-{
-    gint res;
-    if (entry_get_id (e1) == entry_get_id (e2))
-        return 0;
-
-    res = g_strcmp0 (entry_get_tag_str (e1, "pane1"), entry_get_tag_str (e2, "pane1"));
-    if (res != 0)
-        return res;
-
-    res = g_strcmp0 (entry_get_tag_str (e1, "pane2"), entry_get_tag_str (e2, "pane2"));
-    if (res != 0)
-        return res;
-
-    if (entry_get_tag_int (e2, "track") != entry_get_tag_int (e1, "track"))
-        return entry_get_tag_int (e1, "track") - entry_get_tag_int (e2, "track");
-
-    res = g_strcmp0 (entry_get_tag_str (e1, "pane3"), entry_get_tag_str (e2, "pane3"));
-    if (res != 0)
-        return res;
-
-    return -1;
 }

@@ -77,6 +77,9 @@ void shell_toggle_visibility (Shell *self);
 void shell_hide (Shell *self);
 void shell_show (Shell *self);
 
+gchar **shell_get_media_stores (Shell *self);
+gboolean shell_move_to (Shell *self, gchar **e, const gchar *ms_name);
+
 G_END_DECLS
 
 #endif /* __SHELL_H__ */
