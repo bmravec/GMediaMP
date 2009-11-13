@@ -208,9 +208,15 @@ browser_new (gchar *media_type,
 
     self->priv->mtype = mtype;
     self->priv->media_type = g_strdup (media_type);
-    self->priv->p1_tag = g_ascii_strdown (p1_tag, -1);
-    self->priv->p2_tag = g_ascii_strdown (p2_tag, -1);
     self->priv->cmp_func = cmp_func;
+
+    if (p1_tag) {
+        self->priv->p1_tag = g_ascii_strdown (p1_tag, -1);
+    }
+
+    if (p2_tag) {
+        self->priv->p2_tag = g_ascii_strdown (p2_tag, -1);
+    }
 
     self->priv->shell = shell_new ();
     self->priv->db = gmediadb_new (media_type);
@@ -262,7 +268,6 @@ browser_new (gchar *media_type,
     }
 
     if (p2_tag) {
-        // Create Columns for Seasons
         renderer = gtk_cell_renderer_text_new ();
         g_object_set (G_OBJECT (renderer), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
         column = gtk_tree_view_column_new_with_attributes ("Season", renderer, "text", 0, NULL);
@@ -1233,10 +1238,10 @@ static void
 on_info_completed (Browser *self, GPtrArray *changes, TagDialog *td)
 {
     g_print ("on_td_completed: ");
-    if (changes && changes->len > 0) {
+    if (changes && changes->pdata[0]) {
         gint i;
         g_print ("%d changes\n", changes->len / 2);
-        for (i = 0; i < changes->len; i += 2) {
+        for (i = 0; changes->pdata[i]; i += 2) {
             g_print ("%s :: %s\n",
                 changes->pdata[i],
                 changes->pdata[i+1]);

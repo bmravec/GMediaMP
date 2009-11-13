@@ -102,7 +102,7 @@ mini_pane_deactivate (MiniPane *self)
 static void
 on_size_allocate (GtkWidget *widget, GtkAllocation *alloc, MiniPane *self)
 {
-    g_print ("Size Allocate (%d,%d)\n", alloc->width, alloc->height);
+//    g_print ("Size Allocate (%d,%d)\n", alloc->width, alloc->height);
     if (alloc->width != alloc->height) {
         self->priv->width = alloc->width;
         gtk_widget_set_size_request (widget, alloc->width, alloc->width);
@@ -126,7 +126,7 @@ on_size_allocate (GtkWidget *widget, GtkAllocation *alloc, MiniPane *self)
 static void
 on_size_requisition (GtkWidget *widget, GtkRequisition *req, MiniPane *self)
 {
-    g_print ("Size Requisition (%d,%d)\n", req->width, req->height);
+//    g_print ("Size Requisition (%d,%d)\n", req->width, req->height);
 
     req->height = req->width = self->priv->width;
 }

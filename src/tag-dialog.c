@@ -219,6 +219,8 @@ tag_dialog_close (TagDialog *self)
 static void
 on_response (TagDialog *self, gint response_id, GtkDialog *dialog)
 {
+    g_ptr_array_add (self->priv->changes, NULL);
+
     switch (response_id) {
         case GTK_RESPONSE_DELETE_EVENT:
         case GTK_RESPONSE_REJECT:
@@ -228,6 +230,9 @@ on_response (TagDialog *self, gint response_id, GtkDialog *dialog)
             g_signal_emit (self, signal_completed, 0, self->priv->changes);
             break;
     };
+
+    g_ptr_array_free (self->priv->changes, TRUE);
+    self->priv->changes = NULL;
 
     gtk_widget_hide (self->priv->dialog);
 }
