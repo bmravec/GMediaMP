@@ -55,6 +55,7 @@ Browser *browser_new (gchar *media_type,
                       gint mtype,
                       gchar *p1_tag,
                       gchar *p2_tag,
+                      gboolean p2_single,
                       BrowserCompareFunc cmp_func,
                       ...);
 GType browser_get_type (void);

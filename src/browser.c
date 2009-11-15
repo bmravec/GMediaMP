@@ -62,6 +62,7 @@ struct _BrowserPrivate {
 
     BrowserCompareFunc cmp_func;
     gchar *p1_tag, *p2_tag;
+    gboolean p2_single;
     gint mtype;
     gchar *media_type;
     gchar **tags;
@@ -181,6 +182,8 @@ browser_init (Browser *self)
     self->priv->s_p1 = NULL;
     self->priv->s_p2 = NULL;
     self->priv->s_entry = NULL;
+
+    self->priv->p2_single = FALSE;
 }
 
 gboolean
@@ -201,6 +204,7 @@ browser_new (gchar *media_type,
              gint mtype,
              gchar *p1_tag,
              gchar *p2_tag,
+             gboolean p2_single,
              BrowserCompareFunc cmp_func,
              ...)
 {
@@ -208,6 +212,7 @@ browser_new (gchar *media_type,
 
     self->priv->mtype = mtype;
     self->priv->media_type = g_strdup (media_type);
+    self->priv->p2_single = p2_single;
     self->priv->cmp_func = cmp_func;
 
     if (p1_tag) {
@@ -270,7 +275,7 @@ browser_new (gchar *media_type,
     if (p2_tag) {
         renderer = gtk_cell_renderer_text_new ();
         g_object_set (G_OBJECT (renderer), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
-        column = gtk_tree_view_column_new_with_attributes ("Season", renderer, "text", 0, NULL);
+        column = gtk_tree_view_column_new_with_attributes (p2_tag, renderer, "text", 0, NULL);
         gtk_tree_view_column_set_expand (column, TRUE);
         gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->pane2), column);
 
@@ -278,10 +283,17 @@ browser_new (gchar *media_type,
         column = gtk_tree_view_column_new_with_attributes ("#", renderer, "text", 1, NULL);
         gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->pane2), column);
 
-        gchar *str = g_strdup_printf ("Select a %s", p1_tag);
-        gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
-            NULL, 0, 0, str, 1, 0, -1);
-        g_free (str);
+        if (self->priv->p2_single) {
+            gchar *str = g_strdup_printf ("Select a %s", p1_tag);
+            gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
+                NULL, 0, 0, str, 1, 0, -1);
+            g_free (str);
+        } else {
+            gchar *str = g_strdup_printf ("All 0 %ss", p2_tag);
+            gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
+                NULL, 0, 0, str, 1, 0, -1);
+            g_free (str);
+        }
 
         GtkTreePath *root = gtk_tree_path_new_from_string ("0");
         gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->pane2)), root);
@@ -325,10 +337,10 @@ browser_new (gchar *media_type,
         }
 
         renderer = gtk_cell_renderer_text_new ();
-        g_object_set (G_OBJECT (renderer), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
+        g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
         column = gtk_tree_view_column_new_with_attributes (label, renderer, NULL);
         gtk_tree_view_column_set_cell_data_func (column, renderer, df, tag, NULL);
-        gtk_tree_view_column_set_expand (column, expand);
+        g_object_set (column, "expand", expand, NULL);
         gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->pane3), column);
     }
 
@@ -401,9 +413,13 @@ browser_insert_entry (Browser *self, Entry *entry)
         const gchar *pane1 = entry_get_tag_str (entry, self->priv->p1_tag);
         const gchar *pane2 = entry_get_tag_str (entry, self->priv->p2_tag);
 
-        gboolean sev = !g_strcmp0 (self->priv->s_p1, pane1);
-        tv = (self->priv->s_p1 == NULL || sev) &&
-            (self->priv->s_p2 == NULL || !g_strcmp0 (self->priv->s_p2, pane2));
+        gboolean p2vis = !g_strcmp0 (self->priv->s_p1, pane1);
+        if (!self->priv->p2_single) {
+            p2vis |= (self->priv->s_p1 == NULL);
+        }
+
+        tv = (self->priv->s_p1 == NULL || !g_strcmp0 (self->priv->s_p1, pane1)) &&
+             (self->priv->s_p2 == NULL || !g_strcmp0 (self->priv->s_p2, pane2));
 
         // Add pane1 to view
         res = insert_iter (GTK_LIST_STORE (self->priv->p1_store), &iter,
@@ -417,7 +433,7 @@ browser_insert_entry (Browser *self, Entry *entry)
         gtk_tree_model_get (self->priv->p1_store, &first, 1, &cnt, -1);
 
         if (res) {
-            new_str = g_strdup_printf ("All %d Browser", ++self->priv->num_p1);
+            new_str = g_strdup_printf ("All %d %ss", ++self->priv->num_p1, self->priv->p1_tag);
             gtk_list_store_set (GTK_LIST_STORE (self->priv->p1_store), &first,
                 0, new_str, 1, cnt + 1, -1);
             g_free (new_str);
@@ -426,8 +442,8 @@ browser_insert_entry (Browser *self, Entry *entry)
                 1, cnt + 1, -1);
         }
 
-        // Add pane2 to view
-        if (sev) {
+        if (p2vis) {
+            // Add pane2 to view
             res = insert_iter (GTK_LIST_STORE (self->priv->p2_store), &iter,
                 (gpointer) pane2, (BrowserCompareFunc) g_strcmp0, 1, FALSE);
 
@@ -439,7 +455,7 @@ browser_insert_entry (Browser *self, Entry *entry)
             gtk_tree_model_get (self->priv->p2_store, &first, 1, &cnt, -1);
 
             if (res) {
-                new_str = g_strdup_printf ("All %d Seasons", ++self->priv->num_p2);
+                new_str = g_strdup_printf ("All %d %ss", ++self->priv->num_p2, self->priv->p2_tag);
                 gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store), &first,
                     0, new_str, 1, cnt + 1, -1);
                 g_free (new_str);
@@ -469,8 +485,6 @@ browser_remove_entry (MediaStore *self, Entry *entry)
 static void
 browser_deinsert_entry (Browser *self, Entry *entry)
 {
-    BrowserPrivate *priv = self->priv;
-
     GtkTreeIter first, iter;
     gint cnt;
     gchar *new_str;
@@ -479,62 +493,60 @@ browser_deinsert_entry (Browser *self, Entry *entry)
         const gchar *pane1 = entry_get_tag_str (entry, self->priv->p1_tag);
         const gchar *pane2 = entry_get_tag_str (entry, self->priv->p2_tag);
 
-        gboolean visible = !g_strcmp0 (priv->s_p1, pane1);
+        insert_iter (GTK_LIST_STORE (self->priv->p1_store), &iter,
+            (gpointer) pane1, (BrowserCompareFunc) g_strcmp0, 1, FALSE);
 
-        insert_iter (GTK_LIST_STORE (priv->p1_store), &iter, (gpointer) pane1,
-                     (BrowserCompareFunc) g_strcmp0, 1, FALSE);
-
-        gtk_tree_model_get (priv->p1_store, &iter, 1, &cnt, -1);
+        gtk_tree_model_get (self->priv->p1_store, &iter, 1, &cnt, -1);
 
         if (cnt == 1) {
-            gtk_list_store_remove (GTK_LIST_STORE (priv->p1_store), &iter);
+            gtk_list_store_remove (GTK_LIST_STORE (self->priv->p1_store), &iter);
 
-            gtk_tree_model_get_iter_first (priv->p1_store, &first);
-            gtk_tree_model_get (priv->p1_store, &first, 1, &cnt, -1);
+            gtk_tree_model_get_iter_first (self->priv->p1_store, &first);
+            gtk_tree_model_get (self->priv->p1_store, &first, 1, &cnt, -1);
 
-            new_str = g_strdup_printf ("All %d Browser", --priv->num_p1);
-            gtk_list_store_set (GTK_LIST_STORE (priv->p1_store), &first,
+            new_str = g_strdup_printf ("All %d %ss", --self->priv->num_p1, self->priv->p1_tag);
+            gtk_list_store_set (GTK_LIST_STORE (self->priv->p1_store), &first,
                 0, new_str, 1, cnt - 1, -1);
             g_free (new_str);
         } else {
-            gtk_list_store_set (GTK_LIST_STORE (priv->p1_store), &iter, 1, cnt - 1, -1);
+            gtk_list_store_set (GTK_LIST_STORE (self->priv->p1_store), &iter, 1, cnt - 1, -1);
 
-            gtk_tree_model_get_iter_first (priv->p1_store, &first);
-            gtk_tree_model_get (priv->p1_store, &first, 1, &cnt, -1);
-            gtk_list_store_set (GTK_LIST_STORE (priv->p1_store), &first, 1, cnt - 1, -1);
+            gtk_tree_model_get_iter_first (self->priv->p1_store, &first);
+            gtk_tree_model_get (self->priv->p1_store, &first, 1, &cnt, -1);
+            gtk_list_store_set (GTK_LIST_STORE (self->priv->p1_store), &first, 1, cnt - 1, -1);
         }
 
-        if (visible) {
-            insert_iter (GTK_LIST_STORE (priv->p2_store), &iter, (gpointer) pane2,
+        if ((!self->priv->p2_single && self->priv->s_p2 == NULL) || !g_strcmp0 (self->priv->s_p1, pane1)) {
+            insert_iter (GTK_LIST_STORE (self->priv->p2_store), &iter, (gpointer) pane2,
                      (BrowserCompareFunc) g_strcmp0, 1, FALSE);
 
-            gtk_tree_model_get (priv->p2_store, &iter, 1, &cnt, -1);
+            gtk_tree_model_get (self->priv->p2_store, &iter, 1, &cnt, -1);
 
             if (cnt == 1) {
-                gtk_list_store_remove (GTK_LIST_STORE (priv->p2_store), &iter);
+                gtk_list_store_remove (GTK_LIST_STORE (self->priv->p2_store), &iter);
 
-                gtk_tree_model_get_iter_first (priv->p2_store, &first);
-                gtk_tree_model_get (priv->p2_store, &first, 1, &cnt, -1);
+                gtk_tree_model_get_iter_first (self->priv->p2_store, &first);
+                gtk_tree_model_get (self->priv->p2_store, &first, 1, &cnt, -1);
 
-                new_str = g_strdup_printf ("All %d Season", --priv->num_p2);
-                gtk_list_store_set (GTK_LIST_STORE (priv->p2_store), &first,
+                new_str = g_strdup_printf ("All %d %ss", --self->priv->num_p2, self->priv->p2_tag);
+                gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store), &first,
                     0, new_str, 1, cnt - 1, -1);
                 g_free (new_str);
             } else {
-                gtk_list_store_set (GTK_LIST_STORE (priv->p2_store), &iter, 1, cnt - 1, -1);
+                gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store), &iter, 1, cnt - 1, -1);
 
-                gtk_tree_model_get_iter_first (priv->p2_store, &first);
-                gtk_tree_model_get (priv->p2_store, &first, 1, &cnt, -1);
-                gtk_list_store_set (GTK_LIST_STORE (priv->p2_store), &first,
+                gtk_tree_model_get_iter_first (self->priv->p2_store, &first);
+                gtk_tree_model_get (self->priv->p2_store, &first, 1, &cnt, -1);
+                gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store), &first,
                     1, cnt - 1, -1);
             }
         }
     }
 
-    insert_iter (GTK_LIST_STORE (priv->p3_store), &iter, entry,
+    insert_iter (GTK_LIST_STORE (self->priv->p3_store), &iter, entry,
         self->priv->cmp_func, 0, FALSE);
 
-    gtk_list_store_remove (GTK_LIST_STORE (priv->p3_store), &iter);
+    gtk_list_store_remove (GTK_LIST_STORE (self->priv->p3_store), &iter);
 
     g_object_unref (entry);
 }
@@ -756,11 +768,11 @@ static void
 pane1_cursor_changed (GtkTreeView *view, Browser *self)
 {
     GtkTreePath *path;
-    GtkTreeIter iter, siter;
+    GtkTreeIter iter, siter, first;
     gchar *pane1, *path_str = NULL;
     const gchar *pane2 = NULL;
     Entry *e;
-    gint pane2s, tracks, cnt;
+    gint tracks, cnt;
 
     gtk_tree_view_get_cursor (GTK_TREE_VIEW (self->priv->pane1), &path, NULL);
 
@@ -777,16 +789,54 @@ pane1_cursor_changed (GtkTreeView *view, Browser *self)
             gtk_tree_model_get_iter_first (self->priv->p2_store, &iter);
             while (gtk_list_store_remove (GTK_LIST_STORE (self->priv->p2_store), &iter));
 
-            gchar *str = g_strdup_printf ("Select a %s...", self->priv->p1_tag);
-            gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
-                NULL, 0, 0, str, 1, 0, -1);
-            g_free (str);
+            if (self->priv->p2_single) {
+                gchar *str = g_strdup_printf ("Select a %s...", self->priv->p1_tag);
+                gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
+                    NULL, 0, 0, str, 1, 0, -1);
+                g_free (str);
 
-            gtk_tree_model_get_iter_first (self->priv->p3_store, &iter);
-            do {
-                gtk_list_store_set (GTK_LIST_STORE (self->priv->p3_store),
-                    &iter, 1, TRUE, -1);
-            } while (gtk_tree_model_iter_next (self->priv->p3_store, &iter));
+                gtk_tree_model_get_iter_first (self->priv->p3_store, &iter);
+                do {
+                    gtk_list_store_set (GTK_LIST_STORE (self->priv->p3_store),
+                        &iter, 1, TRUE, -1);
+                } while (gtk_tree_model_iter_next (self->priv->p3_store, &iter));
+            } else {
+                gtk_list_store_append (GTK_LIST_STORE (self->priv->p2_store), &first);
+
+                gint tcnt = 1, scnt = 1;
+                const gchar *centry = NULL, *nentry;
+                self->priv->num_p2 = 1;
+
+                gtk_tree_model_get_iter_first (self->priv->p3_store, &iter);
+
+                gtk_tree_model_get (self->priv->p3_store, &iter, 0, &e, -1);
+                centry = entry_get_tag_str (e, self->priv->p2_tag);
+                gtk_list_store_append (GTK_LIST_STORE (self->priv->p2_store), &siter);
+
+                while (gtk_tree_model_iter_next (self->priv->p3_store, &iter)) {
+                    gtk_list_store_set (GTK_LIST_STORE (self->priv->p3_store), &iter, 1, TRUE, -1);
+                    gtk_tree_model_get (self->priv->p3_store, &iter, 0, &e, -1);
+                    nentry = entry_get_tag_str (e, self->priv->p2_tag);
+                    if (g_strcmp0 (centry, nentry)) {
+                        gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store), &siter,
+                            0, centry, 1, scnt, -1);
+
+                        insert_iter (GTK_LIST_STORE (self->priv->p2_store), &siter,
+                            (gpointer) nentry, (BrowserCompareFunc) g_strcmp0, 1, TRUE);
+
+                        scnt = 0;
+                        centry = nentry;
+                        self->priv->num_p2++;
+                    }
+
+                    tcnt++;
+                    scnt++;
+                }
+
+                gchar *str = g_strdup_printf ("All %d %ss", self->priv->num_p2, self->priv->p1_tag);
+                gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store), &first, 0, str, 1, tcnt, -1);
+                g_free (str);
+            }
         }
     } else {
         gtk_tree_model_get_iter (self->priv->p1_store, &iter, path);
@@ -806,7 +856,7 @@ pane1_cursor_changed (GtkTreeView *view, Browser *self)
             gtk_tree_model_get_iter_first (self->priv->p3_store, &iter);
             gtk_list_store_append (GTK_LIST_STORE (self->priv->p2_store), &siter);
             cnt = 0;
-            pane2s = 0;
+            self->priv->num_p2 = 0;
             gboolean started = FALSE;
             do {
                 gtk_tree_model_get (self->priv->p3_store, &iter, 0, &e, -1);
@@ -818,7 +868,7 @@ pane1_cursor_changed (GtkTreeView *view, Browser *self)
                         } else {
                             gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store),
                                 &siter, 0, pane2, 1, tracks, -1);
-                            pane2s++;
+                            self->priv->num_p2++;
                             gtk_list_store_append (GTK_LIST_STORE (self->priv->p2_store),
                                 &siter);
 
@@ -844,9 +894,9 @@ pane1_cursor_changed (GtkTreeView *view, Browser *self)
 
             gtk_list_store_set (GTK_LIST_STORE (self->priv->p2_store),
                 &siter, 0, pane2, 1, tracks, -1);
-            pane2s++;
+            self->priv->num_p2++;
 
-            gchar *str = g_strdup_printf ("All %d %ss", pane2s, self->priv->p2_tag);
+            gchar *str = g_strdup_printf ("All %d %ss", self->priv->num_p2, self->priv->p2_tag);
             gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
                 NULL, 0, 0, str, 1, cnt, -1);
             g_free (str);

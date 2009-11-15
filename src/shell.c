@@ -670,7 +670,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, gtk_label_new ("Library"), "Library", NULL);
 
-    shell->priv->music = browser_new ("Music", MEDIA_SONG, "Artist", "Album",
+    shell->priv->music = browser_new ("Music", MEDIA_SONG, "Artist", "Album", FALSE,
         (BrowserCompareFunc) music_entry_cmp,
         "Track", "track", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
@@ -681,7 +681,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->music), "Library/Music", NULL);
 
-    shell->priv->movies = browser_new ("Movies", MEDIA_MOVIE, NULL, NULL,
+    shell->priv->movies = browser_new ("Movies", MEDIA_MOVIE, NULL, NULL, FALSE,
         (BrowserCompareFunc) movie_entry_cmp,
         "Title", "title", TRUE, str_column_func,
         "Duration", "duration", FALSE, time_column_func,
@@ -689,7 +689,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->movies), "Library/Movies", NULL);
 
-    shell->priv->shows = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season",
+    shell->priv->shows = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season", TRUE,
         (BrowserCompareFunc) tvshow_entry_cmp,
         "Track", "track", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
