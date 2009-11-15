@@ -40,7 +40,7 @@ G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 struct _ShellPrivate {
     Player *player;
 
-    Browser *music, *movies, *shows;
+    Browser *music, *movies, *shows, *music_videos;
 
     Playlist *playlist;
     Tray *tray;
@@ -689,6 +689,15 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->movies), "Library/Movies", NULL);
 
+    shell->priv->music_videos = browser_new ("MusicVideos", MEDIA_MUSIC_VIDEO, "Artist", NULL, FALSE,
+        (BrowserCompareFunc) movie_entry_cmp,
+        "Title", "title", TRUE, str_column_func,
+        "Artist", "artist", TRUE, str_column_func,
+        "Duration", "duration", FALSE, time_column_func,
+        NULL);
+
+    shell_add_widget (shell, browser_get_widget (shell->priv->music_videos), "Library/Music Videos", NULL);
+
     shell->priv->shows = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season", TRUE,
         (BrowserCompareFunc) tvshow_entry_cmp,
         "Track", "track", FALSE, int_column_func,
@@ -708,6 +717,7 @@ main (int argc, char *argv[])
 
     g_object_unref (shell->priv->music);
     g_object_unref (shell->priv->movies);
+    g_object_unref (shell->priv->music_videos);
     g_object_unref (shell->priv->shows);
 }
 
