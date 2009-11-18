@@ -68,7 +68,6 @@ tag_handler_main (TagHandler *self)
     const TagLib_AudioProperties *properties;
     TagLib_File *file;
     TagLib_Tag *tag;
-    Entry *ne;
 
     gboolean has_ref = FALSE;
 
@@ -109,11 +108,13 @@ tag_handler_main (TagHandler *self)
             g_free (new_str);
         }
 
-        ne = entry_new (-1);
-
         file = taglib_file_new(entry);
         if (!file) {
-            entry_set_tag_str (ne, "location", entry);
+            gchar **tags = g_new0 (gchar*, 5);
+
+            tags[0] = "location";
+            tags[1] = entry;
+
             gchar *title = g_path_get_basename (entry);
             gint i = 0;
             while (title[i++]);
@@ -126,11 +127,12 @@ tag_handler_main (TagHandler *self)
 
             if (i == 0) {
                 g_free (title);
-                g_object_unref (ne);
+                g_free (tags);
                 continue;
             }
 
-            entry_set_tag_str (ne, "title", title);
+            tags[2] = "title";
+            tags[3] = title;
 
             gchar *ext = &title[i+1];
 
@@ -138,45 +140,51 @@ tag_handler_main (TagHandler *self)
                 !g_strcmp0 (ext, "avi") || !g_strcmp0 (ext, "mov") ||
                 !g_strcmp0 (ext, "mp4") || !g_strcmp0 (ext, "m4v") ||
                 !g_strcmp0 (ext, "mkv") || !g_strcmp0 (ext, "ogm")) {
-                entry_set_media_type (ne, MEDIA_MOVIE);
-                media_store_emit_move (MEDIA_STORE (self), ne);
+
+                shell_move_to (self->priv->shell, tags, "Movies");
             }
 
             self->priv->done++;
 
-            g_object_unref (ne);
-            ne = NULL;
+            g_free (tags);
             continue;
         }
 
         tag = taglib_file_tag(file);
         properties = taglib_file_audioproperties(file);
 
-        entry_set_tag_str (ne, "artist", taglib_tag_artist (tag));
-        entry_set_tag_str (ne, "title", taglib_tag_title (tag));
-        entry_set_tag_str (ne, "album", taglib_tag_album (tag));
-        entry_set_tag_str (ne, "comment", taglib_tag_comment (tag));
-        entry_set_tag_str (ne, "genre", taglib_tag_genre (tag));
+        gchar **tags = g_new0 (gchar*, 19);
 
-        gchar *year = g_strdup_printf ("%d", taglib_tag_year (tag));
-        entry_set_tag_str (ne, "year", year);
-        g_free (year);
+        tags[0] = "artist";
+        tags[1] = taglib_tag_artist (tag);
 
-        gchar *track = g_strdup_printf ("%d",taglib_tag_track (tag));
-        entry_set_tag_str (ne, "track", track);
-        g_free (track);
+        tags[2] = "title";
+        tags[3] = taglib_tag_title (tag);
 
-        gchar *duration = g_strdup_printf ("%d", taglib_audioproperties_length (properties));
-        entry_set_tag_str (ne, "duration", duration);
-        g_free (duration);
+        tags[4] = "album";
+        tags[5] = taglib_tag_album (tag);
 
-        entry_set_tag_str (ne, "location", entry);
-        entry_set_media_type (ne, MEDIA_SONG);
+        tags[6] = "comment";
+        tags[7] = taglib_tag_comment (tag);
 
-        media_store_emit_move (MEDIA_STORE (self), ne);
+        tags[8] = "genre";
+        tags[9] = taglib_tag_genre (tag);
 
-        g_object_unref (ne);
-        ne = NULL;
+        tags[10] = "year";
+        tags[11] = g_strdup_printf ("%d", taglib_tag_year (tag));
+
+        tags[12] = "track";
+        tags[13] = g_strdup_printf ("%d", taglib_tag_track (tag));
+
+        tags[14] = "duration";
+        tags[15] = g_strdup_printf ("%d", taglib_audioproperties_length (properties));
+
+        tags[16] = "location";
+        tags[17] = entry;
+
+        shell_move_to (self->priv->shell, tags, "Music");
+
+        g_free (tags);
 
         self->priv->done++;
 

@@ -137,6 +137,10 @@ music_finalize (GObject *object)
 {
     Music *self = MUSIC (object);
 
+    if (self->priv->db) {
+        g_object_unref (self->priv->db);
+    }
+
     G_OBJECT_CLASS (music_parent_class)->finalize (object);
 }
 
@@ -1050,8 +1054,8 @@ on_title_remove (GtkWidget *item, Music *self)
 
     entries = g_new0 (Entry*, size);
     for (i = 0; i < size; i++) {
-        gtk_tree_model_get_iter (self->priv->title_store, &iter, g_list_nth_data (rows, i));
-        gtk_tree_model_get (self->priv->title_store, &iter, 0, &entries[i], -1);
+        gtk_tree_model_get_iter (self->priv->title_filter, &iter, g_list_nth_data (rows, i));
+        gtk_tree_model_get (self->priv->title_filter, &iter, 0, &entries[i], -1);
     }
 
     g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);

@@ -14,11 +14,10 @@ gmediamp_SOURCES = \
     tag-handler.c tag-handler.h \
     progress.c progress.h \
     playlist.c playlist.h \
-    music.c music.h \
-    movies.c movies.h \
-    shows.c shows.h \
     track-source.c track-source.h \
-    media-store.c media-store.h
+    media-store.c media-store.h \
+    tag-dialog.c tag-dialog.h \
+    browser.c browser.h
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=

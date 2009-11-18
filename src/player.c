@@ -398,6 +398,20 @@ player_close (Player *self)
 }
 
 void
+insert_stream_data (StreamData *sd, gint index, const gchar *lang)
+{
+    gint i = 0;
+
+    for (;;i++) {
+        if (sd[i].index == -1) {
+            sd[i].index = index;
+            sd[i].lang = g_strdup (lang);
+            break;
+        }
+    }
+}
+
+void
 player_play (Player *self)
 {
     g_thread_create ((GThreadFunc) player_audio_loop, self, FALSE, NULL);
@@ -414,7 +428,6 @@ player_play (Player *self)
 
         g_timeout_add (500, (GSourceFunc) position_update, self);
 //    }
-
 }
 
 void
@@ -445,6 +458,27 @@ player_stop (Player *self)
 
 
     g_signal_emit (self, signal_pos, 0, 0);
+}
+
+StreamData*
+player_get_audio_streams (Player *self)
+{
+//    return self->priv->as;
+    return NULL;
+}
+
+StreamData*
+player_get_video_streams (Player *self)
+{
+//    return self->priv->vs;
+    return NULL;
+}
+
+StreamData*
+player_get_subtitle_streams (Player *self)
+{
+//    return self->priv->ss;
+    return NULL;
 }
 
 guint
@@ -675,6 +709,49 @@ on_window_state (GtkWidget *widget,
 }
 
 static gboolean
+player_on_as_change (Player *self, GtkWidget *item)
+{
+    g_print ("On AS Change\n");
+}
+
+static gboolean
+player_on_vs_change (Player *self, GtkWidget *item)
+{
+    g_print ("On VS Change\n");
+}
+
+static gboolean
+player_on_ss_change (Player *self, GtkWidget *item)
+{
+    g_print ("On SS Change\n");
+}
+
+static GtkWidget*
+browser_get_stream_submenu (Player *self, StreamData *sd, GCallback func)
+{
+    GtkWidget *menu = gtk_menu_new ();
+    gint i;
+
+    if (!sd) {
+        return menu;
+    }
+
+    for (i = 0;; i++) {
+        if (sd[i].index == -1) {
+            break;
+        }
+
+        gchar *str = g_strdup_printf ("%d: %s", i+1, sd[i].lang);
+        GtkWidget *item = gtk_menu_item_new_with_label (str);
+        g_free (str);
+        gtk_menu_append (GTK_MENU (menu), item);
+        g_signal_connect_swapped (item, "activate", func, self);
+    }
+
+    return menu;
+}
+
+static gboolean
 player_button_press (GtkWidget *da, GdkEventButton *event, Player *self)
 {
     GdkRectangle rect;
@@ -693,8 +770,7 @@ player_button_press (GtkWidget *da, GdkEventButton *event, Player *self)
         gtk_menu_append (GTK_MENU (menu), item);
         g_signal_connect (item, "activate", G_CALLBACK (toggle_fullscreen), self);
 
-        item = gtk_separator_menu_item_new ();
-        gtk_menu_append (GTK_MENU (menu), item);
+        gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
 
         GSList *group = NULL;
         gint i;
@@ -714,6 +790,30 @@ player_button_press (GtkWidget *da, GdkEventButton *event, Player *self)
             g_signal_connect (item, "activate", G_CALLBACK (on_pick_screen), self);
         }
 
+        gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
+
+/*
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_CONVERT, NULL);
+        gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Video");
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_menu_item_set_submenu (GTK_MENU_ITEM (item),
+            browser_get_stream_submenu (self, self->priv->vs, G_CALLBACK (player_on_vs_change)));
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_CONVERT, NULL);
+        gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Audio");
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_menu_item_set_submenu (GTK_MENU_ITEM (item),
+            browser_get_stream_submenu (self, self->priv->as, G_CALLBACK (player_on_as_change)));
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_CONVERT, NULL);
+        gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Subtitles");
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_menu_item_set_submenu (GTK_MENU_ITEM (item),
+            browser_get_stream_submenu (self, self->priv->ss, G_CALLBACK (player_on_ss_change)));
+*/
         gtk_widget_show_all (menu);
 
         gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,

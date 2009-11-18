@@ -117,6 +117,10 @@ movies_finalize (GObject *object)
 {
     Movies *self = MOVIES (object);
 
+    if (self->priv->db) {
+        g_object_unref (self->priv->db);
+    }
+
     G_OBJECT_CLASS (movies_parent_class)->finalize (object);
 }
 
@@ -392,7 +396,9 @@ entry_changed (Entry *entry, Movies *self)
     GtkTreeIter iter;
     Entry *e;
 
-    gtk_tree_model_get_iter_first (self->priv->title_store, &iter);
+    if (!gtk_tree_model_get_iter_first (self->priv->title_store, &iter)) {
+        return;
+    }
 
     do {
         gtk_tree_model_get (self->priv->title_store, &iter, 0, &e, -1);

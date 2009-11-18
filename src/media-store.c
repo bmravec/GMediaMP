@@ -56,7 +56,7 @@ media_store_get_type ()
 }
 
 void
-media_store_add_entry (MediaStore *self, Entry *entry)
+media_store_add_entry (MediaStore *self, gchar **entry)
 {
     MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
 
@@ -84,6 +84,18 @@ media_store_get_media_type (MediaStore *self)
         return iface->get_mtype (self);
     } else {
         return MEDIA_NONE;
+    }
+}
+
+gchar*
+media_store_get_name (MediaStore *self)
+{
+    MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
+
+    if (iface->get_name) {
+        return iface->get_name (self);
+    } else {
+        return NULL;
     }
 }
 

@@ -2,22 +2,22 @@
 <interface>
   <requires lib="gtk+" version="2.16"/>
   <!-- interface-naming-policy project-wide -->
-  <object class="GtkVPaned" id="shows_vpane">
+  <object class="GtkVPaned" id="browser_vpane">
     <property name="visible">True</property>
     <property name="can_focus">True</property>
     <property name="orientation">vertical</property>
     <child>
-      <object class="GtkHBox" id="shows_hbox1">
+      <object class="GtkHBox" id="browser_hbox1">
         <property name="visible">True</property>
         <property name="spacing">5</property>
         <child>
-          <object class="GtkScrolledWindow" id="shows_sw1">
+          <object class="GtkScrolledWindow" id="browser_sw1">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="hscrollbar_policy">automatic</property>
             <property name="vscrollbar_policy">automatic</property>
             <child>
-              <object class="GtkTreeView" id="shows_show">
+              <object class="GtkTreeView" id="browser_pane1">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
               </object>
@@ -28,13 +28,13 @@
           </packing>
         </child>
         <child>
-          <object class="GtkScrolledWindow" id="shows_sw2">
+          <object class="GtkScrolledWindow" id="browser_sw2">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="hscrollbar_policy">automatic</property>
             <property name="vscrollbar_policy">automatic</property>
             <child>
-              <object class="GtkTreeView" id="shows_season">
+              <object class="GtkTreeView" id="browser_pane2">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
               </object>
@@ -51,13 +51,13 @@
       </packing>
     </child>
     <child>
-      <object class="GtkScrolledWindow" id="shows_sw3">
+      <object class="GtkScrolledWindow" id="browser_sw3">
         <property name="visible">True</property>
         <property name="can_focus">True</property>
-        <property name="hscrollbar_policy">automatic</property>
+        <property name="hscrollbar_policy">never</property>
         <property name="vscrollbar_policy">automatic</property>
         <child>
-          <object class="GtkTreeView" id="shows_title">
+          <object class="GtkTreeView" id="browser_pane3">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
           </object>
