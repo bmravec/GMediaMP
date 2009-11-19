@@ -37,7 +37,7 @@
 
 G_DEFINE_TYPE(Player, player, G_TYPE_OBJECT)
 
-static gboolean player_get_video_frame (Player *self, AVFrame *pFrame, double *pts);
+static gboolean player_get_video_frame (Player *self, AVFrame *pFrame, int64_t *pts);
 static gint player_get_audio_frame (Player *self, short *dest);
 
 static gpointer player_audio_loop (Player *self);
@@ -67,6 +67,8 @@ struct _PlayerPrivate {
 
     int64_t pos, dur;
     double vpos;
+
+    int64_t start_time;
 
     gdouble volume;
     guint state;
@@ -312,8 +314,8 @@ player_load (Player *self, Entry *entry)
         self->priv->vframe = avcodec_alloc_frame ();
         self->priv->vframe_xv = avcodec_alloc_frame();
 
-        self->priv->win_height = self->priv->vctx->height;
-        self->priv->win_width = self->priv->vctx->width;
+//        self->priv->win_height = self->priv->vctx->height;
+//        self->priv->win_width = self->priv->vctx->width;
 
         int numBytes = avpicture_get_size (PIX_FMT_YUV420P,
             self->priv->vctx->width, self->priv->vctx->height);
@@ -360,7 +362,7 @@ player_load (Player *self, Entry *entry)
 
         self->priv->xvimage = XvCreateImage (
             self->priv->display, self->priv->xv_port_id,
-            formats[2].id, self->priv->vbuffer_xv,
+            formats[1].id, self->priv->vbuffer_xv,
             self->priv->vctx->width, self->priv->vctx->height);
 
         self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
@@ -414,10 +416,12 @@ insert_stream_data (StreamData *sd, gint index, const gchar *lang)
 void
 player_play (Player *self)
 {
+    self->priv->start_time = av_gettime ();
     g_thread_create ((GThreadFunc) player_audio_loop, self, FALSE, NULL);
 
     if (self->priv->vctx) {
-        g_timeout_add (1.0 / 29.97 * 1000, (GSourceFunc) on_timeout, self);
+        g_timeout_add (10, (GSourceFunc) on_timeout, self);
+//        g_thread_create ((GThreadFunc) player_video_loop, self, FALSE, NULL);
     }
 
 //    if (self->priv->pipeline) {
@@ -875,7 +879,7 @@ on_pos_change_value (GtkWidget *range,
 }
 
 static gboolean
-player_get_video_frame (Player *self, AVFrame *pFrame, double *pts)
+player_get_video_frame (Player *self, AVFrame *pFrame, int64_t *pts)
 {
     static AVPacket *packet = NULL;
     static int       bytesRemaining = 0;
@@ -891,13 +895,15 @@ player_get_video_frame (Player *self, AVFrame *pFrame, double *pts)
             bytesDecoded = avcodec_decode_video (self->priv->vctx, pFrame,
                 &frameFinished, rawData, bytesRemaining);
 
-            if (packet->dts != AV_NOPTS_VALUE) {
+            if (packet->dts == AV_NOPTS_VALUE && pFrame->opaque && *(uint64_t*) pFrame->opaque != AV_NOPTS_VALUE) {
+                *pts = *(uint64_t*) pFrame->opaque;
+            } else if (packet->dts != AV_NOPTS_VALUE) {
                 *pts = packet->dts;
             } else {
                 *pts = 0;
             }
 
-            *pts *= av_q2d (self->priv->vctx->time_base);
+//            *pts *= av_q2d (self->priv->vctx->time_base);
 
             // Was there an error?
             if (bytesDecoded < 0) {
@@ -944,6 +950,7 @@ player_get_video_frame (Player *self, AVFrame *pFrame, double *pts)
 
         bytesRemaining = packet->size;
         rawData = packet->data;
+        global_video_pkt_pts = packet->pts;
     }
 
 loop_exit:
@@ -1024,6 +1031,24 @@ player_get_audio_frame (Player *self, short *dest)
     }
 }
 
+gint
+player_sync_audio (short *abuffer, int len, double timediff, int64_t sample_rate)
+{
+    if (timediff >  0.1) timediff = 0.1;
+    if (timediff < -0.1) timediff = -0.1;
+
+    int sample_diff = timediff * sample_rate;
+//    g_print ("SDIFF (%d)\n", sample_diff);
+
+    if (sample_diff > 0) {
+
+    } else {
+
+    }
+
+    return len;
+}
+
 gpointer
 player_audio_loop (Player *self)
 {
@@ -1076,11 +1101,19 @@ player_audio_loop (Player *self)
 
     g_print ("Done with SND Init\n");
 
+    double atime, ctime;
+
     while ((len = player_get_audio_frame (self, abuffer)) >= 0) {
         self->priv->pos += len;
-//        g_print ("LEN: %d\n", len);
-        g_print ("TIME: %d::%d\n",
-            player_get_position (self), player_get_length (self));
+
+        atime = self->priv->pos / 4.0 / self->priv->actx->sample_rate;
+        ctime = (av_gettime () - self->priv->start_time) / 1000000.0;
+//        g_print ("is %f should be %f\n", atime, ctime);
+
+        len = player_sync_audio (abuffer, len, atime - ctime, self->priv->actx->sample_rate);
+
+//        g_print ("TIME: %d::%d\n",
+//            player_get_position (self), player_get_length (self));
         int rc = snd_pcm_writei (alsa_handle, abuffer, len / 4);
         if (rc == -EPIPE) {
             /* EPIPE means underrun */
@@ -1091,41 +1124,113 @@ player_audio_loop (Player *self)
 
     snd_pcm_drain (alsa_handle);
     snd_pcm_close (alsa_handle);
-
 }
 
 gpointer
 player_video_loop (Player *self)
 {
+    gint res;
+    int64_t pts;
+    int64_t ctime;
 
+    self->priv->vpos = 0;
+    double delta = 1 / 29.97;
+    double frame_delay;
+
+//    *pts *= av_q2d (self->priv->vctx->time_base);
+
+    while (TRUE) {
+        res = player_get_video_frame (self, self->priv->vframe, &pts);
+
+        ctime = av_gettime () - self->priv->start_time;
+
+         frame_delay = av_q2d (self->priv->vctx->time_base);
+
+        g_print ("PTS(%d)\tDIFF(%f)\tTIME(%d)\n", pts, pts - self->priv->vpos, ctime);
+
+//        pts *= 2;
+
+//        double delta = pts - self->priv->vpos;
+
+        self->priv->vpos = pts;
+
+        if (res >= 0) {
+            sws_scale (self->priv->sws_ctx, (uint8_t**) self->priv->vframe->data, (int *) self->priv->vframe->linesize,
+                0, self->priv->vctx->height, self->priv->vframe_xv->data, self->priv->vframe_xv->linesize);
+
+//            gdk_threads_enter ();
+            XvPutImage (self->priv->display, self->priv->xv_port_id,
+                self->priv->win, self->priv->xv_gc, self->priv->xvimage,
+                0, 0, self->priv->vctx->width, self->priv->vctx->height,
+                0, 0, self->priv->win_width, self->priv->win_height);
+//            gdk_threads_leave ();
+        }
+
+        if ((delta + delta * pts) * 1000000 - ctime > 0) {
+            g_print ("Sleep %f\n", (delta + delta * pts) * 1000000 - ctime);
+            g_usleep ((delta + delta * pts) * 1000000 - ctime);
+        } else {
+            g_usleep (10000);
+        }
+    }
 }
 
 gboolean
 on_timeout (Player *self)
 {
     gint res;
-    double pts;
+    int64_t pts;
+    int64_t ctime;
+
+    self->priv->vpos = 0;
+    double delta = av_q2d (self->priv->vctx->time_base) * 2;
+    double ratio = 1.0 * self->priv->vctx->width / self->priv->vctx->height;
+    gint sw, sh, sx, sy;
 
     res = player_get_video_frame (self, self->priv->vframe, &pts);
 
-    double delta = pts - self->priv->vpos;
+    ctime = (av_gettime () - self->priv->start_time) / 1000;
+//    ctime = 1000.0 * self->priv->pos / 4.0 / self->priv->actx->sample_rate;
 
-    g_print ("PTS(%f) : %f\tDIFF = %f\n", pts, pts / 29.97, pts - self->priv->vpos);
+//    g_print ("PTS(%d)\tDIFF(%f)\tTIME(%d:%f)\n", pts, delta, ctime, pts * delta);
+
     self->priv->vpos = pts;
 
     if (res >= 0) {
         sws_scale (self->priv->sws_ctx, (uint8_t**) self->priv->vframe->data, (int *) self->priv->vframe->linesize,
             0, self->priv->vctx->height, self->priv->vframe_xv->data, self->priv->vframe_xv->linesize);
 
+        if (self->priv->win_height * ratio > self->priv->win_width) {
+            sw = self->priv->win_width;
+            sh = self->priv->win_width / ratio;
+            sx = 0;
+            sy = (self->priv->win_height - sh) / 2;
+        } else {
+            sw = self->priv->win_height * ratio;
+            sh = self->priv->win_height;
+            sx = (self->priv->win_width - sw) / 2;
+            sy = 0;
+        }
+
         XvPutImage (self->priv->display, self->priv->xv_port_id,
             self->priv->win, self->priv->xv_gc, self->priv->xvimage,
             0, 0, self->priv->vctx->width, self->priv->vctx->height,
-//            0, 0, self->priv->vctx->width, self->priv->vctx->height);
-            0, 0, self->priv->win_width, self->priv->win_height);
+            sx, sy, sw, sh);
     }
 
     if (res) {
-        g_timeout_add (delta * 1000,(GSourceFunc) on_timeout, self);
+        if ((delta + delta * pts) * 1000 - ctime > 2000 * delta) {
+            g_print ("1");
+            g_timeout_add (delta * 1000, (GSourceFunc) on_timeout, self);
+        } else if ((delta + delta * pts) * 1000 - ctime > 0) {
+            g_print ("2");
+//            g_print ("Sleep %f\n", (delta + delta * pts) * 1000 - ctime);
+            g_timeout_add ((delta + delta * pts) * 1000 - ctime, (GSourceFunc) on_timeout, self);
+        } else {
+            g_print ("3");
+//            g_timeout_add (delta * 1000,(GSourceFunc) on_timeout, self);
+            g_timeout_add (10,(GSourceFunc) on_timeout, self);
+        }
     }
 
     return FALSE;
