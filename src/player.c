@@ -167,15 +167,6 @@ player_new (int argc, char *argv[])
 static gboolean
 position_update (Player *self)
 {
-    gint as, vs, ss;
-
-    g_object_get (self->priv->pipeline,
-                  "current-text", &ss,
-                  "current-audio", &as,
-                  "current-video", &vs, NULL);
-
-    g_print ("A:%2d V:%2d S:%2d\n", as, vs, ss);
-
     guint len = player_get_length (self);
     guint pos = player_get_position (self);
 
@@ -679,7 +670,9 @@ player_on_as_change (Player *self, GtkWidget *item)
     g_print ("set current-audio to %d\n", ni);
     g_object_set (self->priv->pipeline, "current-audio", ni, NULL);
 
-    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
+
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
 }
 
 static gboolean
@@ -687,12 +680,12 @@ player_on_vs_change (Player *self, GtkWidget *item)
 {
     gint ni = atoi (gtk_menu_item_get_label (GTK_MENU_ITEM (item))) - 1;
 
-    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
 
     g_print ("set current-video to %d\n", ni);
     g_object_set (self->priv->pipeline, "current-video", ni, NULL);
 
-    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
 }
 
 static gboolean
@@ -700,12 +693,12 @@ player_on_ss_change (Player *self, GtkWidget *item)
 {
     gint ni = atoi (gtk_menu_item_get_label (GTK_MENU_ITEM (item))) - 1;
 
-    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
 
     g_print ("set current-text to %d\n", ni);
     g_object_set (self->priv->pipeline, "current-text", ni, NULL);
 
-    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
+//    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
 }
 
 static GtkWidget*
@@ -774,6 +767,7 @@ player_button_press (GtkWidget *da, GdkEventButton *event, Player *self)
 
         gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
 
+/*
         item = gtk_image_menu_item_new_from_stock (GTK_STOCK_CONVERT, NULL);
         gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Video");
         gtk_menu_append (GTK_MENU (menu), item);
@@ -794,7 +788,7 @@ player_button_press (GtkWidget *da, GdkEventButton *event, Player *self)
 
         gtk_menu_item_set_submenu (GTK_MENU_ITEM (item),
             browser_get_stream_submenu (self, self->priv->ss, G_CALLBACK (player_on_ss_change)));
-
+*/
         gtk_widget_show_all (menu);
 
         gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,

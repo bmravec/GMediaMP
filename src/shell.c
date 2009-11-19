@@ -179,7 +179,13 @@ on_player_state_changed (Player *player, guint state, Shell *self)
     } else {
         gtk_widget_show (self->priv->tb_play);
         gtk_widget_hide (self->priv->tb_pause);
-    };
+    }
+
+    if (state == PLAYER_STATE_PLAYING || state == PLAYER_STATE_PAUSED) {
+        gtk_widget_show (self->priv->mini_pane);
+    } else {
+        gtk_widget_hide (self->priv->mini_pane);
+    }
 }
 
 static gboolean
@@ -709,7 +715,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->shows), "Library/TV Shows", NULL);
 
-    gtk_widget_show (shell->priv->mini_pane);
+    gtk_widget_hide (shell->priv->mini_pane);
 
     gtk_box_pack_start (GTK_BOX (shell->priv->sidebar), shell->priv->mini_pane, FALSE, FALSE, 0);
 
