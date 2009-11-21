@@ -293,6 +293,7 @@ shell_init (Shell *self)
     gtk_tree_view_column_add_attribute (column, renderer, "pixbuf", 0);
 
     renderer = gtk_cell_renderer_text_new ();
+    g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
     gtk_tree_view_column_pack_start (column, renderer, TRUE);
     gtk_tree_view_column_add_attribute (column, renderer, "text", 1);
     gtk_tree_view_column_set_expand (column, TRUE);
