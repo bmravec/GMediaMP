@@ -375,6 +375,7 @@ shell_add_widget (Shell *self,
     GtkTreeIter iter, *parent = NULL;
     gchar **path = g_strsplit (name, "/", 0);
     gint len = 0, i, page = -1;
+    GtkTreePath *tpath;
 
     while (path[len++]);
     len--;
@@ -436,6 +437,11 @@ shell_add_widget (Shell *self,
         1, path[len-1],
         2, page,
         -1);
+
+    if (tpath = gtk_tree_model_get_path (GTK_TREE_MODEL (self->priv->sidebar_store), &iter)) {
+        gtk_tree_view_expand_to_path (GTK_TREE_VIEW (self->priv->sidebar_view), tpath);
+        gtk_tree_path_free (tpath);
+    }
 
     if (parent) {
         gtk_tree_iter_free (parent);
