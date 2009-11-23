@@ -11,7 +11,7 @@ PKG_PROG_PKG_CONFIG
 
 DBUS_REQUIRED=0.60
 
-PKG_CHECK_MODULES(PROG, glib-2.0 gthread-2.0 gmediadb libnotify gconf-2.0 taglib_c vorbisfile
+PKG_CHECK_MODULES(PROG, glib-2.0 gthread-2.0 gmediadb libnotify gconf-2.0
     dbus-1 >= $DBUS_REQUIRED
     dbus-glib-1 >= $DBUS_REQUIRED
     alsa

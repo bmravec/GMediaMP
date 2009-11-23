@@ -26,7 +26,7 @@
 #include "media-store.h"
 #include "entry.h"
 
-#include <tag_c.h>
+#include <libavformat/avformat.h>
 
 static void media_store_init (MediaStoreInterface *iface);
 G_DEFINE_TYPE_WITH_CODE (TagHandler, tag_handler, G_TYPE_OBJECT,
@@ -48,6 +48,11 @@ struct _TagHandlerPrivate
     gboolean run;
 };
 
+struct AVMetadata{
+    int count;
+    AVMetadataTag *elems;
+};
+
 static void
 media_store_init (MediaStoreInterface *iface)
 {
@@ -65,13 +70,7 @@ g_strdup0 (gchar *str)
 gpointer
 tag_handler_main (TagHandler *self)
 {
-    const TagLib_AudioProperties *properties;
-    TagLib_File *file;
-    TagLib_Tag *tag;
-
-    gboolean has_ref = FALSE;
-
-    taglib_set_strings_unicode(TRUE);
+    gint i, j;
 
     while (self->priv->run) {
         gchar *entry;
@@ -108,88 +107,90 @@ tag_handler_main (TagHandler *self)
             g_free (new_str);
         }
 
-        file = taglib_file_new(entry);
-        if (!file) {
-            gchar **tags = g_new0 (gchar*, 5);
+        AVFormatContext *pFormatCtx;
+        if (av_open_input_file (&pFormatCtx, entry, NULL, 0, NULL) != 0) {
+            g_print ("Continue\n");
+            continue;
+        }
 
-            tags[0] = "location";
-            tags[1] = entry;
+        if (av_find_stream_info (pFormatCtx) < 0) {
+            av_close_input_file (pFormatCtx);
+            g_print ("Continue\n");
+            continue;
+        }
 
-            gchar *title = g_path_get_basename (entry);
-            gint i = 0;
-            while (title[i++]);
-            for (;i > 0;i--) {
-                if (title[i] == '.') {
-                    title[i] = '\0';
+        AVMetadata *md = pFormatCtx->metadata;
+        gint count = md ? 2 * md->count + 7 : 7;
+
+        gchar **tags = g_new0 (gchar*, count);
+        gboolean has_title = FALSE;
+        gchar *title = NULL;
+
+        i = 0;
+        if (md) {
+            for (; i < md->count; i++) {
+                tags[2*i] = g_ascii_strdown (md->elems[i].key, -1);
+                tags[2*i+1] = md->elems[i].value;
+
+                if (!g_strcmp0 (tags[2*i], "title")) {
+                    has_title = TRUE;
+                }
+            }
+        }
+
+        tags[2*i] = "duration";
+        tags[2*i+1] = g_strdup_printf ("%d", (gint) (pFormatCtx->duration / AV_TIME_BASE));
+        tags[2*i+2] = "location";
+        tags[2*i+3] = entry;
+
+        // If the file does not have a title field, lets make one up
+        if (!has_title) {
+            title = g_path_get_basename (entry);
+            j = 0;
+            while (title[j++]);
+            for (; j > 0; j--) {
+                if (title[j] == '.') {
+                    title[j] = '\0';
                     break;
                 }
             }
 
-            if (i == 0) {
-                g_free (title);
-                g_free (tags);
-                continue;
-            }
-
-            tags[2] = "title";
-            tags[3] = title;
-
-            gchar *ext = &title[i+1];
-
-            if (!g_strcmp0 (ext, "ogg") || !g_strcmp0 (ext, "ogv") ||
-                !g_strcmp0 (ext, "avi") || !g_strcmp0 (ext, "mov") ||
-                !g_strcmp0 (ext, "mp4") || !g_strcmp0 (ext, "m4v") ||
-                !g_strcmp0 (ext, "mkv") || !g_strcmp0 (ext, "ogm")) {
-
-                shell_move_to (self->priv->shell, tags, "Movies");
-            }
-
-            self->priv->done++;
-
-            g_free (tags);
-            continue;
+            tags[2*i+4] = "title";
+            tags[2*i+5] = title;
         }
 
-        tag = taglib_file_tag(file);
-        properties = taglib_file_audioproperties(file);
+        gint videoStream = -1;
+        for (j = 0; j < pFormatCtx->nb_streams; j++) {
+            if (pFormatCtx->streams[j]->codec->codec_type == CODEC_TYPE_VIDEO) {
+                videoStream = j;
+                break;
+            }
+        }
 
-        gchar **tags = g_new0 (gchar*, 19);
+        if (videoStream != -1) {
+            shell_move_to (self->priv->shell, tags, "Movies");
+        } else {
+            shell_move_to (self->priv->shell, tags, "Music");
+        }
 
-        tags[0] = "artist";
-        tags[1] = taglib_tag_artist (tag);
+        g_free (tags[2*i+1]);
 
-        tags[2] = "title";
-        tags[3] = taglib_tag_title (tag);
+        if (title) {
+            g_free (title);
+        }
 
-        tags[4] = "album";
-        tags[5] = taglib_tag_album (tag);
-
-        tags[6] = "comment";
-        tags[7] = taglib_tag_comment (tag);
-
-        tags[8] = "genre";
-        tags[9] = taglib_tag_genre (tag);
-
-        tags[10] = "year";
-        tags[11] = g_strdup_printf ("%d", taglib_tag_year (tag));
-
-        tags[12] = "track";
-        tags[13] = g_strdup_printf ("%d", taglib_tag_track (tag));
-
-        tags[14] = "duration";
-        tags[15] = g_strdup_printf ("%d", taglib_audioproperties_length (properties));
-
-        tags[16] = "location";
-        tags[17] = entry;
-
-        shell_move_to (self->priv->shell, tags, "Music");
+        if (md) {
+            for (i = 0; i < md->count; i++) {
+                g_free (tags[2*i]);
+            }
+        }
 
         g_free (tags);
+        g_free (entry);
+
+        av_close_input_file (pFormatCtx);
 
         self->priv->done++;
-
-        taglib_tag_free_strings();
-        taglib_file_free(file);
     }
 }
 
@@ -209,7 +210,6 @@ tag_handler_finalize (GObject *object)
     }
 
     g_async_queue_push (self->priv->job_queue, "");
-
     g_thread_join (self->priv->job_thread);
 
     g_async_queue_unref (self->priv->job_queue);
@@ -226,6 +226,8 @@ tag_handler_class_init (TagHandlerClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (TagHandlerPrivate));
 
     object_class->finalize = tag_handler_finalize;
+
+    av_register_all();
 }
 
 static void
