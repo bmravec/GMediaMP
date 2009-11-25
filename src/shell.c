@@ -179,7 +179,13 @@ on_player_state_changed (Player *player, guint state, Shell *self)
     } else {
         gtk_widget_show (self->priv->tb_play);
         gtk_widget_hide (self->priv->tb_pause);
-    };
+    }
+
+    if (state == PLAYER_STATE_PLAYING || state == PLAYER_STATE_PAUSED) {
+        gtk_widget_show (self->priv->mini_pane);
+    } else {
+        gtk_widget_hide (self->priv->mini_pane);
+    }
 }
 
 static gboolean
@@ -287,6 +293,7 @@ shell_init (Shell *self)
     gtk_tree_view_column_add_attribute (column, renderer, "pixbuf", 0);
 
     renderer = gtk_cell_renderer_text_new ();
+    g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
     gtk_tree_view_column_pack_start (column, renderer, TRUE);
     gtk_tree_view_column_add_attribute (column, renderer, "text", 1);
     gtk_tree_view_column_set_expand (column, TRUE);
@@ -369,6 +376,7 @@ shell_add_widget (Shell *self,
     GtkTreeIter iter, *parent = NULL;
     gchar **path = g_strsplit (name, "/", 0);
     gint len = 0, i, page = -1;
+    GtkTreePath *tpath;
 
     while (path[len++]);
     len--;
@@ -430,6 +438,11 @@ shell_add_widget (Shell *self,
         1, path[len-1],
         2, page,
         -1);
+
+    if (tpath = gtk_tree_model_get_path (GTK_TREE_MODEL (self->priv->sidebar_store), &iter)) {
+        gtk_tree_view_expand_to_path (GTK_TREE_VIEW (self->priv->sidebar_view), tpath);
+        gtk_tree_path_free (tpath);
+    }
 
     if (parent) {
         gtk_tree_iter_free (parent);
@@ -709,7 +722,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->shows), "Library/TV Shows", NULL);
 
-    gtk_widget_show (shell->priv->mini_pane);
+    gtk_widget_hide (shell->priv->mini_pane);
 
     gtk_box_pack_start (GTK_BOX (shell->priv->sidebar), shell->priv->mini_pane, FALSE, FALSE, 0);
 
