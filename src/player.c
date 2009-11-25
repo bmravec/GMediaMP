@@ -580,8 +580,7 @@ on_vol_changed (GtkWidget *widget, gdouble val, Player *self)
 gboolean
 on_alloc_event (GtkWidget *widget, GtkAllocation *allocation, Player *self)
 {
-    if (widget == self->priv->fs_da && self->priv->fullscreen ||
-        widget == self->priv->em_da && !self->priv->fullscreen) {
+    if (widget == self->priv->video_dest) {
         self->priv->win_width = allocation->width;
         self->priv->win_height = allocation->height;
     }
@@ -628,10 +627,8 @@ player_activate (Player *self)
         G_CALLBACK (player_button_press), self);
     g_signal_connect (self->priv->fs_da, "button-press-event",
         G_CALLBACK (player_button_press), self);
-    g_signal_connect (self->priv->em_da, "size-allocate",
-        G_CALLBACK (on_alloc_event), self);
-    g_signal_connect (self->priv->fs_da, "size-allocate",
-        G_CALLBACK (on_alloc_event), self);
+    g_signal_connect (self->priv->em_da, "size-allocate", G_CALLBACK (on_alloc_event), self);
+    g_signal_connect (self->priv->fs_da, "size-allocate", G_CALLBACK (on_alloc_event), self);
 
     g_signal_connect (self->priv->em_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
     g_signal_connect (self->priv->fs_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
@@ -1188,9 +1185,10 @@ on_timeout (Player *self)
 static void
 player_change_gdk_window (Player *self, GdkWindow *window)
 {
-    self->priv->win = GDK_WINDOW_XID (window);
-
-    self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
+    if (self->priv->fctx) {
+        self->priv->win = GDK_WINDOW_XID (window);
+        self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
+    }
 }
 
 static int
@@ -1232,21 +1230,27 @@ time_to_string (gdouble time)
 void
 player_set_video_destination (Player *self, GtkWidget *dest)
 {
-    GtkWidget *d = self->priv->video_dest = dest;
+    if (self->priv->video_dest) {
+        gdk_window_invalidate_rect (self->priv->video_dest->window, NULL, TRUE);
+    }
+
+    self->priv->video_dest = dest;
 
     if (dest) {
         player_change_gdk_window (self, dest->window);
     } else {
         if (self->priv->fullscreen) {
             player_change_gdk_window (self, self->priv->fs_da->window);
-            d = self->priv->fs_da;
+            self->priv->video_dest = self->priv->fs_da;
         } else {
             player_change_gdk_window (self, self->priv->em_da->window);
-            d = self->priv->em_da;
+            self->priv->video_dest = self->priv->em_da;
         }
     }
 
-    gdk_drawable_get_size (GDK_DRAWABLE (d->window),
+    g_signal_connect (self->priv->video_dest, "size-allocate", G_CALLBACK (on_alloc_event), self);
+
+    gdk_drawable_get_size (GDK_DRAWABLE (self->priv->video_dest->window),
         &self->priv->win_width, &self->priv->win_height);
 }
 

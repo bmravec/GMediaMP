@@ -48,7 +48,7 @@ struct _ShellPrivate {
 
     GtkBuilder *builder;
 
-    GtkTreeStore *sidebar_store;
+    GtkTreeModel *sidebar_store;
 
     GtkWidget *progress_bars;
 
@@ -280,7 +280,7 @@ shell_init (Shell *self)
     g_signal_connect (gtk_builder_get_object (self->priv->builder, "menu_import_directory"),"activate", G_CALLBACK (import_dir_cb), self);
 
     // Create stores and columns
-    self->priv->sidebar_store = gtk_tree_store_new (3, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT);
+    self->priv->sidebar_store = gtk_tree_store_new (4, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT, GTK_TYPE_WIDGET);
     gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->sidebar_view),
         GTK_TREE_MODEL (self->priv->sidebar_store));
 
@@ -418,7 +418,7 @@ shell_add_widget (Shell *self,
 
     if (!gtk_tree_model_iter_children (GTK_TREE_MODEL (self->priv->sidebar_store),
         &iter, parent)) {
-        gtk_tree_store_append (self->priv->sidebar_store, &iter, parent);
+        gtk_tree_store_append (GTK_TREE_STORE (self->priv->sidebar_store), &iter, parent);
     } else {
         do {
             gchar *str;
@@ -430,13 +430,14 @@ shell_add_widget (Shell *self,
             }
         } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->sidebar_store), &iter));
 
-        gtk_tree_store_append (self->priv->sidebar_store, &iter, parent);
+        gtk_tree_store_append (GTK_TREE_STORE (self->priv->sidebar_store), &iter, parent);
     }
 
-    gtk_tree_store_set (self->priv->sidebar_store, &iter,
+    gtk_tree_store_set (GTK_TREE_STORE (self->priv->sidebar_store), &iter,
         0, icon ? gdk_pixbuf_new_from_file_at_size (icon, 16, 16, NULL) : NULL,
         1, path[len-1],
         2, page,
+        3, widget,
         -1);
 
     if (tpath = gtk_tree_model_get_path (GTK_TREE_MODEL (self->priv->sidebar_store), &iter)) {
@@ -481,10 +482,22 @@ selector_changed_cb (GtkTreeSelection *selection, Shell *self)
 {
     GtkTreeIter iter;
     int page;
+    gchar *name;
+
+    g_print ("Selector changed\n");
 
     if (gtk_tree_selection_get_selected (selection, NULL, &iter)) {
         gtk_tree_model_get (GTK_TREE_MODEL (self->priv->sidebar_store), &iter,
-                        2, &page, -1);
+                        1, &name, 2, &page, -1);
+
+        if (!g_strcmp0 (name, "Now Playing")) {
+            player_set_video_destination (self->priv->player, NULL);
+        } else {
+            player_set_video_destination (self->priv->player,
+                GTK_WIDGET (self->priv->mini_pane));
+        }
+
+        g_free (name);
 
         if (page >= 0) {
             gtk_notebook_set_current_page (GTK_NOTEBOOK (self->priv->sidebar_book), page);
@@ -726,6 +739,8 @@ main (int argc, char *argv[])
 
     gtk_box_pack_start (GTK_BOX (shell->priv->sidebar), shell->priv->mini_pane, FALSE, FALSE, 0);
 
+    shell_select_path (shell, "Library/Music");
+
     shell_run (shell);
 
     g_object_unref (shell->priv->music);
@@ -957,4 +972,127 @@ shell_move_to (Shell *self, gchar **e, const gchar *ms_name)
             media_store_add_entry (ms, e);
         }
     }
+}
+
+static gboolean
+shell_select_widget_rec (Shell *self,
+                         GtkWidget *widget,
+                         GtkTreeIter *parent)
+{
+    GtkTreeIter iter;
+    GtkWidget *w;
+
+    gtk_tree_model_get (self->priv->sidebar_store, parent, 3, &w, -1);
+    if (w == widget) {
+        GtkTreePath *path = gtk_tree_model_get_path (self->priv->sidebar_store, parent);
+
+        gtk_tree_view_set_cursor (GTK_TREE_VIEW (self->priv->sidebar_view),
+            path, NULL, FALSE);
+
+        gtk_tree_path_free (path);
+        return TRUE;
+    }
+
+    if (gtk_tree_model_iter_children (self->priv->sidebar_store, &iter, parent)) {
+        do {
+            if (shell_select_widget_rec (self, widget, &iter)) {
+                return TRUE;
+            }
+        } while (gtk_tree_model_iter_next (self->priv->sidebar_store, &iter));
+    }
+
+    return FALSE;
+}
+
+gboolean
+shell_select_widget (Shell *self, GtkWidget *widget)
+{
+    GtkTreeIter iter;
+
+    if (gtk_tree_model_iter_children (self->priv->sidebar_store, &iter, NULL)) {
+        do {
+            if (shell_select_widget_rec (self, widget, &iter)) {
+                return TRUE;
+            }
+        } while (gtk_tree_model_iter_next (self->priv->sidebar_store, &iter));
+    }
+
+    return FALSE;
+}
+
+gboolean
+shell_select_path (Shell *self, const gchar *name)
+{
+    GtkTreeIter iter, *parent = NULL;
+    gchar **path = g_strsplit (name, "/", 0);
+    gint len = 0, i, page = -1;
+    GtkTreePath *tpath;
+
+    while (path[len++]);
+    len--;
+
+    for (i = 0; i < len - 1; i++) {
+        gboolean found = FALSE;
+        gtk_tree_model_iter_children (GTK_TREE_MODEL (self->priv->sidebar_store),
+            &iter, parent);
+
+        if (parent) {
+            gtk_tree_iter_free (parent);
+            parent = NULL;
+        }
+
+        do {
+            gchar *str;
+
+            gtk_tree_model_get (GTK_TREE_MODEL (self->priv->sidebar_store), &iter, 1, &str, -1);
+
+            if (!g_strcmp0 (str, path[i])) {
+                found = TRUE;
+                break;
+            }
+        } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->sidebar_store), &iter));
+
+        if (found) {
+            parent = gtk_tree_iter_copy (&iter);
+        } else {
+            return FALSE;
+        }
+    }
+
+    if (!gtk_tree_model_iter_children (GTK_TREE_MODEL (self->priv->sidebar_store),
+        &iter, parent)) {
+        return FALSE;
+    } else {
+        gboolean found = FALSE;
+        do {
+            gchar *str;
+
+            gtk_tree_model_get (GTK_TREE_MODEL (self->priv->sidebar_store), &iter, 1, &str, -1);
+
+            if (!g_strcmp0 (str, path[i])) {
+                found = TRUE;
+                break;
+            }
+        } while (gtk_tree_model_iter_next (GTK_TREE_MODEL (self->priv->sidebar_store), &iter));
+
+        if (!found) {
+            return FALSE;
+        }
+    }
+
+    if (tpath = gtk_tree_model_get_path (GTK_TREE_MODEL (self->priv->sidebar_store), &iter)) {
+        gtk_tree_view_expand_to_path (GTK_TREE_VIEW (self->priv->sidebar_view), tpath);
+        gtk_tree_view_set_cursor (GTK_TREE_VIEW (self->priv->sidebar_view),
+            tpath, NULL, FALSE);
+        gtk_tree_path_free (tpath);
+    }
+
+    if (parent) {
+        gtk_tree_iter_free (parent);
+        parent = NULL;
+    }
+
+    g_strfreev (path);
+
+    return TRUE;
 }
