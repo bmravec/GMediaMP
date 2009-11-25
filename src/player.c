@@ -26,9 +26,7 @@
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 
-#include <pulse/pulseaudio.h>
 #include <pulse/simple.h>
-#include <pulse/glib-mainloop.h>
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -89,6 +87,8 @@ struct _PlayerPrivate {
 
     guint win_width, win_height;
 
+    GtkWidget *video_dest;
+
     GtkWidget *em_da;
 
     GtkWidget *fs_win;
@@ -103,10 +103,6 @@ struct _PlayerPrivate {
     GtkWidget *fs_next;
     GtkWidget *fs_vbox;
     GtkWidget *fs_hbox;
-
-    pa_glib_mainloop *pulse_glib_loop;
-    pa_stream *pulse_astream;
-    pa_context *pulse_context;
 
     XvImage *xvimage;
     Window win;
@@ -209,13 +205,10 @@ player_init (Player *self)
     self->priv->volume = 1.0;
     self->priv->fullscreen = FALSE;
     self->priv->monitor = 0;
+    self->priv->video_dest = NULL;
 
     self->priv->apq = g_async_queue_new ();
     self->priv->vpq = g_async_queue_new ();
-
-    self->priv->pulse_glib_loop = pa_glib_mainloop_new (NULL);
-    self->priv->pulse_context = pa_context_new (
-        pa_glib_mainloop_get_api (self->priv->pulse_glib_loop), "GMediaMP");
 
     self->priv->rp_mutex = g_mutex_new ();
 }
@@ -331,9 +324,6 @@ player_load (Player *self, Entry *entry)
         self->priv->vframe = avcodec_alloc_frame ();
         self->priv->vframe_xv = avcodec_alloc_frame();
 
-//        self->priv->win_height = self->priv->vctx->height;
-//        self->priv->win_width = self->priv->vctx->width;
-
         int numBytes = avpicture_get_size (PIX_FMT_YUV420P,
             self->priv->vctx->width, self->priv->vctx->height);
         self->priv->vbuffer_xv = (uint8_t*) malloc (numBytes * sizeof (uint8_t));
@@ -433,56 +423,10 @@ insert_stream_data (StreamData *sd, gint index, const gchar *lang)
 }
 
 void
-player_pulse_write_cb (pa_stream *stream, size_t nbytes, Player *self)
-{
-    g_print ("Write CB\n");
-
-    short *abuffer = g_new0 (short, AVCODEC_MAX_AUDIO_FRAME_SIZE * self->priv->actx->channels);
-
-    gint len = player_get_audio_frame (self, abuffer);
-    g_print ("NBYTES(%d) LEN(%d)\n", nbytes, len);
-
-    pa_stream_write (self->priv->pulse_astream, (const void*) abuffer,
-        len, (pa_free_cb_t) g_free, 0, PA_SEEK_RELATIVE);
-}
-
-void
-player_pulse_notify_cb (pa_stream *stream, Player *self)
-{
-    g_print ("State Changed CB\n");
-}
-
-void
 player_play (Player *self)
 {
     self->priv->start_time = av_gettime ();
     g_thread_create ((GThreadFunc) player_audio_loop, self, FALSE, NULL);
-
-/*
-    pa_sample_spec ss;
-
-    ss.format = PA_SAMPLE_S16LE;
-    ss.rate = self->priv->actx->sample_rate;
-    ss.channels = self->priv->actx->channels;
-
-    g_print ("r(%d) c(%d)\n", ss.rate, ss.channels);
-
-    self->priv->pulse_astream = pa_stream_new (self->priv->pulse_context,
-        "Audio", &ss, NULL);
-
-    pa_stream_connect_playback (self->priv->pulse_astream, NULL, NULL, 0, NULL, NULL);
-
-    pa_stream_set_state_callback (self->priv->pulse_astream,
-        (pa_stream_notify_cb_t) player_pulse_notify_cb, self);
-
-    pa_stream_set_write_callback (self->priv->pulse_astream,
-        (pa_stream_request_cb_t) player_pulse_write_cb, self);
-
-    g_print ("Stream Setup\n");
-
-    player_pulse_write_cb (self->priv->pulse_astream,
-        pa_stream_writable_size (self->priv->pulse_astream), self);
-*/
 
     if (self->priv->vctx) {
         self->priv->frame_ready = FALSE;
@@ -638,7 +582,6 @@ on_alloc_event (GtkWidget *widget, GtkAllocation *allocation, Player *self)
 {
     if (widget == self->priv->fs_da && self->priv->fullscreen ||
         widget == self->priv->em_da && !self->priv->fullscreen) {
-        g_print ("ON Alloc %dx%d\n", allocation->width, allocation->height);
         self->priv->win_width = allocation->width;
         self->priv->win_height = allocation->height;
     }
@@ -747,7 +690,6 @@ toggle_fullscreen (GtkWidget *item, Player *self)
     }
 
     self->priv->t_pos = player_get_position (self);
-//    gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
 
     if (!self->priv->fullscreen) {
         gdk_screen_get_monitor_geometry (screen, self->priv->monitor, &rect);
@@ -756,12 +698,14 @@ toggle_fullscreen (GtkWidget *item, Player *self)
         self->priv->fullscreen = TRUE;
         gtk_window_fullscreen (GTK_WINDOW (self->priv->fs_win));
         gtk_window_move (GTK_WINDOW (self->priv->fs_win), rect.x, rect.y);
-        player_change_gdk_window (self, self->priv->fs_win->window);
+//        player_change_gdk_window (self, self->priv->fs_win->window);
     } else {
         gtk_widget_hide (self->priv->fs_win);
         self->priv->fullscreen = FALSE;
-        player_change_gdk_window (self, self->priv->em_da->window);
+//        player_change_gdk_window (self, self->priv->em_da->window);
     }
+
+    player_set_video_destination (self, NULL);
 }
 
 static gboolean
@@ -988,7 +932,6 @@ player_get_video_frame (Player *self, AVFrame *pFrame, int64_t *pts)
             if (packet) {
                 if (packet->data != NULL)
                     av_free_packet (packet);
-//                g_free (packet);
                 av_free (packet);
                 packet = NULL;
             }
@@ -997,7 +940,6 @@ player_get_video_frame (Player *self, AVFrame *pFrame, int64_t *pts)
                 packet = (AVPacket*) g_async_queue_pop (self->priv->vpq);
                 break;
             } else {
-//                packet = g_new0 (AVPacket, 1);
                 packet = (AVPacket*) av_mallocz (sizeof (AVPacket));
                 // Read new packet
 
@@ -1034,7 +976,6 @@ loop_exit:
     if (packet != NULL)
         if (packet->data != NULL) {
             av_free_packet (packet);
-//        g_free (packet);
         av_free (packet);
         packet = NULL;
     }
@@ -1077,7 +1018,6 @@ player_get_audio_frame (Player *self, short *dest)
             if (packet) {
                 if (packet->data != NULL)
                     av_free_packet (packet);
-//                g_free (packet);
                 av_free (packet);
                 packet = NULL;
             }
@@ -1086,7 +1026,6 @@ player_get_audio_frame (Player *self, short *dest)
                 packet = (AVPacket*) g_async_queue_pop (self->priv->apq);
                 break;
             } else {
-//                packet = g_new0 (AVPacket, 1);
                 packet = (AVPacket*) av_mallocz (sizeof (AVPacket));
                 // Read new packet
 
@@ -1158,7 +1097,7 @@ player_audio_loop (Player *self)
 
         len = player_sync_audio (abuffer, len, atime - ctime, self->priv->actx->sample_rate);
 
-            pa_simple_write (s, abuffer, len, NULL);
+        pa_simple_write (s, abuffer, len, NULL);
     }
 
     pa_simple_flush (s, NULL);
@@ -1249,7 +1188,7 @@ on_timeout (Player *self)
 static void
 player_change_gdk_window (Player *self, GdkWindow *window)
 {
-    self->priv->win = GDK_WINDOW_XID (self->priv->fs_da->window);
+    self->priv->win = GDK_WINDOW_XID (window);
 
     self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
 }
@@ -1288,4 +1227,31 @@ time_to_string (gdouble time)
     }
 
     return g_strdup_printf ("%02d:%02d", min, sec);
+}
+
+void
+player_set_video_destination (Player *self, GtkWidget *dest)
+{
+    GtkWidget *d = self->priv->video_dest = dest;
+
+    if (dest) {
+        player_change_gdk_window (self, dest->window);
+    } else {
+        if (self->priv->fullscreen) {
+            player_change_gdk_window (self, self->priv->fs_da->window);
+            d = self->priv->fs_da;
+        } else {
+            player_change_gdk_window (self, self->priv->em_da->window);
+            d = self->priv->em_da;
+        }
+    }
+
+    gdk_drawable_get_size (GDK_DRAWABLE (d->window),
+        &self->priv->win_width, &self->priv->win_height);
+}
+
+GtkWidget*
+player_get_video_destination (Player *self)
+{
+    return self->priv->video_dest;
 }

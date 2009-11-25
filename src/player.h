@@ -86,6 +86,9 @@ StreamData *player_get_audio_streams (Player *self);
 StreamData *player_get_video_streams (Player *self);
 StreamData *player_get_subtitle_streams (Player *self);
 
+void player_set_video_destination (Player *self, GtkWidget *dest);
+GtkWidget *player_get_video_destination (Player *self);
+
 gboolean player_activate (Player *self);
 gboolean player_deactivate (Player *self);
 
