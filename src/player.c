@@ -54,11 +54,9 @@ static void player_av_release_buffer (struct AVCodecContext *c, AVFrame *pic);
 struct _PlayerPrivate {
     AVFormatContext *fctx;
 
-    AVCodec *vcodec;
     AVCodecContext *vctx;
-
-    AVCodec *acodec;
     AVCodecContext *actx;
+
     AVFrame *vframe, *vframe_xv;
     uint8_t *vbuffer_xv;
     struct SwsContext *sws_ctx;
@@ -67,11 +65,14 @@ struct _PlayerPrivate {
     gint astream, vstream;
     GAsyncQueue *apq, *vpq;
     GMutex *rp_mutex;
+    GThread *athread;
+    gint vt_id;
 
     int64_t pos, dur;
-    double vpos;
+    int64_t vpos;
 
     int64_t start_time;
+    int64_t stop_time;
 
     gdouble volume;
     guint state;
@@ -264,8 +265,9 @@ player_load (Player *self, Entry *entry)
     gint i;
 
     if (self->priv->entry) {
-        g_object_unref (self->priv->entry);
-        self->priv->entry = NULL;
+//        g_object_unref (self->priv->entry);
+//        self->priv->entry = NULL;
+        player_close (self);
     }
 
     if (av_open_input_file (&self->priv->fctx, entry_get_location (entry), NULL, 0, NULL) != 0)
@@ -298,23 +300,21 @@ player_load (Player *self, Entry *entry)
     // Setup Audio Stream
     if (self->priv->astream != -1) {
         self->priv->actx = self->priv->fctx->streams[self->priv->astream]->codec;
-        self->priv->acodec = avcodec_find_decoder (self->priv->actx->codec_id);
-        if (self->priv->acodec && avcodec_open (self->priv->actx, self->priv->acodec) < 0)
+        AVCodec *acodec = avcodec_find_decoder (self->priv->actx->codec_id);
+        if (acodec && avcodec_open (self->priv->actx, acodec) < 0)
             return;
     } else {
         self->priv->actx = NULL;
-        self->priv->acodec = NULL;
     }
 
     // Setup Video Stream
     if (self->priv->vstream != -1) {
         self->priv->vctx = self->priv->fctx->streams[self->priv->vstream]->codec;
-        self->priv->vcodec = avcodec_find_decoder (self->priv->vctx->codec_id);
-        if(self->priv->vcodec && avcodec_open (self->priv->vctx, self->priv->vcodec) < 0)
+        AVCodec *vcodec = avcodec_find_decoder (self->priv->vctx->codec_id);
+        if(vcodec && avcodec_open (self->priv->vctx, vcodec) < 0)
             return;
     } else {
         self->priv->vctx = NULL;
-        self->priv->vcodec = NULL;
     }
 
     if (self->priv->vctx) {
@@ -326,7 +326,7 @@ player_load (Player *self, Entry *entry)
 
         int numBytes = avpicture_get_size (PIX_FMT_YUV420P,
             self->priv->vctx->width, self->priv->vctx->height);
-        self->priv->vbuffer_xv = (uint8_t*) malloc (numBytes * sizeof (uint8_t));
+        self->priv->vbuffer_xv = (uint8_t*) av_malloc (numBytes * sizeof (uint8_t));
 
         // Assign appropriate parts of buffer to image planes in pFrameRGB
         avpicture_fill ((AVPicture*) self->priv->vframe_xv,
@@ -379,23 +379,26 @@ player_load (Player *self, Entry *entry)
     g_object_ref (entry);
 
     self->priv->vpos = 0;
+
+    self->priv->start_time = -1;
+    self->priv->stop_time = -1;
 }
 
 void
 player_close (Player *self)
 {
-    /*
     player_stop (self);
 
+/*
     if (self->priv->pipeline) {
         gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
         gst_object_unref (GST_OBJECT (self->priv->pipeline));
         self->priv->pipeline = NULL;
     }
+*/
 
-    if (self->priv->songtags) {
-        gst_tag_list_free (self->priv->songtags);
-        self->priv->songtags = NULL;
+    if (self->priv->fctx) {
+
     }
 
     if (self->priv->entry) {
@@ -405,7 +408,7 @@ player_close (Player *self)
 
         g_object_unref (self->priv->entry);
         self->priv->entry = NULL;
-    } */
+    }
 }
 
 void
@@ -425,12 +428,22 @@ insert_stream_data (StreamData *sd, gint index, const gchar *lang)
 void
 player_play (Player *self)
 {
-    self->priv->start_time = av_gettime ();
-    g_thread_create ((GThreadFunc) player_audio_loop, self, FALSE, NULL);
+    if (self->priv->stop_time != -1) {
+        self->priv->start_time += av_gettime () - self->priv->stop_time;
+    } else {
+        self->priv->start_time = av_gettime ();
+    }
+
+    self->priv->athread = g_thread_create ((GThreadFunc) player_audio_loop, self, TRUE, NULL);
 
     if (self->priv->vctx) {
         self->priv->frame_ready = FALSE;
-        g_timeout_add (10, (GSourceFunc) on_timeout, self);
+        self->priv->vt_id = g_timeout_add_full (
+            G_PRIORITY_HIGH,
+            10,
+            (GSourceFunc) on_timeout,
+            self,
+            NULL);
     }
 
     player_set_state (self, PLAYER_STATE_PLAYING);
@@ -443,28 +456,54 @@ player_play (Player *self)
 void
 player_pause (Player *self)
 {
+    if (!self->priv->entry) {
+        return;
+    }
 
-//    if (self->priv->pipeline) {
-//        gst_element_set_state (self->priv->pipeline, GST_STATE_PAUSED);
-        player_set_state (self, PLAYER_STATE_PAUSED);
+    player_set_state (self, PLAYER_STATE_PAUSED);
+    entry_set_state (self->priv->entry, ENTRY_STATE_PAUSED);
 
-        entry_set_state (self->priv->entry, ENTRY_STATE_PAUSED);
-//    }
-
+    self->priv->stop_time = av_gettime ();
 }
 
 void
 player_stop (Player *self)
 {
+    if (!self->priv->entry) {
+        return;
+    }
 
-//    if (self->priv->pipeline) {
-//        gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
-        player_set_state (self, PLAYER_STATE_STOPPED);
+    self->priv->start_time = self->priv->stop_time = -1;
 
-        if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
-            entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
-        }
-//    }
+    player_set_state (self, PLAYER_STATE_STOPPED);
+    if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
+        entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
+    }
+
+    g_thread_join (self->priv->athread);
+
+    while (g_async_queue_length (self->priv->apq) > 0) {
+        av_free (g_async_queue_pop (self->priv->apq));
+    }
+
+    while (g_async_queue_length (self->priv->vpq) > 0) {
+        av_free (g_async_queue_pop (self->priv->vpq));
+    }
+
+    if (self->priv->fctx) {
+        av_close_input_file (self->priv->fctx);
+        self->priv->fctx = NULL;
+    }
+
+    if (self->priv->vctx) {
+        avcodec_close (self->priv->vctx);
+        self->priv->vctx = NULL;
+    }
+
+    if (self->priv->actx) {
+        avcodec_close (self->priv->actx);
+        self->priv->actx = NULL;
+    }
 
 
     g_signal_emit (self, signal_pos, 0, 0);
@@ -1082,7 +1121,7 @@ player_audio_loop (Player *self)
         NULL, NULL, NULL);
 
     gint len, lcv;
-    short *abuffer = (short*) malloc (AVCODEC_MAX_AUDIO_FRAME_SIZE * self->priv->actx->channels * sizeof (uint8_t));
+    short *abuffer = (short*) av_malloc (AVCODEC_MAX_AUDIO_FRAME_SIZE * self->priv->actx->channels * sizeof (uint8_t));
 
     double atime, ctime;
 
@@ -1095,7 +1134,12 @@ player_audio_loop (Player *self)
         len = player_sync_audio (abuffer, len, atime - ctime, self->priv->actx->sample_rate);
 
         pa_simple_write (s, abuffer, len, NULL);
+        if (self->priv->state != PLAYER_STATE_PLAYING) {
+            break;
+        }
     }
+
+    av_free (abuffer);
 
     pa_simple_flush (s, NULL);
     pa_simple_free (s);
@@ -1104,6 +1148,11 @@ player_audio_loop (Player *self)
 gboolean
 on_timeout (Player *self)
 {
+    if (self->priv->vt_id < 0) {
+        return FALSE;
+    }
+    g_print ("[");
+
     gint res;
     int64_t pts;
     int64_t ctime;
@@ -1134,6 +1183,11 @@ on_timeout (Player *self)
         self->priv->frame_ready = FALSE;
     }
 
+    if (self->priv->state != PLAYER_STATE_PLAYING) {
+        self->priv->vt_id = -1;
+        return FALSE;
+    }
+
     res = player_get_video_frame (self, self->priv->vframe, &pts);
     self->priv->frame_ready = TRUE;
 
@@ -1144,7 +1198,7 @@ on_timeout (Player *self)
     }
 
     double mult = 1;
-    if (pts - self->priv->vpos < 5) {
+    if (abs (pts - self->priv->vpos) < 5) {
         mult = delta * 1000;
     }
 
@@ -1154,30 +1208,33 @@ on_timeout (Player *self)
 
     double delay = pts * mult - ctime;
 
-//    g_print ("VP(%f) PTS(%d) DIFF(%f) TIME(%d) TB(%d,%d) M(%f) D(%f)\n", self->priv->vpos, pts, delta, ctime,
-//        self->priv->vctx->time_base.num, self->priv->vctx->time_base.den, mult, delay);
+    g_print ("VP(%d) PTS(%d) DIFF(%f) TIME(%d) TB(%d,%d) M(%f) D(%f)", self->priv->vpos, pts, delta, ctime,
+        self->priv->vctx->time_base.num, self->priv->vctx->time_base.den, mult, delay);
 
-//    if (res) {
-//        if (pts * mult - ctime > 2000 * delta) {
-        if (delay > 2000 * delta) {
-//            g_print ("1(%f,%d)", pts * mult, ctime);
-            g_timeout_add (delta * 1000, (GSourceFunc) on_timeout, self);
-//        } else if ((delta + delta * pts * mult) - ctime > 0) {
-        } else if (delay > 0) {
-//            g_print ("2(%f)", delay);
-//            g_print ("Sleep %f\n", (delta + delta * pts) * 1000 - ctime);
-            g_timeout_add (delay, (GSourceFunc) on_timeout, self);
-        } else {
-//            g_print ("3");
-//            g_timeout_add (delta * 1000,(GSourceFunc) on_timeout, self);
-            g_timeout_add (1, (GSourceFunc) on_timeout, self);
-//            res = -1;
-        }
-//    } else {
-//        g_print ("4");
-//        g_timeout_add (10, (GSourceFunc) on_timeout, self);
-//        return FALSE;
-//    }
+    if (delay > 3000 * delta) {
+        self->priv->vt_id = g_timeout_add_full (
+            G_PRIORITY_HIGH,
+            delta * 3000,
+            (GSourceFunc) on_timeout,
+            self,
+            NULL);
+    } else if (delay > 0) {
+        self->priv->vt_id = g_timeout_add_full (
+            G_PRIORITY_HIGH,
+            delay,
+            (GSourceFunc) on_timeout,
+            self,
+            NULL);
+    } else {
+        self->priv->vt_id = g_timeout_add_full (
+            G_PRIORITY_HIGH,
+            1,
+            (GSourceFunc) on_timeout,
+            self,
+            NULL);
+    }
+
+    g_print ("]\n");
 
     return FALSE;
 }
