@@ -264,11 +264,7 @@ player_load (Player *self, Entry *entry)
 {
     gint i;
 
-    if (self->priv->entry) {
-//        g_object_unref (self->priv->entry);
-//        self->priv->entry = NULL;
-        player_close (self);
-    }
+    player_close (self);
 
     if (av_open_input_file (&self->priv->fctx, entry_get_location (entry), NULL, 0, NULL) != 0)
         return;
@@ -555,7 +551,7 @@ player_get_length (Player *self)
 guint
 player_get_position (Player *self)
 {
-    return self->priv->pos / 4 / self->priv->actx->sample_rate;
+    return self->priv->pos / 2.0 / self->priv->actx->channels / self->priv->actx->sample_rate;
     /*
     if (self->priv->pipeline) {
         GstFormat fmt = GST_FORMAT_TIME;
@@ -982,7 +978,7 @@ player_get_video_frame (Player *self, AVFrame *pFrame, int64_t *pts)
                 g_mutex_lock (self->priv->rp_mutex);
 
                 if(av_read_frame (self->priv->fctx, packet) < 0) {
-                    g_mutex_lock (self->priv->rp_mutex);
+                    g_mutex_unlock (self->priv->rp_mutex);
                     goto loop_exit;
                 }
 
@@ -1089,22 +1085,10 @@ player_get_audio_frame (Player *self, short *dest)
     }
 }
 
-gint
-player_sync_audio (short *abuffer, int len, double timediff, int64_t sample_rate)
+static gpointer
+player_emit_eos (Player *self)
 {
-    if (timediff >  0.1) timediff = 0.1;
-    if (timediff < -0.1) timediff = -0.1;
-
-    int sample_diff = timediff * sample_rate;
-//    g_print ("SDIFF (%d)\n", sample_diff);
-
-    if (sample_diff > 0) {
-
-    } else {
-
-    }
-
-    return len;
+    g_signal_emit (self, signal_eos, 0);
 }
 
 gpointer
@@ -1125,18 +1109,35 @@ player_audio_loop (Player *self)
 
     double atime, ctime;
 
-    while ((len = player_get_audio_frame (self, abuffer)) >= 0) {
-        self->priv->pos += len;
+    while ((len = player_get_audio_frame (self, abuffer)) > 0) {
+        atime = self->priv->pos / 2.0 / self->priv->actx->sample_rate / self->priv->actx->channels;
 
-        atime = self->priv->pos / 4.0 / self->priv->actx->sample_rate;
         ctime = (av_gettime () - self->priv->start_time) / 1000000.0;
 
-        len = player_sync_audio (abuffer, len, atime - ctime, self->priv->actx->sample_rate);
+        self->priv->pos += len;
 
-        pa_simple_write (s, abuffer, len, NULL);
+        self->priv->start_time += (1000000 * (ctime - atime));
+
+        g_print ("A(%6f) C(%6f) D(%6f) L(%6d) ST(%ld)\n", atime, ctime, atime - ctime, len, self->priv->start_time);
+
+//        len = player_sync_audio (self, abuffer, len, ctime - atime);
+
+        if (len > 0) {
+            pa_simple_write (s, abuffer, len, NULL);
+        }
+
+        if (atime >= self->priv->fctx->duration) {
+            break;
+        }
+
         if (self->priv->state != PLAYER_STATE_PLAYING) {
             break;
         }
+    }
+
+    if (self->priv->state == PLAYER_STATE_PLAYING) {
+//        g_signal_emit (self, signal_eos, 0);
+        g_thread_create ((GThreadFunc) player_emit_eos, self, FALSE, NULL);
     }
 
     av_free (abuffer);
@@ -1151,7 +1152,6 @@ on_timeout (Player *self)
     if (self->priv->vt_id < 0) {
         return FALSE;
     }
-    g_print ("[");
 
     gint res;
     int64_t pts;
@@ -1208,8 +1208,8 @@ on_timeout (Player *self)
 
     double delay = pts * mult - ctime;
 
-    g_print ("VP(%d) PTS(%d) DIFF(%f) TIME(%d) TB(%d,%d) M(%f) D(%f)", self->priv->vpos, pts, delta, ctime,
-        self->priv->vctx->time_base.num, self->priv->vctx->time_base.den, mult, delay);
+//    g_print ("VP(%d) PTS(%d) DIFF(%f) TIME(%d) TB(%d,%d) M(%f) D(%f)", self->priv->vpos, pts, delta, ctime,
+//        self->priv->vctx->time_base.num, self->priv->vctx->time_base.den, mult, delay);
 
     if (delay > 3000 * delta) {
         self->priv->vt_id = g_timeout_add_full (
@@ -1233,8 +1233,6 @@ on_timeout (Player *self)
             self,
             NULL);
     }
-
-    g_print ("]\n");
 
     return FALSE;
 }
