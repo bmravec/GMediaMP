@@ -25,10 +25,6 @@
 #include "player.h"
 #include "progress.h"
 #include "playlist.h"
-
-#include "music.h"
-#include "movies.h"
-#include "shows.h"
 #include "browser.h"
 
 #include "tag-handler.h"
@@ -280,7 +276,7 @@ shell_init (Shell *self)
     g_signal_connect (gtk_builder_get_object (self->priv->builder, "menu_import_directory"),"activate", G_CALLBACK (import_dir_cb), self);
 
     // Create stores and columns
-    self->priv->sidebar_store = gtk_tree_store_new (4, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT, GTK_TYPE_WIDGET);
+    self->priv->sidebar_store = GTK_TREE_MODEL (gtk_tree_store_new (4, GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT, GTK_TYPE_WIDGET));
     gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->sidebar_view),
         GTK_TREE_MODEL (self->priv->sidebar_store));
 
