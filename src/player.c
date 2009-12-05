@@ -297,8 +297,10 @@ player_load (Player *self, Entry *entry)
     if (self->priv->astream != -1) {
         self->priv->actx = self->priv->fctx->streams[self->priv->astream]->codec;
         AVCodec *acodec = avcodec_find_decoder (self->priv->actx->codec_id);
-        if (acodec && avcodec_open (self->priv->actx, acodec) < 0)
+        if (acodec && avcodec_open (self->priv->actx, acodec) < 0) {
+            g_print ("Error opening audio stream\n");
             return;
+        }
     } else {
         self->priv->actx = NULL;
     }
@@ -307,8 +309,10 @@ player_load (Player *self, Entry *entry)
     if (self->priv->vstream != -1) {
         self->priv->vctx = self->priv->fctx->streams[self->priv->vstream]->codec;
         AVCodec *vcodec = avcodec_find_decoder (self->priv->vctx->codec_id);
-        if(vcodec && avcodec_open (self->priv->vctx, vcodec) < 0)
+        if(vcodec && avcodec_open (self->priv->vctx, vcodec) < 0) {
+            g_print ("Error opening video stream\n");
             return;
+        }
     } else {
         self->priv->vctx = NULL;
     }
@@ -359,7 +363,7 @@ player_load (Player *self, Entry *entry)
 
         XvFreeAdaptorInfo (adaptors);
 
-        int nb_formats, fmt;
+        int nb_formats;
         XvImageFormatValues *formats = XvListImageFormats (self->priv->display,
             self->priv->xv_port_id, &nb_formats);
 
@@ -385,16 +389,53 @@ player_close (Player *self)
 {
     player_stop (self);
 
-/*
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
-        gst_object_unref (GST_OBJECT (self->priv->pipeline));
-        self->priv->pipeline = NULL;
+    if (self->priv->video_dest) {
+        gdk_window_invalidate_rect (self->priv->video_dest->window, NULL, TRUE);
     }
-*/
 
     if (self->priv->fctx) {
+        av_close_input_file (self->priv->fctx);
+        self->priv->fctx = NULL;
+    }
 
+    if (self->priv->vctx) {
+        avcodec_close (self->priv->vctx);
+        self->priv->vctx = NULL;
+    }
+
+    if (self->priv->actx) {
+        avcodec_close (self->priv->actx);
+        self->priv->actx = NULL;
+    }
+
+    if (self->priv->vbuffer_xv) {
+        av_free (self->priv->vbuffer_xv);
+        self->priv->vbuffer_xv = NULL;
+    }
+
+    if (self->priv->vframe) {
+        av_free (self->priv->vframe);
+        self->priv->vframe = NULL;
+    }
+
+    if (self->priv->vframe_xv) {
+        av_free (self->priv->vframe_xv);
+        self->priv->vframe_xv = NULL;
+    }
+
+    if (self->priv->xv_gc) {
+        XFreeGC (self->priv->display, self->priv->xv_gc);
+        self->priv->xv_gc = NULL;
+    }
+
+    if (self->priv->sws_ctx) {
+        sws_freeContext (self->priv->sws_ctx);
+        self->priv->sws_ctx = NULL;
+    }
+
+    if (self->priv->xvimage) {
+        XFree (self->priv->xvimage);
+        self->priv->xvimage = NULL;
     }
 
     if (self->priv->entry) {
@@ -469,14 +510,19 @@ player_stop (Player *self)
         return;
     }
 
-    self->priv->start_time = self->priv->stop_time = -1;
-
     player_set_state (self, PLAYER_STATE_STOPPED);
     if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
         entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
     }
 
-    g_thread_join (self->priv->athread);
+    if (self->priv->athread) {
+        g_thread_join (self->priv->athread);
+        self->priv->athread = NULL;
+    }
+
+    self->priv->vt_id = -1;
+
+    self->priv->start_time = self->priv->stop_time = -1;
 
     while (g_async_queue_length (self->priv->apq) > 0) {
         av_free (g_async_queue_pop (self->priv->apq));
@@ -485,22 +531,6 @@ player_stop (Player *self)
     while (g_async_queue_length (self->priv->vpq) > 0) {
         av_free (g_async_queue_pop (self->priv->vpq));
     }
-
-    if (self->priv->fctx) {
-        av_close_input_file (self->priv->fctx);
-        self->priv->fctx = NULL;
-    }
-
-    if (self->priv->vctx) {
-        avcodec_close (self->priv->vctx);
-        self->priv->vctx = NULL;
-    }
-
-    if (self->priv->actx) {
-        avcodec_close (self->priv->actx);
-        self->priv->actx = NULL;
-    }
-
 
     g_signal_emit (self, signal_pos, 0, 0);
 }
@@ -535,33 +565,21 @@ player_get_state (Player *self)
 guint
 player_get_length (Player *self)
 {
-    return self->priv->dur / AV_TIME_BASE;
-    /*
-    if (self->priv->pipeline) {
-        GstFormat fmt = GST_FORMAT_TIME;
-        gint64 len;
-        gst_element_query_duration (self->priv->pipeline, &fmt, &len);
-        return GST_TIME_AS_SECONDS (len);
+    if (self->priv->fctx) {
+        return self->priv->dur / AV_TIME_BASE;
     } else {
         return 0;
     }
-    */
 }
 
 guint
 player_get_position (Player *self)
 {
-    return self->priv->pos / 2.0 / self->priv->actx->channels / self->priv->actx->sample_rate;
-    /*
-    if (self->priv->pipeline) {
-        GstFormat fmt = GST_FORMAT_TIME;
-        gint64 pos;
-        gst_element_query_position (self->priv->pipeline, &fmt, &pos);
-        return GST_TIME_AS_SECONDS (pos);
+    if (self->priv->actx) {
+        return self->priv->pos / 2.0 / self->priv->actx->channels / self->priv->actx->sample_rate;
     } else {
         return 0;
     }
-    */
 }
 
 void
@@ -730,11 +748,9 @@ toggle_fullscreen (GtkWidget *item, Player *self)
         self->priv->fullscreen = TRUE;
         gtk_window_fullscreen (GTK_WINDOW (self->priv->fs_win));
         gtk_window_move (GTK_WINDOW (self->priv->fs_win), rect.x, rect.y);
-//        player_change_gdk_window (self, self->priv->fs_win->window);
     } else {
         gtk_widget_hide (self->priv->fs_win);
         self->priv->fullscreen = FALSE;
-//        player_change_gdk_window (self, self->priv->em_da->window);
     }
 
     player_set_video_destination (self, NULL);
@@ -1088,7 +1104,9 @@ player_get_audio_frame (Player *self, short *dest)
 static gpointer
 player_emit_eos (Player *self)
 {
+    gdk_threads_enter ();
     g_signal_emit (self, signal_eos, 0);
+    gdk_threads_leave ();
 }
 
 gpointer
@@ -1116,11 +1134,9 @@ player_audio_loop (Player *self)
 
         self->priv->pos += len;
 
-        self->priv->start_time += (1000000 * (ctime - atime));
-
-        g_print ("A(%6f) C(%6f) D(%6f) L(%6d) ST(%ld)\n", atime, ctime, atime - ctime, len, self->priv->start_time);
-
-//        len = player_sync_audio (self, abuffer, len, ctime - atime);
+        if (abs (ctime - atime) > 0.1) {
+            self->priv->start_time += (1000000 * (ctime - atime));
+        }
 
         if (len > 0) {
             pa_simple_write (s, abuffer, len, NULL);
@@ -1136,7 +1152,7 @@ player_audio_loop (Player *self)
     }
 
     if (self->priv->state == PLAYER_STATE_PLAYING) {
-//        g_signal_emit (self, signal_eos, 0);
+        self->priv->state = PLAYER_STATE_STOPPED;
         g_thread_create ((GThreadFunc) player_emit_eos, self, FALSE, NULL);
     }
 
@@ -1150,6 +1166,7 @@ gboolean
 on_timeout (Player *self)
 {
     if (self->priv->vt_id < 0) {
+        self->priv->frame_ready = FALSE;
         return FALSE;
     }
 
@@ -1184,6 +1201,7 @@ on_timeout (Player *self)
     }
 
     if (self->priv->state != PLAYER_STATE_PLAYING) {
+        self->priv->frame_ready = FALSE;
         self->priv->vt_id = -1;
         return FALSE;
     }
@@ -1242,6 +1260,9 @@ player_change_gdk_window (Player *self, GdkWindow *window)
 {
     if (self->priv->fctx) {
         self->priv->win = GDK_WINDOW_XID (window);
+    }
+
+    if (self->priv->vctx) {
         self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
     }
 }
