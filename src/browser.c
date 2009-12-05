@@ -199,6 +199,26 @@ g_ptr_array_contains_string (GPtrArray *array, gchar *str)
     return FALSE;
 }
 
+static void
+num_column_func (GtkTreeViewColumn *column,
+                 GtkCellRenderer *cell,
+                 GtkTreeModel *model,
+                 GtkTreeIter *iter,
+                 gchar *data)
+{
+    gint num;
+
+    gtk_tree_model_get (model, iter, 1, &num, -1);
+
+    if (num != 0) {
+        gchar *str = g_strdup_printf ("%d", num);
+        g_object_set (G_OBJECT (cell), "text", str, NULL);
+        g_free (str);
+    } else {
+        g_object_set (G_OBJECT (cell), "text", "", NULL);
+    }
+}
+
 Browser*
 browser_new (gchar *media_type,
              gint mtype,
@@ -259,17 +279,10 @@ browser_new (gchar *media_type,
         gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->pane1), column);
 
         renderer = gtk_cell_renderer_text_new ();
-        column = gtk_tree_view_column_new_with_attributes ("#", renderer, "text", 1, NULL);
+        column = gtk_tree_view_column_new_with_attributes ("#", renderer, NULL);
+        gtk_tree_view_column_set_cell_data_func (column, renderer,
+            (GtkTreeCellDataFunc) num_column_func, NULL, NULL);
         gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->pane1), column);
-
-        gchar *str = g_strdup_printf ("All 0 %ss", p1_tag);
-        gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p1_store),
-            NULL, 0, 0, str, 1, 0, -1);
-        g_free (str);
-
-        GtkTreePath *root = gtk_tree_path_new_from_string ("0");
-        gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->pane1)), root);
-        gtk_tree_path_free (root);
     }
 
     if (p2_tag) {
@@ -280,24 +293,10 @@ browser_new (gchar *media_type,
         gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->pane2), column);
 
         renderer = gtk_cell_renderer_text_new ();
-        column = gtk_tree_view_column_new_with_attributes ("#", renderer, "text", 1, NULL);
+        column = gtk_tree_view_column_new_with_attributes ("#", renderer, NULL);
+        gtk_tree_view_column_set_cell_data_func (column, renderer,
+            (GtkTreeCellDataFunc) num_column_func, NULL, NULL);
         gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->pane2), column);
-
-        if (self->priv->p2_single) {
-            gchar *str = g_strdup_printf ("Select a %s", p1_tag);
-            gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
-                NULL, 0, 0, str, 1, 0, -1);
-            g_free (str);
-        } else {
-            gchar *str = g_strdup_printf ("All 0 %ss", p2_tag);
-            gtk_list_store_insert_with_values (GTK_LIST_STORE (self->priv->p2_store),
-                NULL, 0, 0, str, 1, 0, -1);
-            g_free (str);
-        }
-
-        GtkTreePath *root = gtk_tree_path_new_from_string ("0");
-        gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->pane2)), root);
-        gtk_tree_path_free (root);
     }
 
     renderer = gtk_cell_renderer_pixbuf_new ();
@@ -377,7 +376,7 @@ browser_new (gchar *media_type,
         gtk_widget_hide (GTK_WIDGET (gtk_builder_get_object (builder, "browser_sw2")));
     }
 
-    initial_import (self);
+    g_thread_create ((GThreadFunc) initial_import, self, TRUE, NULL);
 
     return self;
 }
@@ -752,6 +751,16 @@ initial_import (Browser *self)
 {
     GPtrArray *entries = gmediadb_get_all_entries (self->priv->db, self->priv->tags);
 
+    GtkTreeIter iter;
+    GtkListStore *p1_store = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_UINT);
+    GtkListStore *p2_store = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_UINT);
+    GtkListStore *p3_store = gtk_list_store_new (2, G_TYPE_OBJECT, G_TYPE_BOOLEAN);
+
+    GtkTreeModel *p3_filter = gtk_tree_model_filter_new (GTK_TREE_MODEL (p3_store), NULL);
+    gtk_tree_model_filter_set_visible_column (GTK_TREE_MODEL_FILTER (p3_filter), 1);
+
+    gint num_p1 = 0, num_p2 = 0, cnt, res;
+
     int i, j;
     for (i = 0; i < entries->len; i++) {
         gchar **entry = g_ptr_array_index (entries, i);
@@ -764,9 +773,97 @@ initial_import (Browser *self)
             entry_set_tag_str (e, self->priv->tags[j], entry[j]);
         }
 
-        browser_insert_entry (self, e);
+        if (self->priv->p1_tag) {
+            const gchar *pane1 = entry_get_tag_str (e, self->priv->p1_tag);
+
+            // Add pane1 to view
+            res = insert_iter (p1_store, &iter, (gpointer) pane1,
+                (BrowserCompareFunc) g_strcmp0, 0, FALSE);
+
+            gtk_tree_model_get (GTK_TREE_MODEL (p1_store), &iter, 1, &cnt, -1);
+            gtk_list_store_set (p1_store, &iter, 0, pane1, 1, cnt + 1, -1);
+
+            if (res) {
+                num_p1++;
+            }
+
+            if (self->priv->p2_tag && !self->priv->p2_single) {
+                const gchar *pane2 = entry_get_tag_str (e, self->priv->p2_tag);
+
+                // Add pane2 to view
+                res = insert_iter (p2_store, &iter, (gpointer) pane2,
+                    (BrowserCompareFunc) g_strcmp0, 0, FALSE);
+
+                gtk_tree_model_get (GTK_TREE_MODEL (p2_store), &iter, 1, &cnt, -1);
+                gtk_list_store_set (p2_store, &iter, 0, pane2, 1, cnt + 1, -1);
+
+                if (res) {
+                    num_p2++;
+                }
+            }
+        }
+
+        insert_iter (p3_store, &iter, e, self->priv->cmp_func, 0, TRUE);
+        gtk_list_store_set (p3_store, &iter, 0, e, 1, TRUE, -1);
+        g_signal_connect (G_OBJECT (e), "entry-changed", G_CALLBACK (entry_changed), self);
 
         g_object_unref (G_OBJECT (e));
+    }
+
+    if (self->priv->p1_tag) {
+        gchar *new_str = g_strdup_printf ("All %d %ss", num_p1, self->priv->p1_tag);
+
+        gtk_list_store_insert_with_values (p1_store, NULL, 0,
+            0, new_str, 1, entries->len, -1);
+
+        g_free (new_str);
+
+    }
+
+    if (self->priv->p2_tag) {
+        if (self->priv->p2_single) {
+            gchar *str = g_strdup_printf ("Select a %s", self->priv->p1_tag);
+            gtk_list_store_insert_with_values (p2_store, NULL, 0,
+                0, str, 1, 0, -1);
+            g_free (str);
+        } else {
+            gchar *str = g_strdup_printf ("All %d %ss", num_p2, self->priv->p2_tag);
+            gtk_list_store_insert_with_values (p2_store, NULL, 0,
+                0, str, 1, entries->len, -1);
+            g_free (str);
+        }
+    }
+
+    gdk_threads_enter ();
+    gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->pane1), GTK_TREE_MODEL (p1_store));
+    gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->pane2), GTK_TREE_MODEL (p2_store));
+    gtk_tree_view_set_model (GTK_TREE_VIEW (self->priv->pane3), GTK_TREE_MODEL (p3_filter));
+
+    GtkTreePath *root = gtk_tree_path_new_from_string ("0");
+    gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->pane1)), root);
+    gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->pane2)), root);
+    gtk_tree_path_free (root);
+
+    gdk_threads_leave ();
+
+    if (self->priv->p1_store) {
+        g_object_unref (self->priv->p1_store);
+        self->priv->p1_store = GTK_TREE_MODEL (p1_store);
+    }
+
+    if (self->priv->p2_store) {
+        g_object_unref (self->priv->p2_store);
+        self->priv->p2_store = GTK_TREE_MODEL (p2_store);
+    }
+
+    if (self->priv->p3_store) {
+        g_object_unref (self->priv->p3_store);
+        self->priv->p3_store = GTK_TREE_MODEL (p3_store);
+    }
+
+    if (self->priv->p3_filter) {
+        g_object_unref (self->priv->p3_filter);
+        self->priv->p3_filter = GTK_TREE_MODEL (p3_filter);
     }
 
     g_ptr_array_free (entries, TRUE);
