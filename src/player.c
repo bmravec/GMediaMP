@@ -256,6 +256,21 @@ player_get_entry (Player *self)
     return self->priv->entry;
 }
 
+enum PixelFormat
+avcodec_codec_tag_to_pix_fmt (unsigned int codec_tag)
+{
+    enum PixelFormat fmt;
+
+    gint i;
+    for (i = 0; i < PIX_FMT_NB; i++) {
+        if (codec_tag == avcodec_pix_fmt_to_codec_tag (i)) {
+            return i;
+        }
+    }
+
+    return PIX_FMT_NONE;
+}
+
 void
 player_load (Player *self, Entry *entry)
 {
@@ -315,23 +330,6 @@ player_load (Player *self, Entry *entry)
         self->priv->vctx->get_buffer = player_av_get_buffer;
         self->priv->vctx->release_buffer = player_av_release_buffer;
 
-        self->priv->vframe = avcodec_alloc_frame ();
-        self->priv->vframe_xv = avcodec_alloc_frame();
-
-        int numBytes = avpicture_get_size (PIX_FMT_YUV420P,
-            self->priv->vctx->width, self->priv->vctx->height);
-        self->priv->vbuffer_xv = (uint8_t*) av_malloc (numBytes * sizeof (uint8_t));
-
-        // Assign appropriate parts of buffer to image planes in pFrameRGB
-        avpicture_fill ((AVPicture*) self->priv->vframe_xv,
-            self->priv->vbuffer_xv, PIX_FMT_YUV420P,
-            self->priv->vctx->width, self->priv->vctx->height);
-
-        self->priv->sws_ctx = sws_getContext (
-            self->priv->vctx->width, self->priv->vctx->height, self->priv->vctx->pix_fmt,
-            self->priv->vctx->width, self->priv->vctx->height, PIX_FMT_YUV420P,
-            SWS_POINT, NULL, NULL, NULL);
-
         self->priv->display = gdk_x11_display_get_xdisplay (gdk_display_get_default ());
         self->priv->root = DefaultRootWindow (self->priv->display);
 
@@ -349,7 +347,6 @@ player_load (Player *self, Entry *entry)
             for (j = 0; j < adaptors[adaptor_no].num_ports && !self->priv->xv_port_id; j++) {
                 res = XvGrabPort (self->priv->display, adaptors[adaptor_no].base_id + j, 0);
                 if (Success == res) {
-                    g_print ("Grab Port Success\n");
                     self->priv->xv_port_id = adaptors[adaptor_no].base_id + j;
                 }
             }
@@ -361,10 +358,48 @@ player_load (Player *self, Entry *entry)
         XvImageFormatValues *formats = XvListImageFormats (self->priv->display,
             self->priv->xv_port_id, &nb_formats);
 
+        unsigned int vfmt = avcodec_pix_fmt_to_codec_tag (self->priv->vctx->pix_fmt);
+        for (i = 0; i < nb_formats; i++) {
+            if (vfmt == formats[i].id) {
+                break;
+            }
+        }
+
+        enum PixelFormat ofmt = PIX_FMT_NONE;
+
+        self->priv->vframe = avcodec_alloc_frame ();
+        self->priv->vframe_xv = avcodec_alloc_frame();
+
+        if (i < nb_formats) {
+            ofmt = self->priv->vctx->pix_fmt;
+        } else {
+            for (i = 0; i < nb_formats; i++) {
+                ofmt = avcodec_codec_tag_to_pix_fmt (formats[i].id);
+                if (ofmt != PIX_FMT_NONE) {
+                    break;
+                }
+            }
+        }
+
+        int num_bytes = avpicture_get_size (ofmt,
+            self->priv->vctx->width, self->priv->vctx->height);
+        self->priv->vbuffer_xv = (uint8_t*) av_malloc (num_bytes * sizeof (uint8_t));
+
+        avpicture_fill ((AVPicture*) self->priv->vframe_xv,
+            self->priv->vbuffer_xv, ofmt,
+            self->priv->vctx->width + self->priv->vctx->width % 8, self->priv->vctx->height);
+
+        self->priv->sws_ctx = sws_getContext (
+            self->priv->vctx->width, self->priv->vctx->height, self->priv->vctx->pix_fmt,
+            self->priv->vctx->width, self->priv->vctx->height, ofmt,
+            SWS_POINT, NULL, NULL, NULL);
+
         self->priv->xvimage = XvCreateImage (
             self->priv->display, self->priv->xv_port_id,
-            formats[1].id, self->priv->vbuffer_xv,
+            formats[i].id, self->priv->vbuffer_xv,
             self->priv->vctx->width, self->priv->vctx->height);
+
+        XFree (formats);
 
         self->priv->xv_gc = XCreateGC (self->priv->display, self->priv->win, 0, &self->priv->values);
     }
@@ -1198,8 +1233,10 @@ on_timeout (Player *self)
     double ratio = 1.0 * self->priv->vctx->width / self->priv->vctx->height;
 
     if (self->priv->frame_ready) {
-        sws_scale (self->priv->sws_ctx, (uint8_t**) self->priv->vframe->data, (int *) self->priv->vframe->linesize,
-            0, self->priv->vctx->height, self->priv->vframe_xv->data, self->priv->vframe_xv->linesize);
+        sws_scale (self->priv->sws_ctx,
+            self->priv->vframe->data, self->priv->vframe->linesize,
+            0, self->priv->vctx->height,
+            self->priv->vframe_xv->data, self->priv->vframe_xv->linesize);
 
         if (self->priv->win_height * ratio > self->priv->win_width) {
             sw = self->priv->win_width;
@@ -1228,6 +1265,7 @@ on_timeout (Player *self)
     }
 
     res = player_get_video_frame (self, self->priv->vframe, &pts);
+
     self->priv->frame_ready = TRUE;
 
 //    double delta = av_q2d (self->priv->fctx->streams[self->priv->vstream]->time_base);
