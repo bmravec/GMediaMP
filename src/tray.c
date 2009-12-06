@@ -178,7 +178,9 @@ tray_state_changed (Player *player, gint state, Tray *self)
 
         self->priv->img = gdk_pixbuf_new_from_file_at_scale (entry_get_art (e), 50, 50, TRUE, NULL);
 
-        notify_notification_set_icon_from_pixbuf (self->priv->note, self->priv->img);
+        if (self->priv->img) {
+            notify_notification_set_icon_from_pixbuf (self->priv->note, self->priv->img);
+        }
 
         notify_notification_add_action (self->priv->note, GTK_STOCK_MEDIA_NEXT, "Next",
             NOTIFY_ACTION_CALLBACK (on_notify_next), self, NULL);
