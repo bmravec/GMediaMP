@@ -39,7 +39,7 @@
 G_DEFINE_TYPE(Player, player, G_TYPE_OBJECT)
 
 static gboolean player_get_video_frame (Player *self, AVFrame *pFrame, int64_t *pts);
-static gint player_get_audio_frame (Player *self, short *dest);
+static gint player_get_audio_frame (Player *self, short *dest, int64_t *pts);
 
 static gpointer player_audio_loop (Player *self);
 static gpointer player_video_loop (Player *self);
@@ -68,7 +68,6 @@ struct _PlayerPrivate {
     GThread *athread;
     gint vt_id;
 
-    int64_t pos, dur;
     int64_t vpos;
 
     int64_t start_time;
@@ -76,7 +75,6 @@ struct _PlayerPrivate {
 
     gdouble volume;
     guint state;
-    gint t_pos;
 
     Entry *entry;
 
@@ -130,7 +128,6 @@ static uint64_t global_video_pkt_pts = AV_NOPTS_VALUE;
 static gboolean position_update (Player *self);
 static gboolean player_button_press (GtkWidget *da, GdkEventButton *event, Player *self);
 static void player_set_state (Player *self, guint state);
-static gboolean on_window_state (GtkWidget *widget, GdkEventWindowState *event, Player *self);
 static gboolean handle_expose_cb (GtkWidget *widget, GdkEventExpose *event, Player *self);
 
 static void on_control_prev (GtkWidget *widget, Player *self);
@@ -275,9 +272,6 @@ player_load (Player *self, Entry *entry)
     self->priv->fctx->flags = AVFMT_FLAG_GENPTS;
 
     dump_format(self->priv->fctx, 0, entry_get_location (entry), 0);
-
-    self->priv->dur = self->priv->fctx->duration;
-    self->priv->pos = 0;
 
     self->priv->astream = self->priv->vstream = -1;
     for (i = 0; i < self->priv->fctx->nb_streams; i++) {
@@ -467,6 +461,7 @@ player_play (Player *self)
 {
     if (self->priv->stop_time != -1) {
         self->priv->start_time += av_gettime () - self->priv->stop_time;
+        self->priv->stop_time = -1;
     } else {
         self->priv->start_time = av_gettime ();
     }
@@ -525,11 +520,15 @@ player_stop (Player *self)
     self->priv->start_time = self->priv->stop_time = -1;
 
     while (g_async_queue_length (self->priv->apq) > 0) {
-        av_free (g_async_queue_pop (self->priv->apq));
+        AVPacket *packet = g_async_queue_pop (self->priv->apq);
+        av_free_packet (packet);
+        av_free (packet);
     }
 
     while (g_async_queue_length (self->priv->vpq) > 0) {
-        av_free (g_async_queue_pop (self->priv->vpq));
+        AVPacket *packet = g_async_queue_pop (self->priv->vpq);
+        av_free_packet (packet);
+        av_free (packet);
     }
 
     g_signal_emit (self, signal_pos, 0, 0);
@@ -566,7 +565,7 @@ guint
 player_get_length (Player *self)
 {
     if (self->priv->fctx) {
-        return self->priv->dur / AV_TIME_BASE;
+        return self->priv->fctx->duration / AV_TIME_BASE;
     } else {
         return 0;
     }
@@ -575,8 +574,12 @@ player_get_length (Player *self)
 guint
 player_get_position (Player *self)
 {
-    if (self->priv->actx) {
-        return self->priv->pos / 2.0 / self->priv->actx->channels / self->priv->actx->sample_rate;
+    if (self->priv->start_time != -1) {
+        if (self->priv->stop_time != -1) {
+            return (self->priv->stop_time - self->priv->start_time) / 1000000;
+        } else {
+            return (av_gettime () - self->priv->start_time) / 1000000;
+        }
     } else {
         return 0;
     }
@@ -585,20 +588,52 @@ player_get_position (Player *self)
 void
 player_set_position (Player *self, guint pos)
 {
-    /*
-    if (!self->priv->pipeline) {
-        g_signal_emit (self, signal_pos, 0, 0);
-        return;
+    int stream = self->priv->astream;
+    int64_t seek_target = av_rescale_q (AV_TIME_BASE * pos, AV_TIME_BASE_Q,
+        self->priv->fctx->streams[stream]->time_base);
+
+    if (!av_seek_frame (self->priv->fctx, stream, seek_target, 0)) {
+        g_print ("It Failed\n");
+    } else {
+        g_print ("Seek OK?\n");
     }
 
-    gst_element_seek_simple (self->priv->pipeline, GST_FORMAT_TIME,
-        GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT, GST_SECOND * pos);
+    g_mutex_lock (self->priv->rp_mutex);
+    g_async_queue_lock (self->priv->apq);
+    g_async_queue_lock (self->priv->vpq);
 
-    */
+    while (g_async_queue_length_unlocked (self->priv->apq) > 0) {
+        AVPacket *packet = g_async_queue_pop_unlocked (self->priv->apq);
+        av_free_packet (packet);
+        av_free (packet);
+    }
 
-    guint new_pos = player_get_position (self);
+    while (g_async_queue_length_unlocked (self->priv->vpq) > 0) {
+        AVPacket *packet = g_async_queue_pop_unlocked (self->priv->vpq);
+        av_free_packet (packet);
+        av_free (packet);
+    }
 
-    g_signal_emit (self, signal_pos, 0, new_pos);
+    avcodec_flush_buffers (self->priv->actx);
+    if (self->priv->vctx) {
+        avcodec_flush_buffers (self->priv->vctx);
+    }
+
+    g_async_queue_unlock (self->priv->apq);
+    g_async_queue_unlock (self->priv->vpq);
+    g_mutex_unlock (self->priv->rp_mutex);
+
+    switch (self->priv->state) {
+        case PLAYER_STATE_PLAYING:
+            break;
+        case PLAYER_STATE_PAUSED:
+        case PLAYER_STATE_STOPPED:
+            break;
+        default:
+            g_print ("Can not change position in current state\n");
+    };
+
+    g_signal_emit (self, signal_pos, 0, player_get_position (self));
 }
 
 gdouble
@@ -694,9 +729,6 @@ player_activate (Player *self)
     g_signal_connect (self->priv->fs_vol, "value-changed", G_CALLBACK (on_vol_changed), self);
     g_signal_connect (self->priv->fs_scale, "change-value", G_CALLBACK (on_pos_change_value), self);
 
-    g_signal_connect (self->priv->fs_win, "window-state-event",
-        G_CALLBACK (on_window_state), self);
-
     shell_add_widget (self->priv->shell, self->priv->em_da, "Now Playing", NULL);
 
     gtk_widget_show_all (self->priv->em_da);
@@ -739,8 +771,6 @@ toggle_fullscreen (GtkWidget *item, Player *self)
         self->priv->monitor = num-1;
     }
 
-    self->priv->t_pos = player_get_position (self);
-
     if (!self->priv->fullscreen) {
         gdk_screen_get_monitor_geometry (screen, self->priv->monitor, &rect);
 
@@ -754,16 +784,6 @@ toggle_fullscreen (GtkWidget *item, Player *self)
     }
 
     player_set_video_destination (self, NULL);
-}
-
-static gboolean
-on_window_state (GtkWidget *widget,
-                 GdkEventWindowState *event,
-                 Player *self)
-{
-//    gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
-//    gst_element_get_state (self->priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
-    player_set_position (self, self->priv->t_pos);
 }
 
 static gboolean
@@ -1032,7 +1052,7 @@ loop_exit:
 }
 
 static gint
-player_get_audio_frame (Player *self, short *dest)
+player_get_audio_frame (Player *self, short *dest, int64_t *pts)
 {
     static AVPacket *packet = NULL;
     static uint8_t *pkt_data = NULL;
@@ -1051,6 +1071,8 @@ player_get_audio_frame (Player *self, short *dest)
                 pkt_size = 0;
                 break;
             }
+
+            *pts = packet->pts;
 
             pkt_data += len1;
             pkt_size -= len1;
@@ -1122,19 +1144,18 @@ player_audio_loop (Player *self)
     s = pa_simple_new (NULL, "GMediaMP", PA_STREAM_PLAYBACK, NULL, "Music", &ss,
         NULL, NULL, NULL);
 
+    int64_t pts;
+
     gint len, lcv;
     short *abuffer = (short*) av_malloc (AVCODEC_MAX_AUDIO_FRAME_SIZE * self->priv->actx->channels * sizeof (uint8_t));
 
     double atime, ctime;
 
-    while ((len = player_get_audio_frame (self, abuffer)) > 0) {
-        atime = self->priv->pos / 2.0 / self->priv->actx->sample_rate / self->priv->actx->channels;
+    while ((len = player_get_audio_frame (self, abuffer, &pts)) > 0) {
+        if (pts != AV_NOPTS_VALUE) {
+            atime = pts * av_q2d (self->priv->fctx->streams[self->priv->astream]->time_base);
+            ctime = (av_gettime () - self->priv->start_time) / 1000000.0;
 
-        ctime = (av_gettime () - self->priv->start_time) / 1000000.0;
-
-        self->priv->pos += len;
-
-        if (abs (ctime - atime) > 0.1) {
             self->priv->start_time += (1000000 * (ctime - atime));
         }
 
@@ -1209,7 +1230,12 @@ on_timeout (Player *self)
     res = player_get_video_frame (self, self->priv->vframe, &pts);
     self->priv->frame_ready = TRUE;
 
+//    double delta = av_q2d (self->priv->fctx->streams[self->priv->vstream]->time_base);
     double delta = av_q2d (self->priv->vctx->time_base);
+
+//    if (delta < 0.005) {
+//        delta = av_q2d (self->priv->vctx->time_base);
+//    }
 
     if (self->priv->vctx->time_base.num > 1) {
         delta *= 2;
@@ -1226,13 +1252,10 @@ on_timeout (Player *self)
 
     double delay = pts * mult - ctime;
 
-//    g_print ("VP(%d) PTS(%d) DIFF(%f) TIME(%d) TB(%d,%d) M(%f) D(%f)", self->priv->vpos, pts, delta, ctime,
-//        self->priv->vctx->time_base.num, self->priv->vctx->time_base.den, mult, delay);
-
-    if (delay > 3000 * delta) {
+    if (delay > 5000 * delta) {
         self->priv->vt_id = g_timeout_add_full (
             G_PRIORITY_HIGH,
-            delta * 3000,
+            delta * 5000,
             (GSourceFunc) on_timeout,
             self,
             NULL);
@@ -1251,6 +1274,11 @@ on_timeout (Player *self)
             self,
             NULL);
     }
+
+//    g_print ("VP(%d) PTS(%d) DIFF(%f) TIME(%d) TB(%d,%d) M(%f) D(%f) STB(%d,%d)\n", self->priv->vpos, pts, delta, ctime,
+//        self->priv->vctx->time_base.num, self->priv->vctx->time_base.den, mult, delay,
+//        self->priv->fctx->streams[self->priv->vstream]->time_base.num,
+//        self->priv->fctx->streams[self->priv->vstream]->time_base.den);
 
     return FALSE;
 }
