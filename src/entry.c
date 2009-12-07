@@ -86,7 +86,6 @@ entry_get_location (Entry *self)
     return entry_get_tag_str (self, "location");
 }
 
-
 gchar*
 entry_get_art (Entry *self)
 {

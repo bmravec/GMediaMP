@@ -121,17 +121,6 @@ static void browser_gmediadb_add (GMediaDB *db, guint id, Browser *self);
 static void browser_gmediadb_remove (GMediaDB *db, guint id, Browser *self);
 static void browser_gmediadb_update (GMediaDB *db, guint id, Browser *self);
 
-static GtkWidget*
-add_scroll_bars (GtkWidget *widget)
-{
-    GtkWidget *sw = gtk_scrolled_window_new (NULL, NULL);
-    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw),
-        GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_container_add (GTK_CONTAINER (sw), widget);
-
-    return sw;
-}
-
 static void
 track_source_init (TrackSourceInterface *iface)
 {
@@ -843,7 +832,6 @@ initial_import (Browser *self)
     gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->pane1)), root);
     gtk_tree_selection_select_path (gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->pane2)), root);
     gtk_tree_path_free (root);
-
     gdk_threads_leave ();
 
     if (self->priv->p1_store) {
@@ -1098,7 +1086,6 @@ pane1_row_activated (GtkTreeView *view,
     Entry *entry = browser_get_next (TRACK_SOURCE (self));
     track_source_emit_play (TRACK_SOURCE (self), entry);
 }
-
 
 static void
 pane2_row_activated (GtkTreeView *view,

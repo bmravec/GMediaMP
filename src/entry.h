@@ -76,8 +76,8 @@ gint entry_get_tag_int (Entry *self, const gchar *tag);
 
 gint entry_cmp (Entry *self, Entry *e);
 
-//const gchar *entry_get_location (Entry *self);
-//void entry_set_location (Entry *self, const gchar *location);
+const gchar *entry_get_location (Entry *self);
+void entry_set_location (Entry *self, const gchar *location);
 
 gchar *entry_get_art (Entry *self);
 
