@@ -382,12 +382,12 @@ player_load (Player *self, Entry *entry)
         }
 
         int num_bytes = avpicture_get_size (ofmt,
-            self->priv->vctx->width, self->priv->vctx->height);
+            self->priv->vctx->width + self->priv->vctx->width % 4, self->priv->vctx->height);
         self->priv->vbuffer_xv = (uint8_t*) av_malloc (num_bytes * sizeof (uint8_t));
 
         avpicture_fill ((AVPicture*) self->priv->vframe_xv,
             self->priv->vbuffer_xv, ofmt,
-            self->priv->vctx->width + self->priv->vctx->width % 8, self->priv->vctx->height);
+            self->priv->vctx->width + self->priv->vctx->width % 4, self->priv->vctx->height);
 
         self->priv->sws_ctx = sws_getContext (
             self->priv->vctx->width, self->priv->vctx->height, self->priv->vctx->pix_fmt,
@@ -422,11 +422,6 @@ player_close (Player *self)
         gdk_window_invalidate_rect (self->priv->video_dest->window, NULL, TRUE);
     }
 
-    if (self->priv->fctx) {
-        av_close_input_file (self->priv->fctx);
-        self->priv->fctx = NULL;
-    }
-
     if (self->priv->vctx) {
         avcodec_close (self->priv->vctx);
         self->priv->vctx = NULL;
@@ -435,6 +430,11 @@ player_close (Player *self)
     if (self->priv->actx) {
         avcodec_close (self->priv->actx);
         self->priv->actx = NULL;
+    }
+
+    if (self->priv->fctx) {
+        av_close_input_file (self->priv->fctx);
+        self->priv->fctx = NULL;
     }
 
     if (self->priv->vbuffer_xv) {
@@ -556,13 +556,19 @@ player_stop (Player *self)
 
     while (g_async_queue_length (self->priv->apq) > 0) {
         AVPacket *packet = g_async_queue_pop (self->priv->apq);
-        av_free_packet (packet);
+        if (packet->data) {
+            av_free_packet (packet);
+        }
+
         av_free (packet);
     }
 
     while (g_async_queue_length (self->priv->vpq) > 0) {
         AVPacket *packet = g_async_queue_pop (self->priv->vpq);
-        av_free_packet (packet);
+        if (packet->data) {
+            av_free_packet (packet);
+        }
+
         av_free (packet);
     }
 
@@ -684,9 +690,7 @@ player_set_volume (Player *self, gdouble vol)
         if (vol > 1.0) vol = 1.0;
         if (vol < 0.0) vol = 0.0;
 
-//        if (self->priv->pipeline) {
-//            g_object_set (self->priv->pipeline, "volume", vol, NULL);
-//        }
+        self->priv->volume = vol;
 
         gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->fs_vol), self->priv->volume);
 
@@ -1195,6 +1199,18 @@ player_audio_loop (Player *self)
         }
 
         if (len > 0) {
+            gint i;
+            for (i = 0; i < len / sizeof (short); i++) {
+                gdouble val = self->priv->volume * abuffer[i];
+                if (val > 32767) {
+                    abuffer[i] = 32767;
+                } else if (val < -32768) {
+                    abuffer[i] = -32768;
+                } else {
+                    abuffer[i] = val;
+                }
+            }
+
             pa_simple_write (s, abuffer, len, NULL);
         }
 
