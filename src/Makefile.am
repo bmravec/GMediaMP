@@ -1,9 +1,9 @@
-INCLUDES = $(PROG_CFLAGS) $(GTK_CFLAGS) \
+INCLUDES = $(PROG_CFLAGS) $(GTK_CFLAGS) $(GLIB_FLAGS) $(AVCODEC_LIBS) $(PULSE_LIBS) \
     -DSHARE_DIR=\"$(pkgdatadir)\"
 
 bin_PROGRAMS = gmediamp
 
-gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS)
+gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS) $(GLIB_LIBS) $(AVCODEC_LIBS) $(PULSE_LIBS)
 gmediamp_SOURCES = \
     shell.c shell.h \
     plugin-manager.c plugin-manager.h \

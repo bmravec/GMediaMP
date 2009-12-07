@@ -7,27 +7,26 @@ AC_PROG_CC
 AC_PROG_INSTALL
 AM_GCONF_SOURCE_2
 
+AM_PATH_GLIB_2_0(,,,gthread gobject)
+AM_PATH_GTK_2_0()
+
 PKG_PROG_PKG_CONFIG
 
 DBUS_REQUIRED=0.60
 
-PKG_CHECK_MODULES(PROG, glib-2.0 gthread-2.0 gmediadb libnotify gconf-2.0
-    dbus-1 >= $DBUS_REQUIRED
-    dbus-glib-1 >= $DBUS_REQUIRED
-    libpulse libpulse-mainloop-glib libpulse-simple
-    libavcodec
-    libavformat
-    libswscale
+PKG_CHECK_MODULES(PROG, gmediadb libnotify gconf-2.0
     xv)
+
 AC_SUBST(PROG_CFLAGS)
 AC_SUBST(PROG_LIBS)
 
-PKG_CHECK_MODULES(GTK, gtk+-2.0)
-AC_SUBST(GTK_CFLAGS)
-AC_SUBST(GTK_LIBS)
+PKG_CHECK_MODULES(AVCODEC, libavcodec libavformat libswscale)
+AC_SUBST(AVCODEC_CFLAGS)
+AC_SUBST(AVCODEC_LIBS)
 
-AC_PATH_PROG(DBUSBINDINGTOOL, dbus-binding-tool)
-AC_SUBST(DBUSBINDINGTOOL)
+PKG_CHECK_MODULES(PULSE, libpulse-simple)
+AC_SUBST(PULSE_CFLAGS)
+AC_SUBST(PULSE_LIBS)
 
 AC_PATH_PROG(GCONFTOOL, gconftool-2)
 
