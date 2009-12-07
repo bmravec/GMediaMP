@@ -582,8 +582,10 @@ int_column_func (GtkTreeViewColumn *column,
     Entry *entry;
 
     gtk_tree_model_get (model, iter, 0, &entry, -1);
-    if (entry) {
-        gchar *str = g_strdup_printf ("%d", entry_get_tag_int (entry, data));
+    gint num = entry_get_tag_int (entry, data);
+
+    if (entry && num != 0) {
+        gchar *str = g_strdup_printf ("%d", num);
         g_object_set (G_OBJECT (cell), "text", str, NULL);
         g_free (str);
     } else {
@@ -666,6 +668,24 @@ movie_entry_cmp (Entry *e1, Entry *e2)
     return g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
 }
 
+static gint
+music_video_entry_cmp (Entry *e1, Entry *e2)
+{
+    gint res;
+    if (entry_get_id (e1) == entry_get_id (e2))
+        return 0;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "artist"), entry_get_tag_str (e2, "artist"));
+    if (res != 0)
+        return res;
+
+    res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
+    if (res != 0)
+        return res;
+
+    return -1;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -712,7 +732,7 @@ main (int argc, char *argv[])
     shell_add_widget (shell, browser_get_widget (shell->priv->movies), "Library/Movies", NULL);
 
     shell->priv->music_videos = browser_new ("MusicVideos", MEDIA_MUSIC_VIDEO, "Artist", NULL, FALSE,
-        (BrowserCompareFunc) movie_entry_cmp,
+        (BrowserCompareFunc) music_video_entry_cmp,
         "Title", "title", TRUE, str_column_func,
         "Artist", "artist", TRUE, str_column_func,
         "Duration", "duration", FALSE, time_column_func,
