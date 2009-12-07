@@ -40,6 +40,8 @@ struct _TrayPrivate {
 
     NotifyNotification *note;
     GdkPixbuf *img;
+
+    GdkPixbuf *simg, *pimg;
 };
 
 static guint signal_play;
@@ -130,13 +132,19 @@ tray_class_init (TrayClass *klass)
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
         G_TYPE_NONE, 0);
 
-    notify_init ("GMediaDB");
+    notify_init ("GMediaMP");
 }
 
 static void
 tray_init (Tray *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), TRAY_TYPE, TrayPrivate);
+
+    self->priv->simg = g_object_ref (gdk_pixbuf_new_from_file_at_scale (
+        SHARE_DIR "/imgs/tray-icon.svg", 50, 50, TRUE, NULL));
+
+    self->priv->pimg = g_object_ref (gdk_pixbuf_new_from_file_at_scale (
+        SHARE_DIR "/imgs/tray-icon-playing.svg", 50, 50, TRUE, NULL));
 }
 
 Tray*
@@ -157,11 +165,11 @@ tray_state_changed (Player *player, gint state, Tray *self)
     if (state == PLAYER_STATE_PLAYING) {
         gtk_widget_show (GTK_WIDGET (self->priv->paused_item));
         gtk_widget_hide (GTK_WIDGET (self->priv->play_item));
-        gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon-playing.svg");
+        gtk_status_icon_set_from_pixbuf (self->priv->icon, self->priv->pimg);
     } else {
         gtk_widget_show (GTK_WIDGET (self->priv->play_item));
         gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
-        gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon.svg");
+        gtk_status_icon_set_from_pixbuf (self->priv->icon, self->priv->simg);
     }
 
     if (state == PLAYER_STATE_PLAYING && self->priv->note == NULL) {
@@ -197,22 +205,6 @@ tray_state_changed (Player *player, gint state, Tray *self)
         g_object_unref (self->priv->img);
         self->priv->img = NULL;
     }
-/*
-    g_print ("STATE CHANGED: ");
-    switch (state) {
-        case PLAYER_STATE_PLAYING:
-            g_print ("PLAYING\n");
-            break;
-        case PLAYER_STATE_PAUSED:
-            g_print ("PAUSED\n");
-            break;
-        case PLAYER_STATE_STOPPED:
-            g_print ("STOPPED\n");
-            break;
-        case PLAYER_STATE_NULL:
-            g_print ("NULL\n");
-    }
-    */
 }
 
 void
@@ -221,7 +213,7 @@ tray_activate (Tray *self)
     self->priv->shell = shell_new ();
 
     self->priv->icon = gtk_status_icon_new ();
-    gtk_status_icon_set_from_file (self->priv->icon, SHARE_DIR "/imgs/tray-icon.svg");
+    gtk_status_icon_set_from_pixbuf (self->priv->icon, self->priv->simg);
 
     gtk_status_icon_set_has_tooltip (self->priv->icon, TRUE);
 
@@ -291,13 +283,9 @@ tray_query_tooltip (GtkStatusIcon *icon,
     if (state == PLAYER_STATE_PLAYING || state == PLAYER_STATE_PAUSED) {
         Entry *e = player_get_entry (p);
 
-//        GdkPixbuf *img = gdk_pixbuf_new_from_file_at_scale (entry_get_art (e), 50, 50, TRUE, NULL);
-//        if (img == NULL) {
-//            img = gdk_pixbuf_new_from_file_at_scale (SHARE_DIR "/imgs/rhythmbox-missing-artwork.svg", 50, 50, TRUE, NULL);
-//        }
-
-        gtk_tooltip_set_icon (tooltip, self->priv->img);
-//        g_object_unref (img);
+        if (self->priv->img) {
+            gtk_tooltip_set_icon (tooltip, self->priv->img);
+        }
 
         const gchar *title = entry_get_tag_str (e, "title");
         const gchar *artist = entry_get_tag_str (e, "artist");
