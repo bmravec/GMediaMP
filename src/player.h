@@ -22,47 +22,50 @@
 #ifndef __PLAYER_H__
 #define __PLAYER_H__
 
-#include <glib-object.h>
+#include <gtk/gtk.h>
 
 #include "entry.h"
 
 #define PLAYER_TYPE (player_get_type ())
 #define PLAYER(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), PLAYER_TYPE, Player))
-#define PLAYER_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), PLAYER_TYPE, PlayerClass))
 #define IS_PLAYER(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), PLAYER_TYPE))
-#define IS_PLAYER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), PLAYER_TYPE))
-#define PLAYER_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), PLAYER_TYPE, PlayerClass))
+#define PLAYER_GET_IFACE(obj) (G_TYPE_INSTANCE_GET_INTERFACE ((obj), PLAYER_TYPE, PlayerInterface))
 
-enum {
+typedef enum {
     PLAYER_STATE_NULL = 0,
     PLAYER_STATE_PLAYING,
     PLAYER_STATE_PAUSED,
     PLAYER_STATE_STOPPED,
-};
+} PlayerState;
 
 G_BEGIN_DECLS
 
 typedef struct _Player Player;
-typedef struct _PlayerClass PlayerClass;
-typedef struct _PlayerPrivate PlayerPrivate;
+typedef struct _PlayerInterface PlayerInterface;
 
-struct _Player {
-    GObject parent;
+struct _PlayerInterface {
+    GTypeInterface parent;
 
-    PlayerPrivate *priv;
+    void (*load) (Player *self, Entry *entry);
+    void (*close) (Player *self);
+    Entry* (*get_entry) (Player *self);
+
+    void (*play) (Player *self);
+    void (*pause) (Player *self);
+    void (*stop) (Player *self);
+    PlayerState (*get_state) (Player *self);
+
+    guint (*get_duration) (Player *self);
+    guint (*get_position) (Player *self);
+    void  (*set_position) (Player *self, guint pos);
+
+    void (*set_volume) (Player *self, gdouble vol);
+    gdouble (*get_volume) (Player *self);
+
+    void (*set_video_destination) (Player *self, GtkWidget *dest);
+    GtkWidget* (*get_video_destination) (Player *self);
 };
 
-struct _PlayerClass {
-    GObjectClass parent;
-};
-
-typedef struct {
-    gchar *lang;
-    gint index;
-    gboolean mute;
-} StreamData;
-
-Player *player_new ();
 GType player_get_type (void);
 
 void player_load (Player *self, Entry *entry);
@@ -73,26 +76,29 @@ Entry *player_get_entry (Player *self);
 void player_play (Player *self);
 void player_pause (Player *self);
 void player_stop (Player *self);
-guint player_get_state (Player *self);
+PlayerState player_get_state (Player *self);
 
-guint player_get_length (Player *self);
+guint player_get_duration (Player *self);
 guint player_get_position (Player *self);
 void player_set_position (Player *self, guint pos);
 
 gdouble player_get_volume (Player *self);
 void player_set_volume (Player *self, gdouble vol);
 
-StreamData *player_get_audio_streams (Player *self);
-StreamData *player_get_video_streams (Player *self);
-StreamData *player_get_subtitle_streams (Player *self);
-
 void player_set_video_destination (Player *self, GtkWidget *dest);
 GtkWidget *player_get_video_destination (Player *self);
 
-gboolean player_activate (Player *self);
-gboolean player_deactivate (Player *self);
-
 gchar *time_to_string (gdouble time);
+
+void _player_emit_eos (Player *self);
+void _player_emit_state_changed (Player *self, PlayerState state);
+void _player_emit_position_changed (Player *self, guint pos);
+void _player_emit_volume_changed (Player *self, gdouble vol);
+
+void _player_emit_play (Player *self);
+void _player_emit_pause (Player *self);
+void _player_emit_next (Player *self);
+void _player_emit_previous (Player *self);
 
 G_END_DECLS
 

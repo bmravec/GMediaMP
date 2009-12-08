@@ -293,7 +293,7 @@ tray_query_tooltip (GtkStatusIcon *icon,
         gchar *str;
 
         gchar *pos = time_to_string (player_get_position (p));
-        gchar *len = time_to_string (player_get_length (p));
+        gchar *len = time_to_string (player_get_duration (p));
 
         if (artist && album) {
             str = g_strdup_printf ("%s\n\nby %s from %s\n%s of %s", title, artist, album, pos, len);

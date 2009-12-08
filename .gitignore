@@ -12,3 +12,4 @@ install-sh
 missing
 *.tar.gz
 *.tar.bz2
+a.out

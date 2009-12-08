@@ -23,6 +23,8 @@
 
 #include "shell.h"
 #include "player.h"
+#include "player-av.h"
+#include "player-gst.h"
 #include "progress.h"
 #include "playlist.h"
 #include "browser.h"
@@ -119,7 +121,7 @@ on_ts_play (Shell *self, Entry *entry, TrackSource *ts)
 static void
 on_player_ratio (Player *player, guint pos, Shell *self)
 {
-    guint len = player_get_length (self->priv->player);
+    guint len = player_get_duration (self->priv->player);
 
     if (len > 0.0) {
         gtk_range_set_range (GTK_RANGE (self->priv->play_pos), 0.0, len);
@@ -190,7 +192,7 @@ on_pos_change_value (GtkWidget *range,
                      gdouble value,
                      Shell *self)
 {
-    gint len = player_get_length (self->priv->player);
+    gint len = player_get_duration (self->priv->player);
 
     if (value > len) value = len;
     if (value < 0.0) value = 0.0;
@@ -244,7 +246,7 @@ shell_init (Shell *self)
 
     self->priv->builder = gtk_builder_new ();
 
-    self->priv->player = player_new (0, NULL);
+    self->priv->player = PLAYER (player_av_new (0, NULL));
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
@@ -703,7 +705,7 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
-    player_activate (shell->priv->player);
+    player_av_activate (PLAYER_AV (shell->priv->player));
     playlist_activate (shell->priv->playlist);
     tag_handler_activate (shell->priv->tag_handler);
     tray_activate (shell->priv->tray);
