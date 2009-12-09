@@ -272,7 +272,7 @@ _player_emit_eos_thread (Player *self)
 void
 _player_emit_eos (Player *self)
 {
-    g_thread_create (_player_emit_eos_thread, self, FALSE, NULL);
+    g_thread_create ((GThreadFunc) _player_emit_eos_thread, self, FALSE, NULL);
 }
 
 void

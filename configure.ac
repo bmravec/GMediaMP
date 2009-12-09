@@ -78,3 +78,8 @@ data/Makefile
 data/ui/Makefile
 data/imgs/Makefile
 ])
+
+AC_MSG_NOTICE([GMediaMP was configured with the following options:])
+AC_MSG_NOTICE([Player: $with_player])
+AC_MSG_NOTICE([Tag Reader: $with_tag_reader])
+AC_MSG_NOTICE([End options])
