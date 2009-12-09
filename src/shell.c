@@ -21,10 +21,10 @@
 
 #include <gtk/gtk.h>
 
+#include "../config.h"
+
 #include "shell.h"
 #include "player.h"
-#include "player-av.h"
-#include "player-gst.h"
 #include "progress.h"
 #include "playlist.h"
 #include "browser.h"
@@ -32,6 +32,14 @@
 #include "tag-handler.h"
 #include "tray.h"
 #include "mini-pane.h"
+
+#ifdef USE_AVCODEC_PLAYER
+#include "player-av.h"
+#endif
+
+#ifdef USE_GSTREAMER_PLAYER
+#include "player-gst.h"
+#endif
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
@@ -246,7 +254,14 @@ shell_init (Shell *self)
 
     self->priv->builder = gtk_builder_new ();
 
+#ifdef USE_AVCODEC_PLAYER
     self->priv->player = PLAYER (player_av_new (0, NULL));
+#endif
+
+#ifdef USE_GSTREAMER_PLAYER
+    self->priv->player = PLAYER (player_gst_new (0, NULL));
+#endif
+
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
     self->priv->tag_handler = tag_handler_new ();
@@ -705,7 +720,15 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
+#ifdef USE_AVCODEC_PLAYER
     player_av_activate (PLAYER_AV (shell->priv->player));
+#endif
+
+#ifdef USE_GSTREAMER_PLAYER
+    player_gst_activate (PLAYER_GST (shell->priv->player));
+#endif
+
+
     playlist_activate (shell->priv->playlist);
     tag_handler_activate (shell->priv->tag_handler);
     tray_activate (shell->priv->tray);

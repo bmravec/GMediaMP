@@ -6,6 +6,18 @@ bin_PROGRAMS = gmediamp
 gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS) $(GLIB_LIBS) $(AVCODEC_LIBS) \
     $(PULSE_LIBS) $(GST_LIBS)
 
+if GSTREAMERPLAYER
+    gstreamer_sources = player-gst.c player-gst.h
+else
+    gstreamer_sources =
+endif
+
+if AVCODECPLAYER
+    avcodec_sources = player-av.c player-av.h
+else
+    avcodec_sources =
+endif
+
 gmediamp_SOURCES = \
     shell.c shell.h \
     plugin-manager.c plugin-manager.h \
@@ -18,10 +30,9 @@ gmediamp_SOURCES = \
     playlist.c playlist.h \
     track-source.c track-source.h \
     media-store.c media-store.h \
-    player-av.c player-av.h \
-    player-gst.c player-gst.h \
     tag-dialog.c tag-dialog.h \
-    browser.c browser.h
+    browser.c browser.h \
+    $(gstreamer_sources) $(avcodec_sources)
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=
