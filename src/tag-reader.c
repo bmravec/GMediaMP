@@ -1,5 +1,5 @@
 /*
- *      tag-handler.c
+ *      tag-reader.c
  *
  *      Copyright 2009 Brett Mravec <brett.mravec@gmail.com>
  *
@@ -19,24 +19,27 @@
  *      MA 02110-1301, USA.
  */
 
+#include "../config.h"
+
 #include "shell.h"
 #include "progress.h"
 
-#include "tag-handler.h"
+#include "tag-reader.h"
 #include "media-store.h"
-#include "entry.h"
-
-#include <libavformat/avformat.h>
 
 static void media_store_init (MediaStoreInterface *iface);
-G_DEFINE_TYPE_WITH_CODE (TagHandler, tag_handler, G_TYPE_OBJECT,
+G_DEFINE_TYPE_WITH_CODE (TagReader, tag_reader, G_TYPE_OBJECT,
     G_IMPLEMENT_INTERFACE (MEDIA_STORE_TYPE, media_store_init)
 )
 
-#define TAG_HANDLER_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), TAG_HANDLER_TYPE, TagHandlerPrivate))
+#define TAG_READER_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), TAG_READER_TYPE, TagReaderPrivate))
 
-struct _TagHandlerPrivate
-{
+typedef struct {
+    gchar *location;
+    gchar *mtype;
+} QueueEntry;
+
+struct _TagReaderPrivate {
     Shell *shell;
     Progress *p;
 
@@ -48,11 +51,6 @@ struct _TagHandlerPrivate
     gboolean run;
 };
 
-struct AVMetadata{
-    int count;
-    AVMetadataTag *elems;
-};
-
 static void
 media_store_init (MediaStoreInterface *iface)
 {
@@ -61,19 +59,11 @@ media_store_init (MediaStoreInterface *iface)
     iface->get_mtype = NULL;
 }
 
-gchar *
-g_strdup0 (gchar *str)
-{
-    return str ? g_strdup (str) : g_strdup ("");
-}
-
 gpointer
-tag_handler_main (TagHandler *self)
+tag_reader_main (TagReader *self)
 {
-    gint i, j;
-
     while (self->priv->run) {
-        gchar *entry;
+        QueueEntry *entry;
 
         if (self->priv->p) {
             if (g_async_queue_length (self->priv->job_queue) == 0) {
@@ -107,97 +97,32 @@ tag_handler_main (TagHandler *self)
             g_free (new_str);
         }
 
-        AVFormatContext *pFormatCtx;
-        if (av_open_input_file (&pFormatCtx, entry, NULL, 0, NULL) != 0) {
-            g_print ("Continue\n");
-            continue;
+        gchar **kvs = tag_reader_get_tags (self, entry->location);
+
+        if (kvs) {
+            shell_move_to (self->priv->shell, kvs, entry->mtype);
+
+            g_strfreev (kvs);
+            kvs = NULL;
         }
 
-        if (av_find_stream_info (pFormatCtx) < 0) {
-            av_close_input_file (pFormatCtx);
-            g_print ("Continue\n");
-            continue;
+        if (entry->location) {
+            g_free (entry->location);
         }
 
-        AVMetadata *md = pFormatCtx->metadata;
-        gint count = md ? 2 * md->count + 7 : 7;
-
-        gchar **tags = g_new0 (gchar*, count);
-        gboolean has_title = FALSE;
-        gchar *title = NULL;
-
-        i = 0;
-        if (md) {
-            for (; i < md->count; i++) {
-                tags[2*i] = g_ascii_strdown (md->elems[i].key, -1);
-                tags[2*i+1] = md->elems[i].value;
-
-                if (!g_strcmp0 (tags[2*i], "title")) {
-                    has_title = TRUE;
-                }
-            }
+        if (entry->mtype) {
+            g_free (entry->mtype);
         }
 
-        tags[2*i] = "duration";
-        tags[2*i+1] = g_strdup_printf ("%d", (gint) (pFormatCtx->duration / AV_TIME_BASE));
-        tags[2*i+2] = "location";
-        tags[2*i+3] = entry;
-
-        // If the file does not have a title field, lets make one up
-        if (!has_title) {
-            title = g_path_get_basename (entry);
-            j = 0;
-            while (title[j++]);
-            for (; j > 0; j--) {
-                if (title[j] == '.') {
-                    title[j] = '\0';
-                    break;
-                }
-            }
-
-            tags[2*i+4] = "title";
-            tags[2*i+5] = title;
-        }
-
-        gint videoStream = -1;
-        for (j = 0; j < pFormatCtx->nb_streams; j++) {
-            if (pFormatCtx->streams[j]->codec->codec_type == CODEC_TYPE_VIDEO) {
-                videoStream = j;
-                break;
-            }
-        }
-
-        if (videoStream != -1) {
-            shell_move_to (self->priv->shell, tags, "Movies");
-        } else {
-            shell_move_to (self->priv->shell, tags, "Music");
-        }
-
-        g_free (tags[2*i+1]);
-
-        if (title) {
-            g_free (title);
-        }
-
-        if (md) {
-            for (i = 0; i < md->count; i++) {
-                g_free (tags[2*i]);
-            }
-        }
-
-        g_free (tags);
         g_free (entry);
-
-        av_close_input_file (pFormatCtx);
-
         self->priv->done++;
     }
 }
 
 static void
-tag_handler_finalize (GObject *object)
+tag_reader_finalize (GObject *object)
 {
-    TagHandler *self = TAG_HANDLER (object);
+    TagReader *self = TAG_READER (object);
 
     self->priv->run = FALSE;
 
@@ -214,26 +139,26 @@ tag_handler_finalize (GObject *object)
 
     g_async_queue_unref (self->priv->job_queue);
 
-    G_OBJECT_CLASS (tag_handler_parent_class)->finalize (object);
+    G_OBJECT_CLASS (tag_reader_parent_class)->finalize (object);
 }
 
 static void
-tag_handler_class_init (TagHandlerClass *klass)
+tag_reader_class_init (TagReaderClass *klass)
 {
     GObjectClass *object_class;
     object_class = G_OBJECT_CLASS (klass);
 
-    g_type_class_add_private ((gpointer) klass, sizeof (TagHandlerPrivate));
+    g_type_class_add_private ((gpointer) klass, sizeof (TagReaderPrivate));
 
-    object_class->finalize = tag_handler_finalize;
+    object_class->finalize = tag_reader_finalize;
 
     av_register_all();
 }
 
 static void
-tag_handler_init (TagHandler *self)
+tag_reader_init (TagReader *self)
 {
-    self->priv = TAG_HANDLER_GET_PRIVATE (self);
+    self->priv = TAG_READER_GET_PRIVATE (self);
 
     self->priv->job_queue = g_async_queue_new ();
     self->priv->run = TRUE;
@@ -242,33 +167,113 @@ tag_handler_init (TagHandler *self)
     self->priv->p = NULL;
 }
 
-TagHandler *
-tag_handler_new ()
-{
-    TagHandler *self = g_object_new (TAG_HANDLER_TYPE, NULL);
-
-    return self;
+TagReader*
+tag_reader_new () {
+    return g_object_new (TAG_READER_TYPE, NULL);
 }
 
 gboolean
-tag_handler_activate (TagHandler *self)
+tag_reader_activate (TagReader *self)
 {
     self->priv->shell = shell_new ();
 
     self->priv->job_thread =
-        g_thread_create ((GThreadFunc) tag_handler_main, self, TRUE, NULL);
+        g_thread_create ((GThreadFunc) tag_reader_main, self, TRUE, NULL);
 }
 
 gboolean
-tag_handler_deactivate (TagHandler *self)
+tag_reader_deactivate (TagReader *self)
 {
 
 }
 
 void
-tag_handler_add_entry (TagHandler *self, const gchar *location)
+tag_reader_queue_entry (TagReader *self,
+                        const gchar *location,
+                        const gchar *media_type)
 {
-    g_async_queue_push (self->priv->job_queue, g_strdup (location));
+    QueueEntry *qe = g_new0 (QueueEntry, 1);
+
+    qe->location = g_strdup (location);
+    qe->mtype = g_strdup (media_type);
+
+    g_async_queue_push (self->priv->job_queue, qe);
 
     self->priv->total++;
+}
+
+#ifdef USE_TAG_READER_AVCODEC
+#include <libavformat/avformat.h>
+struct AVMetadata {
+    int count;
+    AVMetadataTag *elems;
+};
+
+gchar**
+tag_reader_av_get_tags (TagReader *self, const gchar *location)
+{
+    AVFormatContext *pFormatCtx;
+    gint i, j;
+
+    if (av_open_input_file (&pFormatCtx, location, NULL, 0, NULL) != 0) {
+        return NULL;
+    }
+
+    if (av_find_stream_info (pFormatCtx) < 0) {
+        av_close_input_file (pFormatCtx);
+        return NULL;
+    }
+
+    AVMetadata *md = pFormatCtx->metadata;
+    gint count = md ? 2 * md->count + 7 : 7;
+
+    gchar **tags = g_new0 (gchar*, count);
+    gboolean has_title = FALSE;
+    gchar *title = NULL;
+
+    i = 0;
+    if (md) {
+        for (; i < md->count; i++) {
+            tags[2*i] = g_ascii_strdown (md->elems[i].key, -1);
+            tags[2*i+1] = g_strdup (md->elems[i].value);
+
+            if (!g_strcmp0 (tags[2*i], "title")) {
+                has_title = TRUE;
+            }
+        }
+    }
+
+    tags[2*i] = g_strdup ("duration");
+    tags[2*i+1] = g_strdup_printf ("%d", (gint) (pFormatCtx->duration / AV_TIME_BASE));
+    tags[2*i+2] = g_strdup ("location");
+    tags[2*i+3] = g_strdup (location);
+
+    // If the file does not have a title field, lets make one up
+    if (!has_title) {
+        title = g_path_get_basename (location);
+        j = 0;
+        while (title[j++]);
+        for (; j > 0; j--) {
+            if (title[j] == '.') {
+                title[j] = '\0';
+                break;
+            }
+        }
+
+        tags[2*i+4] = g_strdup ("title");
+        tags[2*i+5] = title;
+    }
+
+    return tags;
+}
+#endif
+
+gchar**
+tag_reader_get_tags (TagReader *self, const gchar *location)
+{
+#ifdef USE_TAG_READER_AVCODEC
+    return tag_reader_av_get_tags (self, location);
+#else
+    return NULL;
+#endif
 }

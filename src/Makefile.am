@@ -6,13 +6,13 @@ bin_PROGRAMS = gmediamp
 gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS) $(GLIB_LIBS) $(AVCODEC_LIBS) \
     $(PULSE_LIBS) $(GST_LIBS)
 
-if GSTREAMERPLAYER
+if PLAYERGSTREAMER
     gstreamer_sources = player-gst.c player-gst.h
 else
     gstreamer_sources =
 endif
 
-if AVCODECPLAYER
+if PLAYERAVCODEC
     avcodec_sources = player-av.c player-av.h
 else
     avcodec_sources =
@@ -32,7 +32,8 @@ gmediamp_SOURCES = \
     media-store.c media-store.h \
     tag-dialog.c tag-dialog.h \
     browser.c browser.h \
-    $(gstreamer_sources) $(avcodec_sources)
+    $(gstreamer_sources) $(avcodec_sources) \
+    tag-reader.c tag-reader.h
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=

@@ -29,15 +29,16 @@
 #include "playlist.h"
 #include "browser.h"
 
-#include "tag-handler.h"
+//#include "tag-handler.h"
+#include "tag-reader.h"
 #include "tray.h"
 #include "mini-pane.h"
 
-#ifdef USE_AVCODEC_PLAYER
+#ifdef USE_PLAYER_AVCODEC
 #include "player-av.h"
 #endif
 
-#ifdef USE_GSTREAMER_PLAYER
+#ifdef USE_PLAYER_GSTREAMER
 #include "player-gst.h"
 #endif
 
@@ -50,7 +51,7 @@ struct _ShellPrivate {
 
     Playlist *playlist;
     Tray *tray;
-    TagHandler *tag_handler;
+    TagReader *tag_reader;
 
     GtkBuilder *builder;
 
@@ -254,17 +255,17 @@ shell_init (Shell *self)
 
     self->priv->builder = gtk_builder_new ();
 
-#ifdef USE_AVCODEC_PLAYER
+#ifdef USE_PLAYER_AVCODEC
     self->priv->player = PLAYER (player_av_new (0, NULL));
 #endif
 
-#ifdef USE_GSTREAMER_PLAYER
+#ifdef USE_PLAYER_GSTREAMER
     self->priv->player = PLAYER (player_gst_new (0, NULL));
 #endif
 
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
-    self->priv->tag_handler = tag_handler_new ();
+    self->priv->tag_reader = tag_reader_new ();
     self->priv->mini_pane = mini_pane_new ();
 
     // Load objects from main.ui
@@ -329,9 +330,6 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->player, "next", G_CALLBACK (next_cb), self);
     g_signal_connect (self->priv->player, "previous", G_CALLBACK (prev_cb), self);
     g_signal_connect (self->priv->player, "volume-changed", G_CALLBACK (on_player_vol_changed), self);
-
-    // Hook up MediaStore signals
-    //g_signal_connect_swapped (self->priv->tag_handler, "entry-move", G_CALLBACK (on_entry_move), self);
 
     self->priv->visible = TRUE;
     gtk_widget_show (self->priv->window);
@@ -720,17 +718,17 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
-#ifdef USE_AVCODEC_PLAYER
+#ifdef USE_PLAYER_AVCODEC
     player_av_activate (PLAYER_AV (shell->priv->player));
 #endif
 
-#ifdef USE_GSTREAMER_PLAYER
+#ifdef USE_PLAYER_GSTREAMER
     player_gst_activate (PLAYER_GST (shell->priv->player));
 #endif
 
 
     playlist_activate (shell->priv->playlist);
-    tag_handler_activate (shell->priv->tag_handler);
+    tag_reader_activate (shell->priv->tag_reader);
     tray_activate (shell->priv->tray);
 
     mini_pane_activate (MINI_PANE (shell->priv->mini_pane));
@@ -841,7 +839,7 @@ static void
 shell_import_thread_rec (Shell *self, const gchar *path)
 {
     if (g_file_test (path, G_FILE_TEST_IS_REGULAR)) {
-        tag_handler_add_entry (self->priv->tag_handler, path);
+        tag_reader_queue_entry (self->priv->tag_reader, path, "Music");
 //        g_print ("IMPORTING: %s\n", path);
     } else if (g_file_test (path, G_FILE_TEST_IS_DIR)) {
         GDir *dir = g_dir_open (path, 0, NULL);

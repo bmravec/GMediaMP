@@ -14,38 +14,56 @@ AM_PATH_GTK_2_0()
 
 PKG_PROG_PKG_CONFIG
 
+need_gst=false
+need_avcodec=false
+need_pulse=false
+
 AC_ARG_WITH(player,
    AC_HELP_STRING([--with-player=avcodec|gstreamer],
    [Select the player implementation to use (default avcodec)]),,
    with_player=avcodec)
 
-if test "x$with_player" = xgstreamer; then
-    AC_DEFINE(USE_GSTREAMER_PLAYER, 1, [Use gstreamer for media playback])
+AC_ARG_WITH(tag_reader,
+   AC_HELP_STRING([--with-tag-reader=avcodec],
+   [Select the tag reader implementation to use (default avcodec)]),,
+   with_tag_reader=avcodec)
 
-    PKG_CHECK_MODULES(GST, gstreamer-0.10 gstreamer-interfaces-0.10)
-    AC_SUBST(GST_CFLAGS)
-    AC_SUBST(GST_LIBS)
+if test "x$with_player" = xgstreamer; then
+    AC_DEFINE(USE_PLAYER_GSTREAMER, 1, [Use gstreamer for media playback])
+    need_gst=true
 fi
 
 if test "x$with_player" = xavcodec; then
-    AC_DEFINE(USE_AVCODEC_PLAYER, 1, [Use libavcodec for media playback])
+    AC_DEFINE(USE_PLAYER_AVCODEC, 1, [Use libavcodec for media playback])
+    need_avcodec=true
+    need_pulse=true
+fi
 
-#    PKG_CHECK_MODULES(AVCODEC, libavcodec libavformat libswscale)
-#    AC_SUBST(AVCODEC_CFLAGS)
-#    AC_SUBST(AVCODEC_LIBS)
+if test "x$with_tag_reader" = xavcodec; then
+    AC_DEFINE(USE_TAG_READER_AVCODEC, 1, [Use libavcodec for reading tags])
+    need_avcodec=true
+fi
 
+if test "$need_pulse" = true; then
     PKG_CHECK_MODULES(PULSE, libpulse-simple)
     AC_SUBST(PULSE_CFLAGS)
     AC_SUBST(PULSE_LIBS)
 fi
 
-#needed all the time because there is only one type of tag-reader
-PKG_CHECK_MODULES(AVCODEC, libavcodec libavformat libswscale)
-AC_SUBST(AVCODEC_CFLAGS)
-AC_SUBST(AVCODEC_LIBS)
+if test "$need_avcodec" = true; then
+    PKG_CHECK_MODULES(AVCODEC, libavcodec libavformat libswscale)
+    AC_SUBST(AVCODEC_CFLAGS)
+    AC_SUBST(AVCODEC_LIBS)
+fi
 
-AM_CONDITIONAL([GSTREAMERPLAYER], [test x$with_player = xgstreamer])
-AM_CONDITIONAL([AVCODECPLAYER], [test x$with_player = xavcodec])
+if test "$need_gst" = true; then
+    PKG_CHECK_MODULES(GST, gstreamer-0.10 gstreamer-interfaces-0.10)
+    AC_SUBST(GST_CFLAGS)
+    AC_SUBST(GST_LIBS)
+fi
+
+AM_CONDITIONAL([PLAYERGSTREAMER], [test x$with_player = xgstreamer])
+AM_CONDITIONAL([PLAYERAVCODEC], [test x$with_player = xavcodec])
 
 PKG_CHECK_MODULES(PROG, gmediadb libnotify gconf-2.0 xv)
 AC_SUBST(PROG_CFLAGS)
