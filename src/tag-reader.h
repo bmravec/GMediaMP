@@ -48,13 +48,10 @@ struct _TagReaderClass {
 };
 
 GType tag_reader_get_type (void);
-TagReader *tag_reader_new ();
+TagReader *tag_reader_new (Shell *shell);
 
 gchar **tag_reader_get_tags (TagReader *self, const gchar *location);
 void tag_reader_queue_entry (TagReader *self, const gchar *location, const gchar *media_type);
-
-gboolean tag_reader_activate (TagReader *self);
-gboolean tag_reader_deactivate (TagReader *self);
 
 G_END_DECLS
 

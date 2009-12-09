@@ -28,6 +28,8 @@
 #include "media-store.h"
 
 static void media_store_init (MediaStoreInterface *iface);
+gpointer tag_reader_main (TagReader *self);
+
 G_DEFINE_TYPE_WITH_CODE (TagReader, tag_reader, G_TYPE_OBJECT,
     G_IMPLEMENT_INTERFACE (MEDIA_STORE_TYPE, media_store_init)
 )
@@ -57,6 +59,66 @@ media_store_init (MediaStoreInterface *iface)
     iface->add_entry = NULL;
     iface->rem_entry = NULL;
     iface->get_mtype = NULL;
+}
+
+static void
+tag_reader_finalize (GObject *object)
+{
+    TagReader *self = TAG_READER (object);
+
+    self->priv->run = FALSE;
+
+    while (g_async_queue_length (self->priv->job_queue) > 0) {
+        gchar *str = g_async_queue_try_pop (self->priv->job_queue);
+        if (str) {
+            //TODO: DO SOMETHING WITH QUEUED ITEMS
+            g_free (str);
+        }
+    }
+
+    g_async_queue_push (self->priv->job_queue, "");
+    g_thread_join (self->priv->job_thread);
+
+    g_async_queue_unref (self->priv->job_queue);
+
+    G_OBJECT_CLASS (tag_reader_parent_class)->finalize (object);
+}
+
+static void
+tag_reader_class_init (TagReaderClass *klass)
+{
+    GObjectClass *object_class;
+    object_class = G_OBJECT_CLASS (klass);
+
+    g_type_class_add_private ((gpointer) klass, sizeof (TagReaderPrivate));
+
+    object_class->finalize = tag_reader_finalize;
+
+    av_register_all();
+}
+
+static void
+tag_reader_init (TagReader *self)
+{
+    self->priv = TAG_READER_GET_PRIVATE (self);
+
+    self->priv->job_queue = g_async_queue_new ();
+    self->priv->run = TRUE;
+
+    self->priv->shell = NULL;
+    self->priv->p = NULL;
+}
+
+TagReader*
+tag_reader_new (Shell *shell) {
+    TagReader *self = g_object_new (TAG_READER_TYPE, NULL);
+
+    self->priv->shell = g_object_ref (shell);
+
+    self->priv->job_thread =
+        g_thread_create ((GThreadFunc) tag_reader_main, self, TRUE, NULL);
+
+    return self;
 }
 
 gpointer
@@ -117,74 +179,6 @@ tag_reader_main (TagReader *self)
         g_free (entry);
         self->priv->done++;
     }
-}
-
-static void
-tag_reader_finalize (GObject *object)
-{
-    TagReader *self = TAG_READER (object);
-
-    self->priv->run = FALSE;
-
-    while (g_async_queue_length (self->priv->job_queue) > 0) {
-        gchar *str = g_async_queue_try_pop (self->priv->job_queue);
-        if (str) {
-            //TODO: DO SOMETHING WITH QUEUED ITEMS
-            g_free (str);
-        }
-    }
-
-    g_async_queue_push (self->priv->job_queue, "");
-    g_thread_join (self->priv->job_thread);
-
-    g_async_queue_unref (self->priv->job_queue);
-
-    G_OBJECT_CLASS (tag_reader_parent_class)->finalize (object);
-}
-
-static void
-tag_reader_class_init (TagReaderClass *klass)
-{
-    GObjectClass *object_class;
-    object_class = G_OBJECT_CLASS (klass);
-
-    g_type_class_add_private ((gpointer) klass, sizeof (TagReaderPrivate));
-
-    object_class->finalize = tag_reader_finalize;
-
-    av_register_all();
-}
-
-static void
-tag_reader_init (TagReader *self)
-{
-    self->priv = TAG_READER_GET_PRIVATE (self);
-
-    self->priv->job_queue = g_async_queue_new ();
-    self->priv->run = TRUE;
-
-    self->priv->shell = NULL;
-    self->priv->p = NULL;
-}
-
-TagReader*
-tag_reader_new () {
-    return g_object_new (TAG_READER_TYPE, NULL);
-}
-
-gboolean
-tag_reader_activate (TagReader *self)
-{
-    self->priv->shell = shell_new ();
-
-    self->priv->job_thread =
-        g_thread_create ((GThreadFunc) tag_reader_main, self, TRUE, NULL);
-}
-
-gboolean
-tag_reader_deactivate (TagReader *self)
-{
-
 }
 
 void

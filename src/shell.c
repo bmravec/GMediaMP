@@ -29,7 +29,6 @@
 #include "playlist.h"
 #include "browser.h"
 
-//#include "tag-handler.h"
 #include "tag-reader.h"
 #include "tray.h"
 #include "mini-pane.h"
@@ -265,7 +264,7 @@ shell_init (Shell *self)
 
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
-    self->priv->tag_reader = tag_reader_new ();
+    self->priv->tag_reader = tag_reader_new (self);
     self->priv->mini_pane = mini_pane_new ();
 
     // Load objects from main.ui
@@ -726,9 +725,7 @@ main (int argc, char *argv[])
     player_gst_activate (PLAYER_GST (shell->priv->player));
 #endif
 
-
     playlist_activate (shell->priv->playlist);
-    tag_reader_activate (shell->priv->tag_reader);
     tray_activate (shell->priv->tray);
 
     mini_pane_activate (MINI_PANE (shell->priv->mini_pane));

@@ -25,7 +25,6 @@ gmediamp_SOURCES = \
     entry.c entry.h \
     tray.c tray.h \
     mini-pane.c mini-pane.h \
-    tag-handler.c tag-handler.h \
     progress.c progress.h \
     playlist.c playlist.h \
     track-source.c track-source.h \
