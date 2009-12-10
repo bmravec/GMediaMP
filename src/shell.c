@@ -21,8 +21,6 @@
 
 #include <gtk/gtk.h>
 
-#include "../config.h"
-
 #include "shell.h"
 #include "player.h"
 #include "progress.h"
@@ -32,14 +30,6 @@
 #include "tag-reader.h"
 #include "tray.h"
 #include "mini-pane.h"
-
-#ifdef USE_PLAYER_AVCODEC
-#include "player-av.h"
-#endif
-
-#ifdef USE_PLAYER_GSTREAMER
-#include "player-gst.h"
-#endif
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
@@ -187,11 +177,11 @@ on_player_state_changed (Player *player, guint state, Shell *self)
         gtk_widget_hide (self->priv->tb_pause);
     }
 
-    if (state == PLAYER_STATE_PLAYING || state == PLAYER_STATE_PAUSED) {
-        gtk_widget_show (self->priv->mini_pane);
-    } else {
-        gtk_widget_hide (self->priv->mini_pane);
-    }
+//    if (state == PLAYER_STATE_PLAYING || state == PLAYER_STATE_PAUSED) {
+//        gtk_widget_show (self->priv->mini_pane);
+//    } else {
+//        gtk_widget_hide (self->priv->mini_pane);
+//    }
 }
 
 static gboolean
@@ -254,18 +244,8 @@ shell_init (Shell *self)
 
     self->priv->builder = gtk_builder_new ();
 
-#ifdef USE_PLAYER_AVCODEC
-    self->priv->player = PLAYER (player_av_new (0, NULL));
-#endif
-
-#ifdef USE_PLAYER_GSTREAMER
-    self->priv->player = PLAYER (player_gst_new (0, NULL));
-#endif
-
     self->priv->playlist = playlist_new ();
     self->priv->tray = tray_new ();
-    self->priv->tag_reader = tag_reader_new (self);
-    self->priv->mini_pane = mini_pane_new ();
 
     // Load objects from main.ui
     gtk_builder_add_from_file (self->priv->builder, SHARE_DIR "/ui/main.ui", NULL);
@@ -324,27 +304,31 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->tray, "next", G_CALLBACK (next_cb), self);
     g_signal_connect (self->priv->tray, "previous", G_CALLBACK (prev_cb), self);
 
-    g_signal_connect (self->priv->player, "play", G_CALLBACK (play_cb), self);
-    g_signal_connect (self->priv->player, "pause", G_CALLBACK (pause_cb), self);
-    g_signal_connect (self->priv->player, "next", G_CALLBACK (next_cb), self);
-    g_signal_connect (self->priv->player, "previous", G_CALLBACK (prev_cb), self);
-    g_signal_connect (self->priv->player, "volume-changed", G_CALLBACK (on_player_vol_changed), self);
-
     self->priv->visible = TRUE;
     gtk_widget_show (self->priv->window);
 
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->sidebar_view));
     g_signal_connect (tree_selection, "changed", G_CALLBACK (selector_changed_cb), self);
 
-    g_signal_connect (self->priv->player, "pos-changed", G_CALLBACK (on_player_ratio), self);
-    g_signal_connect (self->priv->player, "state-changed", G_CALLBACK (on_player_state_changed), self);
-    g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
-
     g_signal_connect (self->priv->play_pos, "change-value", G_CALLBACK (on_pos_change_value), self);
     g_signal_connect (self->priv->tb_vol, "value-changed", G_CALLBACK (on_vol_changed), self);
 
     self->priv->playing_source = NULL;
     self->priv->playing_entry = NULL;
+
+    self->priv->player = player_new (self);
+    self->priv->tag_reader = tag_reader_new (self);
+    self->priv->mini_pane = mini_pane_new ();
+
+    g_signal_connect (self->priv->player, "play", G_CALLBACK (play_cb), self);
+    g_signal_connect (self->priv->player, "pause", G_CALLBACK (pause_cb), self);
+    g_signal_connect (self->priv->player, "next", G_CALLBACK (next_cb), self);
+    g_signal_connect (self->priv->player, "previous", G_CALLBACK (prev_cb), self);
+    g_signal_connect (self->priv->player, "volume-changed", G_CALLBACK (on_player_vol_changed), self);
+
+    g_signal_connect (self->priv->player, "pos-changed", G_CALLBACK (on_player_ratio), self);
+    g_signal_connect (self->priv->player, "state-changed", G_CALLBACK (on_player_state_changed), self);
+    g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
 }
 
 Shell*
@@ -641,8 +625,8 @@ tvshow_entry_cmp (Entry *e1, Entry *e2)
     if (res != 0)
         return res;
 
-    if (entry_get_tag_int (e2, "track") != entry_get_tag_int (e1, "track"))
-        return entry_get_tag_int (e1, "track") - entry_get_tag_int (e2, "track");
+    if (entry_get_tag_int (e2, "tracknumber") != entry_get_tag_int (e1, "tracknumber"))
+        return entry_get_tag_int (e1, "tracknumber") - entry_get_tag_int (e2, "tracknumber");
 
     res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
     if (res != 0)
@@ -666,8 +650,8 @@ music_entry_cmp (Entry *e1, Entry *e2)
     if (res != 0)
         return res;
 
-    if (entry_get_tag_int (e2, "track") != entry_get_tag_int (e1, "track"))
-        return entry_get_tag_int (e1, "track") - entry_get_tag_int (e2, "track");
+    if (entry_get_tag_int (e2, "tracknumber") != entry_get_tag_int (e1, "tracknumber"))
+        return entry_get_tag_int (e1, "tracknumber") - entry_get_tag_int (e2, "tracknumber");
 
     res = g_strcmp0 (entry_get_tag_str (e1, "title"), entry_get_tag_str (e2, "title"));
     if (res != 0)
@@ -717,14 +701,6 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
-#ifdef USE_PLAYER_AVCODEC
-    player_av_activate (PLAYER_AV (shell->priv->player));
-#endif
-
-#ifdef USE_PLAYER_GSTREAMER
-    player_gst_activate (PLAYER_GST (shell->priv->player));
-#endif
-
     playlist_activate (shell->priv->playlist);
     tray_activate (shell->priv->tray);
 
@@ -734,7 +710,7 @@ main (int argc, char *argv[])
 
     shell->priv->music = browser_new ("Music", MEDIA_SONG, "Artist", "Album", FALSE,
         (BrowserCompareFunc) music_entry_cmp,
-        "Track", "track", FALSE, int_column_func,
+        "Track", "tracknumber", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
         "Artist", "artist", TRUE, str_column_func,
         "Album", "album", TRUE, str_column_func,
@@ -762,7 +738,7 @@ main (int argc, char *argv[])
 
     shell->priv->shows = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season", TRUE,
         (BrowserCompareFunc) tvshow_entry_cmp,
-        "Track", "track", FALSE, int_column_func,
+        "Track", "tracknumber", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
         "Show", "show", TRUE, str_column_func,
         "Season", "season", TRUE, str_column_func,
@@ -771,7 +747,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->shows), "Library/TV Shows", NULL);
 
-    gtk_widget_hide (shell->priv->mini_pane);
+    gtk_widget_show (shell->priv->mini_pane);
 
     gtk_box_pack_start (GTK_BOX (shell->priv->sidebar), shell->priv->mini_pane, FALSE, FALSE, 0);
 

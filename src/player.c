@@ -19,7 +19,19 @@
  *      MA 02110-1301, USA.
  */
 
+#include "../config.h"
+
 #include "player.h"
+#include "shell.h"
+
+#ifdef USE_PLAYER_AVCODEC
+#include "player-av.h"
+#endif
+
+#ifdef USE_PLAYER_GSTREAMER
+#include "player-gst.h"
+#endif
+
 
 static guint signal_eos;
 static guint signal_state;
@@ -315,4 +327,20 @@ void
 _player_emit_previous (Player *self)
 {
     g_signal_emit (self, signal_prev, 0);
+}
+
+Player*
+player_new (Shell *shell)
+{
+    Player *self = NULL;
+
+#ifdef USE_PLAYER_AVCODEC
+    self = PLAYER (player_av_new (shell));
+#endif
+
+#ifdef USE_PLAYER_GSTREAMER
+    self = PLAYER (player_gst_new (shell));
+#endif
+
+    return self;
 }

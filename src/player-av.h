@@ -19,13 +19,14 @@
  *      MA 02110-1301, USA.
  */
 
-#ifndef __PLAYER_AV_H__
-#define __PLAYER_AV_H__
-
 #include <glib-object.h>
 
-#include "entry.h"
+#include "shell.h"
 #include "player.h"
+#include "entry.h"
+
+#ifndef __PLAYER_AV_H__
+#define __PLAYER_AV_H__
 
 #define PLAYER_AV_TYPE (player_av_get_type ())
 #define PLAYER_AV(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), PLAYER_AV_TYPE, PlayerAV))
@@ -50,7 +51,7 @@ struct _PlayerAVClass {
     GObjectClass parent;
 };
 
-PlayerAV *player_av_new (int argc, char *argv[]);
+PlayerAV *player_av_new (Shell *shell);
 GType player_av_get_type (void);
 
 void player_av_load (PlayerAV *self, Entry *entry);
@@ -72,9 +73,6 @@ void player_av_set_volume (PlayerAV *self, gdouble vol);
 
 void player_av_set_video_destination (PlayerAV *self, GtkWidget *dest);
 GtkWidget *player_av_get_video_destination (PlayerAV *self);
-
-gboolean player_av_activate (PlayerAV *self);
-gboolean player_av_deactivate (PlayerAV *self);
 
 G_END_DECLS
 

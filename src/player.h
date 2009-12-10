@@ -24,6 +24,7 @@
 
 #include <gtk/gtk.h>
 
+#include "shell.h"
 #include "entry.h"
 
 #define PLAYER_TYPE (player_get_type ())
@@ -67,6 +68,7 @@ struct _PlayerInterface {
 };
 
 GType player_get_type (void);
+Player *player_new (Shell *shell);
 
 void player_load (Player *self, Entry *entry);
 void player_close (Player *self);

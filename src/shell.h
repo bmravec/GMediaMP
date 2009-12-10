@@ -25,7 +25,6 @@
 #include <glib-object.h>
 
 #include "progress.h"
-#include "player.h"
 #include "track-source.h"
 #include "media-store.h"
 
@@ -41,6 +40,7 @@ G_BEGIN_DECLS
 typedef struct _Shell Shell;
 typedef struct _ShellClass ShellClass;
 typedef struct _ShellPrivate ShellPrivate;
+struct _Player;
 
 struct _Shell {
     GObject parent;
@@ -71,7 +71,7 @@ gboolean shell_register_media_store (Shell *self, MediaStore *ms);
 
 gboolean shell_import_path (Shell *self, const gchar *path);
 
-Player *shell_get_player (Shell *self);
+struct _Player *shell_get_player (Shell *self);
 
 void shell_run (Shell *self);
 void shell_quit (Shell *self);

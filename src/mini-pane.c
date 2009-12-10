@@ -19,10 +19,12 @@
  *      MA 02110-1301, USA.
  */
 
+#include "mini-pane.h"
+
 #include <gtk/gtk.h>
 
 #include "shell.h"
-#include "mini-pane.h"
+#include "player.h"
 
 G_DEFINE_TYPE(MiniPane, mini_pane, GTK_TYPE_DRAWING_AREA)
 
@@ -71,6 +73,7 @@ mini_pane_init (MiniPane *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), MINI_PANE_TYPE, MiniPanePrivate);
 
+    self->priv->width = -1;
 }
 
 GtkWidget*
@@ -103,6 +106,7 @@ static void
 on_size_allocate (GtkWidget *widget, GtkAllocation *alloc, MiniPane *self)
 {
 //    g_print ("Size Allocate (%d,%d)\n", alloc->width, alloc->height);
+
     if (alloc->width != alloc->height) {
         self->priv->width = alloc->width;
         gtk_widget_set_size_request (widget, alloc->width, alloc->width);
@@ -128,7 +132,11 @@ on_size_requisition (GtkWidget *widget, GtkRequisition *req, MiniPane *self)
 {
 //    g_print ("Size Requisition (%d,%d)\n", req->width, req->height);
 
-    req->height = req->width = self->priv->width;
+    if (self->priv->width != -1) {
+        req->height = req->width = self->priv->width;
+    } else {
+        self->priv->width = req->height = req->width;
+    }
 }
 
 static void

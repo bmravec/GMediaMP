@@ -118,6 +118,10 @@ player_gst_class_init (PlayerGstClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (PlayerGstPrivate));
 
     object_class->finalize = player_gst_finalize;
+
+    gint argc = 0;
+    gchar *argv[] = NULL;
+    gst_init (&argc, &argv);
 }
 
 static void
@@ -134,9 +138,67 @@ player_gst_init (PlayerGst *self)
 }
 
 PlayerGst*
-player_gst_new (int argc, char *argv[])
+player_gst_new (Shell *shell)
 {
-    gst_init (&argc, &argv);
+    PlayerGst *self = g_object_new (PLAYER_GST_TYPE, NULL);
+
+    self->priv->shell = g_object_ref (shell);
+
+    self->priv->em_da = gtk_drawing_area_new ();
+
+    GtkBuilder *builder = shell_get_builder (self->priv->shell);
+
+    GError *err = NULL;
+    gtk_builder_add_from_file (builder, SHARE_DIR "/ui/player.ui", &err);
+
+    if (err) {
+        g_print ("ERROR ADDING: %s", err->message);
+        g_error_free (err);
+    }
+
+    // Get objects from gtkbuilder
+    self->priv->fs_win = GTK_WIDGET (gtk_builder_get_object (builder, "player_win"));
+    self->priv->fs_da = GTK_WIDGET (gtk_builder_get_object (builder, "player_da"));
+    self->priv->fs_title = GTK_WIDGET (gtk_builder_get_object (builder, "player_title"));
+    self->priv->fs_scale = GTK_WIDGET (gtk_builder_get_object (builder, "player_scale"));
+    self->priv->fs_vol = GTK_WIDGET (gtk_builder_get_object (builder, "player_vol"));
+    self->priv->fs_time = GTK_WIDGET (gtk_builder_get_object (builder, "player_time"));
+    self->priv->fs_prev = GTK_WIDGET (gtk_builder_get_object (builder, "player_prev"));
+    self->priv->fs_play = GTK_WIDGET (gtk_builder_get_object (builder, "player_play"));
+    self->priv->fs_pause = GTK_WIDGET (gtk_builder_get_object (builder, "player_pause"));
+    self->priv->fs_next = GTK_WIDGET (gtk_builder_get_object (builder, "player_next"));
+    self->priv->fs_vbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_vbox"));
+    self->priv->fs_hbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_hbox"));
+
+    // Set initial state
+    gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->fs_vol), self->priv->volume);
+
+    gtk_widget_add_events (self->priv->em_da, GDK_BUTTON_PRESS_MASK);
+    gtk_widget_add_events (self->priv->fs_da, GDK_BUTTON_PRESS_MASK);
+
+    g_signal_connect (self->priv->em_da, "button-press-event",
+        G_CALLBACK (player_gst_button_press), self);
+    g_signal_connect (self->priv->fs_da, "button-press-event",
+        G_CALLBACK (player_gst_button_press), self);
+
+    g_signal_connect (self->priv->em_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
+    g_signal_connect (self->priv->fs_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
+
+    g_signal_connect (self->priv->fs_prev, "clicked", G_CALLBACK (on_control_prev), self);
+    g_signal_connect (self->priv->fs_play, "clicked", G_CALLBACK (on_control_play), self);
+    g_signal_connect (self->priv->fs_pause, "clicked", G_CALLBACK (on_control_pause), self);
+    g_signal_connect (self->priv->fs_next, "clicked", G_CALLBACK (on_control_next), self);
+
+    g_signal_connect (self->priv->fs_vol, "value-changed", G_CALLBACK (on_vol_changed), self);
+    g_signal_connect (self->priv->fs_scale, "change-value", G_CALLBACK (on_pos_change_value), self);
+
+    g_signal_connect (self->priv->fs_win, "window-state-event",
+        G_CALLBACK (on_window_state), self);
+
+    shell_add_widget (self->priv->shell, self->priv->em_da, "Now Playing", NULL);
+
+    gtk_widget_show_all (self->priv->em_da);
+
     return g_object_new (PLAYER_GST_TYPE, NULL);
 }
 
@@ -506,73 +568,6 @@ static void
 on_vol_changed (GtkWidget *widget, gdouble val, PlayerGst *self)
 {
     player_gst_set_volume (self, val);
-}
-
-gboolean
-player_gst_activate (PlayerGst *self)
-{
-    self->priv->shell = shell_new ();
-
-    self->priv->em_da = gtk_drawing_area_new ();
-
-    GtkBuilder *builder = shell_get_builder (self->priv->shell);
-
-    GError *err = NULL;
-    gtk_builder_add_from_file (builder, SHARE_DIR "/ui/player.ui", &err);
-
-    if (err) {
-        g_print ("ERROR ADDING: %s", err->message);
-        g_error_free (err);
-    }
-
-    // Get objects from gtkbuilder
-    self->priv->fs_win = GTK_WIDGET (gtk_builder_get_object (builder, "player_win"));
-    self->priv->fs_da = GTK_WIDGET (gtk_builder_get_object (builder, "player_da"));
-    self->priv->fs_title = GTK_WIDGET (gtk_builder_get_object (builder, "player_title"));
-    self->priv->fs_scale = GTK_WIDGET (gtk_builder_get_object (builder, "player_scale"));
-    self->priv->fs_vol = GTK_WIDGET (gtk_builder_get_object (builder, "player_vol"));
-    self->priv->fs_time = GTK_WIDGET (gtk_builder_get_object (builder, "player_time"));
-    self->priv->fs_prev = GTK_WIDGET (gtk_builder_get_object (builder, "player_prev"));
-    self->priv->fs_play = GTK_WIDGET (gtk_builder_get_object (builder, "player_play"));
-    self->priv->fs_pause = GTK_WIDGET (gtk_builder_get_object (builder, "player_pause"));
-    self->priv->fs_next = GTK_WIDGET (gtk_builder_get_object (builder, "player_next"));
-    self->priv->fs_vbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_vbox"));
-    self->priv->fs_hbox = GTK_WIDGET (gtk_builder_get_object (builder, "player_hbox"));
-
-    // Set initial state
-    gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->fs_vol), self->priv->volume);
-
-    gtk_widget_add_events (self->priv->em_da, GDK_BUTTON_PRESS_MASK);
-    gtk_widget_add_events (self->priv->fs_da, GDK_BUTTON_PRESS_MASK);
-
-    g_signal_connect (self->priv->em_da, "button-press-event",
-        G_CALLBACK (player_gst_button_press), self);
-    g_signal_connect (self->priv->fs_da, "button-press-event",
-        G_CALLBACK (player_gst_button_press), self);
-
-    g_signal_connect (self->priv->em_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
-    g_signal_connect (self->priv->fs_da, "expose-event", G_CALLBACK (handle_expose_cb), self);
-
-    g_signal_connect (self->priv->fs_prev, "clicked", G_CALLBACK (on_control_prev), self);
-    g_signal_connect (self->priv->fs_play, "clicked", G_CALLBACK (on_control_play), self);
-    g_signal_connect (self->priv->fs_pause, "clicked", G_CALLBACK (on_control_pause), self);
-    g_signal_connect (self->priv->fs_next, "clicked", G_CALLBACK (on_control_next), self);
-
-    g_signal_connect (self->priv->fs_vol, "value-changed", G_CALLBACK (on_vol_changed), self);
-    g_signal_connect (self->priv->fs_scale, "change-value", G_CALLBACK (on_pos_change_value), self);
-
-    g_signal_connect (self->priv->fs_win, "window-state-event",
-        G_CALLBACK (on_window_state), self);
-
-    shell_add_widget (self->priv->shell, self->priv->em_da, "Now Playing", NULL);
-
-    gtk_widget_show_all (self->priv->em_da);
-}
-
-gboolean
-player_gst_deactivate (PlayerGst *self)
-{
-
 }
 
 static void
