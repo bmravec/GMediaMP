@@ -148,9 +148,64 @@ tray_init (Tray *self)
 }
 
 Tray*
-tray_new ()
+tray_new (Shell *shell)
 {
-    return g_object_new (TRAY_TYPE, NULL);
+    Tray *self = g_object_new (TRAY_TYPE, NULL);
+
+    self->priv->shell = g_object_ref (shell);
+
+    self->priv->icon = gtk_status_icon_new ();
+    gtk_status_icon_set_from_pixbuf (self->priv->icon, self->priv->simg);
+
+    gtk_status_icon_set_has_tooltip (self->priv->icon, TRUE);
+
+    g_signal_connect (self->priv->icon, "activate",
+        G_CALLBACK (tray_icon_activate), self);
+    g_signal_connect (self->priv->icon, "popup-menu",
+        G_CALLBACK (tray_popup), self);
+    g_signal_connect (self->priv->icon, "scroll-event",
+        G_CALLBACK (tray_scroll_event), self);
+    g_signal_connect (self->priv->icon, "query-tooltip",
+        G_CALLBACK (tray_query_tooltip), self);
+    g_signal_connect (self->priv->icon, "button-press-event",
+        G_CALLBACK (tray_button_press), self);
+
+    self->priv->menu = gtk_menu_new ();
+
+    self->priv->play_item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PLAY, NULL);
+    g_signal_connect (G_OBJECT (self->priv->play_item), "activate", G_CALLBACK (tray_play), self);
+    gtk_menu_append (self->priv->menu, self->priv->play_item);
+
+    self->priv->paused_item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PAUSE, NULL);
+    g_signal_connect (G_OBJECT (self->priv->paused_item), "activate", G_CALLBACK (tray_pause), self);
+    gtk_menu_append (self->priv->menu, self->priv->paused_item);
+
+    GtkWidget *item = gtk_separator_menu_item_new ();
+    gtk_menu_append (self->priv->menu, item);
+
+    item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_NEXT, NULL);
+    g_signal_connect (G_OBJECT (item), "activate", G_CALLBACK (tray_next), self);
+    gtk_menu_append (self->priv->menu, item);
+
+    item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PREVIOUS, NULL);
+    g_signal_connect (G_OBJECT (item), "activate", G_CALLBACK (tray_prev), self);
+    gtk_menu_append (self->priv->menu, item);
+
+    item = gtk_separator_menu_item_new ();
+    gtk_menu_append (self->priv->menu, item);
+
+    item = gtk_image_menu_item_new_from_stock (GTK_STOCK_QUIT, NULL);
+    g_signal_connect (G_OBJECT (item), "activate", G_CALLBACK (tray_quit), self);
+    gtk_menu_append (self->priv->menu, item);
+
+    gtk_widget_show_all (GTK_WIDGET (self->priv->menu));
+    gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
+
+    Player *p = shell_get_player (self->priv->shell);
+    g_signal_connect (p, "state-changed", G_CALLBACK (tray_state_changed), self);
+    g_signal_connect (p, "pos-changed", G_CALLBACK (tray_pos_changed), self);
+
+    return self;
 }
 
 void
@@ -205,69 +260,6 @@ tray_state_changed (Player *player, gint state, Tray *self)
         g_object_unref (self->priv->img);
         self->priv->img = NULL;
     }
-}
-
-void
-tray_activate (Tray *self)
-{
-    self->priv->shell = shell_new ();
-
-    self->priv->icon = gtk_status_icon_new ();
-    gtk_status_icon_set_from_pixbuf (self->priv->icon, self->priv->simg);
-
-    gtk_status_icon_set_has_tooltip (self->priv->icon, TRUE);
-
-    g_signal_connect (self->priv->icon, "activate",
-        G_CALLBACK (tray_icon_activate), self);
-    g_signal_connect (self->priv->icon, "popup-menu",
-        G_CALLBACK (tray_popup), self);
-    g_signal_connect (self->priv->icon, "scroll-event",
-        G_CALLBACK (tray_scroll_event), self);
-    g_signal_connect (self->priv->icon, "query-tooltip",
-        G_CALLBACK (tray_query_tooltip), self);
-    g_signal_connect (self->priv->icon, "button-press-event",
-        G_CALLBACK (tray_button_press), self);
-
-    self->priv->menu = gtk_menu_new ();
-
-    self->priv->play_item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PLAY, NULL);
-    g_signal_connect (G_OBJECT (self->priv->play_item), "activate", G_CALLBACK (tray_play), self);
-    gtk_menu_append (self->priv->menu, self->priv->play_item);
-
-    self->priv->paused_item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PAUSE, NULL);
-    g_signal_connect (G_OBJECT (self->priv->paused_item), "activate", G_CALLBACK (tray_pause), self);
-    gtk_menu_append (self->priv->menu, self->priv->paused_item);
-
-    GtkWidget *item = gtk_separator_menu_item_new ();
-    gtk_menu_append (self->priv->menu, item);
-
-    item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_NEXT, NULL);
-    g_signal_connect (G_OBJECT (item), "activate", G_CALLBACK (tray_next), self);
-    gtk_menu_append (self->priv->menu, item);
-
-    item = gtk_image_menu_item_new_from_stock (GTK_STOCK_MEDIA_PREVIOUS, NULL);
-    g_signal_connect (G_OBJECT (item), "activate", G_CALLBACK (tray_prev), self);
-    gtk_menu_append (self->priv->menu, item);
-
-    item = gtk_separator_menu_item_new ();
-    gtk_menu_append (self->priv->menu, item);
-
-    item = gtk_image_menu_item_new_from_stock (GTK_STOCK_QUIT, NULL);
-    g_signal_connect (G_OBJECT (item), "activate", G_CALLBACK (tray_quit), self);
-    gtk_menu_append (self->priv->menu, item);
-
-    gtk_widget_show_all (GTK_WIDGET (self->priv->menu));
-    gtk_widget_hide (GTK_WIDGET (self->priv->paused_item));
-
-    Player *p = shell_get_player (self->priv->shell);
-    g_signal_connect (p, "state-changed", G_CALLBACK (tray_state_changed), self);
-    g_signal_connect (p, "pos-changed", G_CALLBACK (tray_pos_changed), self);
-}
-
-void
-tray_deactivate (Tray *self)
-{
-    gtk_widget_hide (GTK_WIDGET (self->priv->icon));
 }
 
 static gboolean

@@ -78,7 +78,6 @@ guint signal_ratio;
 
 GStaticRecMutex rmutex;
 
-static gdouble prev_ratio;
 static Shell *instance = NULL;
 
 static void selector_changed_cb (GtkTreeSelection *selection, Shell *self);
@@ -245,7 +244,6 @@ shell_init (Shell *self)
     self->priv->builder = gtk_builder_new ();
 
     self->priv->playlist = playlist_new ();
-    self->priv->tray = tray_new ();
 
     // Load objects from main.ui
     gtk_builder_add_from_file (self->priv->builder, SHARE_DIR "/ui/main.ui", NULL);
@@ -299,11 +297,6 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->tb_pause, "clicked", G_CALLBACK (pause_cb), self);
     g_signal_connect (self->priv->tb_play, "clicked", G_CALLBACK (play_cb), self);
 
-    g_signal_connect (self->priv->tray, "play", G_CALLBACK (play_cb), self);
-    g_signal_connect (self->priv->tray, "pause", G_CALLBACK (pause_cb), self);
-    g_signal_connect (self->priv->tray, "next", G_CALLBACK (next_cb), self);
-    g_signal_connect (self->priv->tray, "previous", G_CALLBACK (prev_cb), self);
-
     self->priv->visible = TRUE;
     gtk_widget_show (self->priv->window);
 
@@ -318,6 +311,7 @@ shell_init (Shell *self)
 
     self->priv->player = player_new (self);
     self->priv->tag_reader = tag_reader_new (self);
+    self->priv->tray = tray_new (self);
     self->priv->mini_pane = mini_pane_new ();
 
     g_signal_connect (self->priv->player, "play", G_CALLBACK (play_cb), self);
@@ -329,6 +323,11 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->player, "pos-changed", G_CALLBACK (on_player_ratio), self);
     g_signal_connect (self->priv->player, "state-changed", G_CALLBACK (on_player_state_changed), self);
     g_signal_connect (self->priv->player, "eos", G_CALLBACK (on_player_eos), self);
+
+    g_signal_connect (self->priv->tray, "play", G_CALLBACK (play_cb), self);
+    g_signal_connect (self->priv->tray, "pause", G_CALLBACK (pause_cb), self);
+    g_signal_connect (self->priv->tray, "next", G_CALLBACK (next_cb), self);
+    g_signal_connect (self->priv->tray, "previous", G_CALLBACK (prev_cb), self);
 }
 
 Shell*
@@ -702,7 +701,6 @@ main (int argc, char *argv[])
     Shell *shell = shell_new ();
 
     playlist_activate (shell->priv->playlist);
-    tray_activate (shell->priv->tray);
 
     mini_pane_activate (MINI_PANE (shell->priv->mini_pane));
 

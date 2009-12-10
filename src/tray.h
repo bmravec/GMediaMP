@@ -22,7 +22,8 @@
 #ifndef __TRAY_H__
 #define __TRAY_H__
 
-#include <gtk/gtkstatusicon.h>
+#include <glib-object.h>
+#include "shell.h"
 
 #define TRAY_TYPE (tray_get_type ())
 #define TRAY(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), TRAY_TYPE, Tray))
@@ -47,7 +48,7 @@ struct _TrayClass {
     GObjectClass parent;
 };
 
-Tray *tray_new ();
+Tray *tray_new (Shell *shell);
 GType tray_get_type (void);
 
 void tray_set_type (Tray *self, gint state);
