@@ -23,6 +23,7 @@
 #define __PLAYLIST_H__
 
 #include <glib-object.h>
+#include "shell.h"
 
 #define PLAYLIST_TYPE (playlist_get_type ())
 #define PLAYLIST(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), PLAYLIST_TYPE, Playlist))
@@ -30,12 +31,6 @@
 #define IS_PLAYLIST(object) (G_TYPE_CHECK_INSTANCE_TYPE ((object), PLAYLIST_TYPE))
 #define IS_PLAYLIST_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), PLAYLIST_TYPE))
 #define PLAYLIST_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), PLAYLIST_TYPE, PlaylistClass))
-
-enum {
-    PLAYLIST_STATE_NONE = 0,
-    PLAYLIST_STATE_PLAYING,
-    PLAYLIST_STATE_MISSING
-};
 
 G_BEGIN_DECLS
 
@@ -53,11 +48,8 @@ struct _PlaylistClass {
     GObjectClass parent;
 };
 
-Playlist *playlist_new ();
+Playlist *playlist_new (Shell *shell);
 GType playlist_get_type (void);
-
-gboolean playlist_activate (Playlist *self);
-gboolean playlist_deactivate (Playlist *self);
 
 G_END_DECLS
 

@@ -209,7 +209,8 @@ num_column_func (GtkTreeViewColumn *column,
 }
 
 Browser*
-browser_new (gchar *media_type,
+browser_new (Shell *shell,
+             gchar *media_type,
              gint mtype,
              gchar *p1_tag,
              gchar *p2_tag,
@@ -232,7 +233,7 @@ browser_new (gchar *media_type,
         self->priv->p2_tag = g_ascii_strdown (p2_tag, -1);
     }
 
-    self->priv->shell = shell_new ();
+    self->priv->shell = g_object_ref (shell);
     self->priv->db = gmediadb_new (media_type);
 
     GtkBuilder *builder = shell_get_builder (self->priv->shell);

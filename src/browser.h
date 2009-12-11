@@ -24,6 +24,7 @@
 
 #include <glib-object.h>
 
+#include "shell.h"
 #include "entry.h"
 
 #define BROWSER_TYPE (browser_get_type ())
@@ -51,7 +52,8 @@ struct _BrowserClass {
     GObjectClass parent;
 };
 
-Browser *browser_new (gchar *media_type,
+Browser *browser_new (Shell *shell,
+                      gchar *media_type,
                       gint mtype,
                       gchar *p1_tag,
                       gchar *p2_tag,

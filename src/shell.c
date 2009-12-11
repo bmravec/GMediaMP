@@ -78,8 +78,6 @@ guint signal_ratio;
 
 GStaticRecMutex rmutex;
 
-static Shell *instance = NULL;
-
 static void selector_changed_cb (GtkTreeSelection *selection, Shell *self);
 static void import_file_cb (GtkMenuItem *item, Shell *self);
 static void import_dir_cb (GtkMenuItem *item, Shell *self);
@@ -243,8 +241,6 @@ shell_init (Shell *self)
 
     self->priv->builder = gtk_builder_new ();
 
-    self->priv->playlist = playlist_new ();
-
     // Load objects from main.ui
     gtk_builder_add_from_file (self->priv->builder, SHARE_DIR "/ui/main.ui", NULL);
     self->priv->window = GTK_WIDGET (gtk_builder_get_object (self->priv->builder, "main_win"));
@@ -308,11 +304,18 @@ shell_init (Shell *self)
 
     self->priv->playing_source = NULL;
     self->priv->playing_entry = NULL;
+}
+
+Shell*
+shell_new ()
+{
+    Shell *self = g_object_new (SHELL_TYPE, NULL);
 
     self->priv->player = player_new (self);
     self->priv->tag_reader = tag_reader_new (self);
     self->priv->tray = tray_new (self);
     self->priv->mini_pane = mini_pane_new (self);
+    self->priv->playlist = playlist_new (self);
 
     g_signal_connect (self->priv->player, "play", G_CALLBACK (play_cb), self);
     g_signal_connect (self->priv->player, "pause", G_CALLBACK (pause_cb), self);
@@ -328,16 +331,8 @@ shell_init (Shell *self)
     g_signal_connect (self->priv->tray, "pause", G_CALLBACK (pause_cb), self);
     g_signal_connect (self->priv->tray, "next", G_CALLBACK (next_cb), self);
     g_signal_connect (self->priv->tray, "previous", G_CALLBACK (prev_cb), self);
-}
 
-Shell*
-shell_new ()
-{
-    if (!instance) {
-        instance = g_object_new (SHELL_TYPE, NULL);
-    }
-
-    return instance;
+    return self;
 }
 
 gboolean
@@ -700,11 +695,9 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
-    playlist_activate (shell->priv->playlist);
-
     shell_add_widget (shell, gtk_label_new ("Library"), "Library", NULL);
 
-    shell->priv->music = browser_new ("Music", MEDIA_SONG, "Artist", "Album", FALSE,
+    shell->priv->music = browser_new (shell, "Music", MEDIA_SONG, "Artist", "Album", FALSE,
         (BrowserCompareFunc) music_entry_cmp,
         "Track", "tracknumber", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
@@ -715,7 +708,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->music), "Library/Music", NULL);
 
-    shell->priv->movies = browser_new ("Movies", MEDIA_MOVIE, NULL, NULL, FALSE,
+    shell->priv->movies = browser_new (shell, "Movies", MEDIA_MOVIE, NULL, NULL, FALSE,
         (BrowserCompareFunc) movie_entry_cmp,
         "Title", "title", TRUE, str_column_func,
         "Duration", "duration", FALSE, time_column_func,
@@ -723,7 +716,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->movies), "Library/Movies", NULL);
 
-    shell->priv->music_videos = browser_new ("MusicVideos", MEDIA_MUSIC_VIDEO, "Artist", NULL, FALSE,
+    shell->priv->music_videos = browser_new (shell, "MusicVideos", MEDIA_MUSIC_VIDEO, "Artist", NULL, FALSE,
         (BrowserCompareFunc) music_video_entry_cmp,
         "Title", "title", TRUE, str_column_func,
         "Artist", "artist", TRUE, str_column_func,
@@ -732,7 +725,7 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, browser_get_widget (shell->priv->music_videos), "Library/Music Videos", NULL);
 
-    shell->priv->shows = browser_new ("TVShows", MEDIA_TVSHOW, "Show", "Season", TRUE,
+    shell->priv->shows = browser_new (shell, "TVShows", MEDIA_TVSHOW, "Show", "Season", TRUE,
         (BrowserCompareFunc) tvshow_entry_cmp,
         "Track", "tracknumber", FALSE, int_column_func,
         "Title", "title", TRUE, str_column_func,
@@ -825,19 +818,31 @@ shell_import_thread_rec (Shell *self, const gchar *path)
     }
 }
 
+struct SIData {
+    Shell *shell;
+    gchar *path;
+};
+
 static gpointer
-shell_import_thread (gchar *path)
+shell_import_thread (struct SIData *d)
 {
-    shell_import_thread_rec (shell_new (), path);
-    g_free (path);
+    shell_import_thread_rec (d->shell, d->path);
+
+    g_object_unref (d->shell);
+    g_free (d->path);
+    g_free (d);
 }
 
 gboolean
 shell_import_path (Shell *self, const gchar *path)
 {
 //    g_print ("IMPORTING: %s\n", path);
+    struct SIData *d = g_new0 (struct SIData, 1);
 
-    g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) g_strdup (path), FALSE, NULL);
+    d->shell = g_object_ref (self);
+    d->path = g_strdup (path);
+
+    g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) d, FALSE, NULL);
 }
 
 static void

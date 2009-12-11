@@ -38,12 +38,15 @@ struct _PlaylistPrivate {
     GtkListStore *store;
 };
 
-static guint signal_changed;
-
 static void
 playlist_finalize (GObject *object)
 {
     Playlist *self = PLAYLIST (object);
+
+    if (self->priv->shell) {
+        g_object_unref (self->priv->shell);
+        self->priv->shell = NULL;
+    }
 
     G_OBJECT_CLASS (playlist_parent_class)->finalize (object);
 }
@@ -57,10 +60,6 @@ playlist_class_init (PlaylistClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (PlaylistPrivate));
 
     object_class->finalize = playlist_finalize;
-
-    signal_changed = g_signal_new ("playlist-changed", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
-        G_TYPE_NONE, 0);
 }
 
 static void
@@ -93,23 +92,15 @@ playlist_init (Playlist *self)
 }
 
 Playlist*
-playlist_new ()
+playlist_new (Shell *shell)
 {
-    return g_object_new (PLAYLIST_TYPE, NULL);
-}
+    Playlist *self = g_object_new (PLAYLIST_TYPE, NULL);
 
-gboolean
-playlist_activate (Playlist *self)
-{
-    self->priv->shell = shell_new ();
+    self->priv->shell = g_object_ref (shell);
 
     shell_add_widget (self->priv->shell, self->priv->widget, "Playlists", NULL);
 
     gtk_widget_show_all (self->priv->widget);
-}
 
-gboolean
-playlist_deactivate (Playlist *self)
-{
-
+    return self;
 }
