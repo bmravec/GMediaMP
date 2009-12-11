@@ -23,6 +23,7 @@
 #define __MINI_PANE_H__
 
 #include <gtk/gtkdrawingarea.h>
+#include "shell.h"
 
 #define MINI_PANE_TYPE (mini_pane_get_type ())
 #define MINI_PANE(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), MINI_PANE_TYPE, MiniPane))
@@ -47,11 +48,8 @@ struct _MiniPaneClass {
     GtkDrawingAreaClass parent;
 };
 
-GtkWidget *mini_pane_new ();
+GtkWidget *mini_pane_new (Shell *shell);
 GType mini_pane_get_type (void);
-
-gboolean mini_pane_activate (MiniPane *self);
-gboolean mini_pane_deactivate (MiniPane *self);
 
 G_END_DECLS
 

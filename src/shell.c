@@ -312,7 +312,7 @@ shell_init (Shell *self)
     self->priv->player = player_new (self);
     self->priv->tag_reader = tag_reader_new (self);
     self->priv->tray = tray_new (self);
-    self->priv->mini_pane = mini_pane_new ();
+    self->priv->mini_pane = mini_pane_new (self);
 
     g_signal_connect (self->priv->player, "play", G_CALLBACK (play_cb), self);
     g_signal_connect (self->priv->player, "pause", G_CALLBACK (pause_cb), self);
@@ -701,8 +701,6 @@ main (int argc, char *argv[])
     Shell *shell = shell_new ();
 
     playlist_activate (shell->priv->playlist);
-
-    mini_pane_activate (MINI_PANE (shell->priv->mini_pane));
 
     shell_add_widget (shell, gtk_label_new ("Library"), "Library", NULL);
 

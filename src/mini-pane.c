@@ -38,17 +38,20 @@ struct _MiniPanePrivate {
     gint img_width, img_height;
 };
 
-static void on_size_allocate (GtkWidget *widget, GtkAllocation *alloc, MiniPane *self);
-static void on_size_requisition (GtkWidget *widget, GtkRequisition *req, MiniPane *self);
-static void on_player_state (Player *player, gint state, MiniPane *self);
-static gboolean on_expose (GtkWidget *widget, GdkEventExpose *event, MiniPane *self);
-
-static guint signal_changed;
+static void on_size_allocate (MiniPane *self, GtkAllocation *alloc, GtkWidget *widget);
+static void on_size_requisition (MiniPane *self, GtkRequisition *req, GtkWidget *widget);
+static void on_player_state (MiniPane *self, gint state, Player *player);
+static gboolean on_expose (MiniPane *self, GdkEventExpose *event, GtkWidget *widget);
 
 static void
 mini_pane_finalize (GObject *object)
 {
     MiniPane *self = MINI_PANE (object);
+
+    if (self->priv->shell) {
+        g_object_unref (self->priv->shell);
+        self->priv->shell = NULL;
+    }
 
     G_OBJECT_CLASS (mini_pane_parent_class)->finalize (object);
 }
@@ -62,10 +65,6 @@ mini_pane_class_init (MiniPaneClass *klass)
     g_type_class_add_private ((gpointer) klass, sizeof (MiniPanePrivate));
 
     object_class->finalize = mini_pane_finalize;
-
-    signal_changed = g_signal_new ("mini_pane-changed", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
-        G_TYPE_NONE, 0);
 }
 
 static void
@@ -73,37 +72,34 @@ mini_pane_init (MiniPane *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), MINI_PANE_TYPE, MiniPanePrivate);
 
-    self->priv->width = -1;
+    self->priv->shell = NULL;
+
+    self->priv->img_width = self->priv->img_height = self->priv->width = -1;
+
+    self->priv->img = NULL;
+    self->priv->art_file = NULL;
 }
 
 GtkWidget*
-mini_pane_new ()
+mini_pane_new (Shell *shell)
 {
-    return g_object_new (MINI_PANE_TYPE, NULL);
-}
+    MiniPane *self = g_object_new (MINI_PANE_TYPE, NULL);
 
-gboolean
-mini_pane_activate (MiniPane *self)
-{
-    self->priv->shell = shell_new ();
+    self->priv->shell = g_object_ref (shell);
 
-    g_signal_connect (self, "size-allocate", G_CALLBACK (on_size_allocate), self);
-    g_signal_connect (self, "size-request", G_CALLBACK (on_size_requisition), self);
-    g_signal_connect (self, "expose-event", G_CALLBACK (on_expose), self);
+    g_signal_connect_swapped (self, "size-allocate", G_CALLBACK (on_size_allocate), self);
+    g_signal_connect_swapped (self, "size-request", G_CALLBACK (on_size_requisition), self);
+    g_signal_connect_swapped (self, "expose-event", G_CALLBACK (on_expose), self);
 
     Player *p = shell_get_player (self->priv->shell);
 
-    g_signal_connect (p, "state-changed", G_CALLBACK (on_player_state), self);
-}
+    g_signal_connect_swapped (p, "state-changed", G_CALLBACK (on_player_state), self);
 
-gboolean
-mini_pane_deactivate (MiniPane *self)
-{
-
+    return self;
 }
 
 static void
-on_size_allocate (GtkWidget *widget, GtkAllocation *alloc, MiniPane *self)
+on_size_allocate (MiniPane *self, GtkAllocation *alloc, GtkWidget *widget)
 {
 //    g_print ("Size Allocate (%d,%d)\n", alloc->width, alloc->height);
 
@@ -128,7 +124,7 @@ on_size_allocate (GtkWidget *widget, GtkAllocation *alloc, MiniPane *self)
 }
 
 static void
-on_size_requisition (GtkWidget *widget, GtkRequisition *req, MiniPane *self)
+on_size_requisition (MiniPane *self, GtkRequisition *req, GtkWidget *widget)
 {
 //    g_print ("Size Requisition (%d,%d)\n", req->width, req->height);
 
@@ -140,7 +136,7 @@ on_size_requisition (GtkWidget *widget, GtkRequisition *req, MiniPane *self)
 }
 
 static void
-on_player_state (Player *player, gint state, MiniPane *self)
+on_player_state (MiniPane *self, gint state, Player *player)
 {
     if (state == PLAYER_STATE_PLAYING && self->priv->img == NULL) {
         Entry *e = player_get_entry (player);
@@ -174,7 +170,7 @@ on_player_state (Player *player, gint state, MiniPane *self)
 }
 
 static gboolean
-on_expose (GtkWidget *widget, GdkEventExpose *event, MiniPane *self)
+on_expose (MiniPane *self, GdkEventExpose *event, GtkWidget *widget)
 {
     if (self->priv->img) {
         gdk_draw_pixbuf (widget->window, widget->style->fg_gc[GTK_WIDGET_STATE (widget)],
