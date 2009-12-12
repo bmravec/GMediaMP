@@ -56,29 +56,8 @@ typedef struct {
     gboolean mute;
 } StreamData;
 
-PlayerGst *player_gst_new (Shell *shell);
+Player *player_gst_new (Shell *shell);
 GType player_gst_get_type (void);
-
-void player_gst_load (PlayerGst *self, Entry *entry);
-void player_gst_close (PlayerGst *self);
-
-Entry *player_gst_get_entry (PlayerGst *self);
-
-void player_gst_play (PlayerGst *self);
-void player_gst_pause (PlayerGst *self);
-void player_gst_stop (PlayerGst *self);
-guint player_gst_get_state (PlayerGst *self);
-
-guint player_gst_get_duration (PlayerGst *self);
-guint player_gst_get_position (PlayerGst *self);
-void player_gst_set_position (PlayerGst *self, guint pos);
-
-gdouble player_gst_get_volume (PlayerGst *self);
-void player_gst_set_volume (PlayerGst *self, gdouble vol);
-
-StreamData *player_gst_get_audio_streams (PlayerGst *self);
-StreamData *player_gst_get_video_streams (PlayerGst *self);
-StreamData *player_gst_get_subtitle_streams (PlayerGst *self);
 
 G_END_DECLS
 

@@ -51,28 +51,8 @@ struct _PlayerAVClass {
     GObjectClass parent;
 };
 
-PlayerAV *player_av_new (Shell *shell);
+Player *player_av_new (Shell *shell);
 GType player_av_get_type (void);
-
-void player_av_load (PlayerAV *self, Entry *entry);
-void player_av_close (PlayerAV *self);
-
-Entry *player_av_get_entry (PlayerAV *self);
-
-void player_av_play (PlayerAV *self);
-void player_av_pause (PlayerAV *self);
-void player_av_stop (PlayerAV *self);
-guint player_av_get_state (PlayerAV *self);
-
-guint player_av_get_duration (PlayerAV *self);
-guint player_av_get_position (PlayerAV *self);
-void player_av_set_position (PlayerAV *self, guint pos);
-
-gdouble player_av_get_volume (PlayerAV *self);
-void player_av_set_volume (PlayerAV *self, gdouble vol);
-
-void player_av_set_video_destination (PlayerAV *self, GtkWidget *dest);
-GtkWidget *player_av_get_video_destination (PlayerAV *self);
 
 G_END_DECLS
 

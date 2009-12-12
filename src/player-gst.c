@@ -67,19 +67,33 @@ struct _PlayerGstPrivate {
     GtkWidget *fs_hbox;
 };
 
+// Player interface methods
+static void player_gst_load (Player *self, Entry *entry);
+static void player_gst_close (Player *self);
+static Entry *player_gst_get_entry (Player *self);
+static void player_gst_play (Player *self);
+static void player_gst_pause (Player *self);
+static void player_gst_stop (Player *self);
+static guint player_gst_get_state (Player *self);
+static guint player_gst_get_duration (Player *self);
+static guint player_gst_get_position (Player *self);
+static void player_gst_set_position (Player *self, guint pos);
+static gdouble player_gst_get_volume (Player *self);
+static void player_gst_set_volume (Player *self, gdouble vol);
+
+// Internal methods to PlayerGst
 static gboolean position_update (PlayerGst *self);
 static gboolean player_gst_button_press (GtkWidget *da, GdkEventButton *event, PlayerGst *self);
 static void player_gst_set_state (PlayerGst *self, guint state);
 static gboolean player_gst_bus_call (GstBus *bus, GstMessage *msg, PlayerGst *self);
 static gboolean on_window_state (GtkWidget *widget, GdkEventWindowState *event, PlayerGst *self);
 static gboolean handle_expose_cb (GtkWidget *widget, GdkEventExpose *event, PlayerGst *self);
-
 static void on_control_prev (GtkWidget *widget, PlayerGst *self);
 static void on_control_play (GtkWidget *widget, PlayerGst *self);
 static void on_control_pause (GtkWidget *widget, PlayerGst *self);
 static void on_control_next (GtkWidget *widget, PlayerGst *self);
-
 static gboolean on_pos_change_value (GtkWidget *range, GtkScrollType scroll, gdouble value, PlayerGst *self);
+static void on_vol_changed (GtkWidget *widget, gdouble val, PlayerGst *self);
 
 static void
 player_gst_finalize (GObject *object)
@@ -120,7 +134,7 @@ player_gst_class_init (PlayerGstClass *klass)
     object_class->finalize = player_gst_finalize;
 
     gint argc = 0;
-    gchar *argv[] = NULL;
+    gchar **argv = NULL;
     gst_init (&argc, &argv);
 }
 
@@ -137,7 +151,7 @@ player_gst_init (PlayerGst *self)
     self->priv->monitor = 0;
 }
 
-PlayerGst*
+Player*
 player_gst_new (Shell *shell)
 {
     PlayerGst *self = g_object_new (PLAYER_GST_TYPE, NULL);
@@ -199,14 +213,14 @@ player_gst_new (Shell *shell)
 
     gtk_widget_show_all (self->priv->em_da);
 
-    return g_object_new (PLAYER_GST_TYPE, NULL);
+    return PLAYER (self);
 }
 
 static gboolean
 position_update (PlayerGst *self)
 {
-    guint len = player_gst_get_duration (self);
-    guint pos = player_gst_get_position (self);
+    guint len = player_gst_get_duration (PLAYER (self));
+    guint pos = player_gst_get_position (PLAYER (self));
 
     switch (self->priv->state) {
         case PLAYER_STATE_PLAYING:
@@ -235,10 +249,10 @@ player_gst_set_state (PlayerGst *self, guint state)
     _player_emit_state_changed (PLAYER (self), state);
 }
 
-Entry*
-player_gst_get_entry (PlayerGst *self)
+static Entry*
+player_gst_get_entry (Player *self)
 {
-    return self->priv->entry;
+    return PLAYER_GST (self)->priv->entry;
 }
 
 static GstBusSyncReply
@@ -267,19 +281,19 @@ player_gst_bus_call(GstBus *bus, GstMessage *msg, PlayerGst *self)
 
     switch (GST_MESSAGE_TYPE (msg)) {
         case GST_MESSAGE_EOS:
-            player_gst_stop (self);
+            player_gst_stop (PLAYER (self));
 
             _player_emit_eos (PLAYER (self));
             break;
         case GST_MESSAGE_ERROR:
-            player_gst_stop (self);
+            player_gst_stop (PLAYER (self));
             gst_message_parse_error (msg, &err, &debug);
             g_free (debug);
 
             g_print ("Error: %s\n", err->message);
             g_error_free (err);
 
-            player_gst_close (self);
+            player_gst_close (PLAYER (self));
             break;
         case GST_MESSAGE_TAG:
             gst_message_parse_tag (msg,&taglist);
@@ -301,67 +315,71 @@ player_gst_bus_call(GstBus *bus, GstMessage *msg, PlayerGst *self)
     return TRUE;
 }
 
-void
-player_gst_load (PlayerGst *self, Entry *entry)
+static void
+player_gst_load (Player *self, Entry *entry)
 {
-    if (self->priv->pipeline)
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
+
+    if (priv->pipeline)
         player_gst_close (self);
 
-    if (self->priv->entry) {
-        g_object_unref (self->priv->entry);
-        self->priv->entry = NULL;
+    if (priv->entry) {
+        g_object_unref (priv->entry);
+        priv->entry = NULL;
     }
 
-    self->priv->entry = entry;
+    priv->entry = entry;
     g_object_ref (entry);
 
-    self->priv->pipeline = gst_element_factory_make ("playbin", NULL);
-    self->priv->vsink = gst_element_factory_make ("xvimagesink", NULL);
+    priv->pipeline = gst_element_factory_make ("playbin", NULL);
+    priv->vsink = gst_element_factory_make ("xvimagesink", NULL);
 
-    g_object_set (self->priv->vsink, "force-aspect-ratio", TRUE, NULL);
+    g_object_set (priv->vsink, "force-aspect-ratio", TRUE, NULL);
 
     gchar *ruri = g_strdup_printf ("file://%s", entry_get_tag_str (entry, "location"));
-    g_object_set (G_OBJECT (self->priv->pipeline),
-        "video-sink", self->priv->vsink,
+    g_object_set (G_OBJECT (priv->pipeline),
+        "video-sink", priv->vsink,
         "uri", ruri,
-        "volume", self->priv->volume,
+        "volume", priv->volume,
         "subtitle-font-desc", "Sans 32",
         NULL);
     g_free (ruri);
 
-    gst_object_ref (self->priv->pipeline);
+    gst_object_ref (priv->pipeline);
 
-    GstBus *bus = gst_pipeline_get_bus (GST_PIPELINE (self->priv->pipeline));
+    GstBus *bus = gst_pipeline_get_bus (GST_PIPELINE (priv->pipeline));
     gst_bus_add_watch (bus, (GstBusFunc) player_gst_bus_call, self);
     gst_bus_set_sync_handler (bus, (GstBusSyncHandler) bus_sync_handler, self);
     gst_object_unref (bus);
 
-    self->priv->songtags = gst_tag_list_new ();
+    priv->songtags = gst_tag_list_new ();
 }
 
-void
-player_gst_close (PlayerGst *self)
+static void
+player_gst_close (Player *self)
 {
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
+
     player_gst_stop (self);
 
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
-        gst_object_unref (GST_OBJECT (self->priv->pipeline));
-        self->priv->pipeline = NULL;
+    if (priv->pipeline) {
+        gst_element_set_state (priv->pipeline, GST_STATE_NULL);
+        gst_object_unref (GST_OBJECT (priv->pipeline));
+        priv->pipeline = NULL;
     }
 
-    if (self->priv->songtags) {
-        gst_tag_list_free (self->priv->songtags);
-        self->priv->songtags = NULL;
+    if (priv->songtags) {
+        gst_tag_list_free (priv->songtags);
+        priv->songtags = NULL;
     }
 
-    if (self->priv->entry) {
-        if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
-            entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
+    if (priv->entry) {
+        if (entry_get_state (priv->entry) != ENTRY_STATE_MISSING) {
+            entry_set_state (priv->entry, ENTRY_STATE_NONE);
         }
 
-        g_object_unref (self->priv->entry);
-        self->priv->entry = NULL;
+        g_object_unref (priv->entry);
+        priv->entry = NULL;
     }
 }
 
@@ -379,49 +397,51 @@ insert_stream_data (StreamData *sd, gint index, const gchar *lang)
     }
 }
 
-void
-player_gst_play (PlayerGst *self)
+static void
+player_gst_play (Player *self)
 {
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
-        player_gst_set_state (self, PLAYER_STATE_PLAYING);
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
 
-        entry_set_state (self->priv->entry, ENTRY_STATE_PLAYING);
+    if (priv->pipeline) {
+        gst_element_set_state (priv->pipeline, GST_STATE_PLAYING);
+        player_gst_set_state (PLAYER_GST (self), PLAYER_STATE_PLAYING);
+
+        entry_set_state (priv->entry, ENTRY_STATE_PLAYING);
 
         g_timeout_add (1000, (GSourceFunc) position_update, self);
 
-        gst_element_get_state (self->priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+        gst_element_get_state (priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
 
-        if (self->priv->as) {
-            g_free (self->priv->as);
-            self->priv->as = NULL;
+        if (priv->as) {
+            g_free (priv->as);
+            priv->as = NULL;
         }
 
-        if (self->priv->vs) {
-            g_free (self->priv->vs);
-            self->priv->vs = NULL;
+        if (priv->vs) {
+            g_free (priv->vs);
+            priv->vs = NULL;
         }
 
-        if (self->priv->ss) {
-            g_free (self->priv->ss);
-            self->priv->ss = NULL;
+        if (priv->ss) {
+            g_free (priv->ss);
+            priv->ss = NULL;
         }
 
         gint num, i;
 
         GList *si, *iter;
-        g_object_get (self->priv->pipeline,
+        g_object_get (priv->pipeline,
                       "stream-info", &si,
                       "nstreams", &num, NULL);
 
-        self->priv->as = g_new0 (StreamData, num);
-        self->priv->vs = g_new0 (StreamData, num);
-        self->priv->ss = g_new0 (StreamData, num);
+        priv->as = g_new0 (StreamData, num);
+        priv->vs = g_new0 (StreamData, num);
+        priv->ss = g_new0 (StreamData, num);
 
         for (i = 0; i < num; i++) {
-            self->priv->as[i].index = -1;
-            self->priv->vs[i].index = -1;
-            self->priv->ss[i].index = -1;
+            priv->as[i].index = -1;
+            priv->vs[i].index = -1;
+            priv->ss[i].index = -1;
         }
 
         for (i = 0;si; si = si->next, i++) {
@@ -434,104 +454,96 @@ player_gst_play (PlayerGst *self)
 
             switch (stype) {
                 case 1:
-                    insert_stream_data (self->priv->as, i, lang);
+                    insert_stream_data (priv->as, i, lang);
                     break;
                 case 2:
-                    insert_stream_data (self->priv->vs, i, lang);
+                    insert_stream_data (priv->vs, i, lang);
                     break;
                 case 3:
-                    insert_stream_data (self->priv->ss, i, lang);
+                    insert_stream_data (priv->ss, i, lang);
                     break;
             };
         }
     }
 }
 
-void
-player_gst_pause (PlayerGst *self)
+static void
+player_gst_pause (Player *self)
 {
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_PAUSED);
-        player_gst_set_state (self, PLAYER_STATE_PAUSED);
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
 
-        entry_set_state (self->priv->entry, ENTRY_STATE_PAUSED);
+    if (priv->pipeline) {
+        gst_element_set_state (priv->pipeline, GST_STATE_PAUSED);
+        player_gst_set_state (PLAYER_GST (self), PLAYER_STATE_PAUSED);
+
+        entry_set_state (priv->entry, ENTRY_STATE_PAUSED);
     }
 }
 
-void
-player_gst_stop (PlayerGst *self)
+static void
+player_gst_stop (Player *self)
 {
-    if (self->priv->pipeline) {
-        gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
-        player_gst_set_state (self, PLAYER_STATE_STOPPED);
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
 
-        if (entry_get_state (self->priv->entry) != ENTRY_STATE_MISSING) {
-            entry_set_state (self->priv->entry, ENTRY_STATE_NONE);
+    if (priv->pipeline) {
+        gst_element_set_state (priv->pipeline, GST_STATE_NULL);
+        player_gst_set_state (PLAYER_GST (self), PLAYER_STATE_STOPPED);
+
+        if (entry_get_state (priv->entry) != ENTRY_STATE_MISSING) {
+            entry_set_state (priv->entry, ENTRY_STATE_NONE);
         }
     }
 
     _player_emit_position_changed (PLAYER (self), 0);
 }
 
-StreamData*
-player_gst_get_audio_streams (PlayerGst *self)
+static guint
+player_gst_get_state (Player *self)
 {
-    return self->priv->as;
+    return PLAYER_GST (self)->priv->state;
 }
 
-StreamData*
-player_gst_get_video_streams (PlayerGst *self)
+static guint
+player_gst_get_duration (Player *self)
 {
-    return self->priv->vs;
-}
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
 
-StreamData*
-player_gst_get_subtitle_streams (PlayerGst *self)
-{
-    return self->priv->ss;
-}
-
-guint
-player_gst_get_state (PlayerGst *self)
-{
-    return self->priv->state;
-}
-
-guint
-player_gst_get_duration (PlayerGst *self)
-{
-    if (self->priv->pipeline) {
+    if (priv->pipeline) {
         GstFormat fmt = GST_FORMAT_TIME;
         gint64 len;
-        gst_element_query_duration (self->priv->pipeline, &fmt, &len);
+        gst_element_query_duration (priv->pipeline, &fmt, &len);
         return GST_TIME_AS_SECONDS (len);
     } else {
         return 0;
     }
 }
 
-guint
-player_gst_get_position (PlayerGst *self)
+static guint
+player_gst_get_position (Player *self)
 {
-    if (self->priv->pipeline) {
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
+
+    if (priv->pipeline) {
         GstFormat fmt = GST_FORMAT_TIME;
         gint64 pos;
-        gst_element_query_position (self->priv->pipeline, &fmt, &pos);
+        gst_element_query_position (priv->pipeline, &fmt, &pos);
         return GST_TIME_AS_SECONDS (pos);
     } else {
         return 0;
     }
 }
 
-void
-player_gst_set_position (PlayerGst *self, guint pos)
+static void
+player_gst_set_position (Player *self, guint pos)
 {
-    if (!self->priv->pipeline) {
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
+
+    if (!priv->pipeline) {
         _player_emit_position_changed (PLAYER (self), 0);
         return;
     }
 
-    gst_element_seek_simple (self->priv->pipeline, GST_FORMAT_TIME,
+    gst_element_seek_simple (priv->pipeline, GST_FORMAT_TIME,
         GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT, GST_SECOND * pos);
 
     guint new_pos = player_gst_get_position (self);
@@ -539,35 +551,37 @@ player_gst_set_position (PlayerGst *self, guint pos)
     _player_emit_position_changed (PLAYER (self), new_pos);
 }
 
-gdouble
-player_gst_get_volume (PlayerGst *self)
+static gdouble
+player_gst_get_volume (Player *self)
 {
-    return self->priv->volume;
+    return PLAYER_GST (self)->priv->volume;
 }
 
-void
-player_gst_set_volume (PlayerGst *self, gdouble vol)
+static void
+player_gst_set_volume (Player *self, gdouble vol)
 {
-    if (self->priv->volume != vol) {
+    PlayerGstPrivate *priv = PLAYER_GST (self)->priv;
+
+    if (priv->volume != vol) {
         if (vol > 1.0) vol = 1.0;
         if (vol < 0.0) vol = 0.0;
 
-        self->priv->volume = vol;
+        priv->volume = vol;
 
-        if (self->priv->pipeline) {
-            g_object_set (self->priv->pipeline, "volume", vol, NULL);
+        if (priv->pipeline) {
+            g_object_set (priv->pipeline, "volume", vol, NULL);
         }
 
-        gtk_scale_button_set_value (GTK_SCALE_BUTTON (self->priv->fs_vol), self->priv->volume);
+        gtk_scale_button_set_value (GTK_SCALE_BUTTON (priv->fs_vol), priv->volume);
 
-        _player_emit_volume_changed (PLAYER (self), self->priv->volume);
+        _player_emit_volume_changed (self, priv->volume);
     }
 }
 
 static void
 on_vol_changed (GtkWidget *widget, gdouble val, PlayerGst *self)
 {
-    player_gst_set_volume (self, val);
+    player_gst_set_volume (PLAYER (self), val);
 }
 
 static void
@@ -601,7 +615,7 @@ toggle_fullscreen (GtkWidget *item, PlayerGst *self)
         self->priv->monitor = num-1;
     }
 
-    self->priv->t_pos = player_gst_get_position (self);
+    self->priv->t_pos = player_gst_get_position (PLAYER (self));
     gst_element_set_state (self->priv->pipeline, GST_STATE_NULL);
 
     if (!self->priv->fullscreen) {
@@ -624,7 +638,7 @@ on_window_state (GtkWidget *widget,
 {
     gst_element_set_state (self->priv->pipeline, GST_STATE_PLAYING);
     gst_element_get_state (self->priv->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
-    player_gst_set_position (self, self->priv->t_pos);
+    player_gst_set_position (PLAYER (self), self->priv->t_pos);
 }
 
 static gboolean
@@ -808,12 +822,12 @@ on_pos_change_value (GtkWidget *range,
                      gdouble value,
                      PlayerGst *self)
 {
-    gint len = player_gst_get_duration (self);
+    gint len = player_gst_get_duration (PLAYER (self));
 
     if (value > len) value = len;
     if (value < 0.0) value = 0.0;
 
-    player_gst_set_position (self,  value);
+    player_gst_set_position (PLAYER (self), value);
 
     return FALSE;
 }

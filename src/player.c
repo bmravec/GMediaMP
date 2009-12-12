@@ -335,11 +335,11 @@ player_new (Shell *shell)
     Player *self = NULL;
 
 #ifdef USE_PLAYER_AVCODEC
-    self = PLAYER (player_av_new (shell));
+    self = player_av_new (shell);
 #endif
 
 #ifdef USE_PLAYER_GSTREAMER
-    self = PLAYER (player_gst_new (shell));
+    self = player_gst_new (shell);
 #endif
 
     return self;
