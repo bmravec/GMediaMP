@@ -95,7 +95,7 @@ mini_pane_new (Shell *shell)
 
     g_signal_connect_swapped (p, "state-changed", G_CALLBACK (on_player_state), self);
 
-    return self;
+    return GTK_WIDGET (self);
 }
 
 static void

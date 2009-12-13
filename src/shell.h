@@ -69,7 +69,7 @@ gboolean shell_remove_progress (Shell *self, Progress *p);
 gboolean shell_register_track_source (Shell *self, TrackSource *ts);
 gboolean shell_register_media_store (Shell *self, MediaStore *ms);
 
-gboolean shell_import_path (Shell *self, const gchar *path);
+gboolean shell_import_path (Shell *self, const gchar *path, const gchar *media_type);
 
 struct _Player *shell_get_player (Shell *self);
 

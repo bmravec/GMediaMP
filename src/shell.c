@@ -744,6 +744,8 @@ main (int argc, char *argv[])
 
     shell_run (shell);
 
+    player_close (shell->priv->player);
+    g_object_unref (shell->priv->player);
     g_object_unref (shell->priv->music);
     g_object_unref (shell->priv->movies);
     g_object_unref (shell->priv->music_videos);
@@ -754,6 +756,7 @@ static void
 import_file_cb (GtkMenuItem *item, Shell *self)
 {
     GtkWidget *dialog;
+    GSList *fnames, *iter;
 
     dialog = gtk_file_chooser_dialog_new ("Import File",
                     GTK_WINDOW (self->priv->window),
@@ -761,12 +764,21 @@ import_file_cb (GtkMenuItem *item, Shell *self)
                     GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
                     "Import", GTK_RESPONSE_ACCEPT,
                     NULL);
+
+    gtk_file_chooser_set_select_multiple (GTK_FILE_CHOOSER (dialog), TRUE);
+
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT) {
         gchar *filename;
 
-        filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
+        fnames = gtk_file_chooser_get_filenames (GTK_FILE_CHOOSER (dialog));
+//        filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
 
-        shell_import_path (self, filename);
+        for (iter = fnames; iter; iter = iter->next) {
+            g_print ("URI: %s\n", iter->data);
+            shell_import_path (self, iter->data, "Music");
+        }
+
+//        shell_import_path (self, filename, "Music");
         g_free (filename);
     }
 
@@ -789,7 +801,7 @@ import_dir_cb (GtkMenuItem *item, Shell *self)
 
         filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
 
-        shell_import_path (self, filename);
+        shell_import_path (self, filename, "Music");
 
         g_free (filename);
     }
@@ -798,10 +810,10 @@ import_dir_cb (GtkMenuItem *item, Shell *self)
 }
 
 static void
-shell_import_thread_rec (Shell *self, const gchar *path)
+shell_import_thread_rec (Shell *self, const gchar *path, const gchar *mtype)
 {
     if (g_file_test (path, G_FILE_TEST_IS_REGULAR)) {
-        tag_reader_queue_entry (self->priv->tag_reader, path, "Music");
+        tag_reader_queue_entry (self->priv->tag_reader, path, mtype);
 //        g_print ("IMPORTING: %s\n", path);
     } else if (g_file_test (path, G_FILE_TEST_IS_DIR)) {
         GDir *dir = g_dir_open (path, 0, NULL);
@@ -810,7 +822,7 @@ shell_import_thread_rec (Shell *self, const gchar *path)
             gchar *new_path = g_strdup_printf ("%s/%s", path, entry);
 //            gchar *new_path = g_strjoin ("/", path, entry, NULL);
 //            import_recurse (new_path);
-            shell_import_thread_rec (self, new_path);
+            shell_import_thread_rec (self, new_path, mtype);
             g_free (new_path);
         }
 
@@ -821,26 +833,29 @@ shell_import_thread_rec (Shell *self, const gchar *path)
 struct SIData {
     Shell *shell;
     gchar *path;
+    gchar *mtype;
 };
 
 static gpointer
 shell_import_thread (struct SIData *d)
 {
-    shell_import_thread_rec (d->shell, d->path);
+    shell_import_thread_rec (d->shell, d->path, d->mtype);
 
     g_object_unref (d->shell);
     g_free (d->path);
+    g_free (d->mtype);
     g_free (d);
 }
 
 gboolean
-shell_import_path (Shell *self, const gchar *path)
+shell_import_path (Shell *self, const gchar *path, const gchar *mtype)
 {
 //    g_print ("IMPORTING: %s\n", path);
     struct SIData *d = g_new0 (struct SIData, 1);
 
     d->shell = g_object_ref (self);
     d->path = g_strdup (path);
+    d->mtype = g_strdup (mtype);
 
     g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) d, FALSE, NULL);
 }

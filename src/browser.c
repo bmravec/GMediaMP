@@ -107,6 +107,9 @@ static void on_info_cancel (GtkWidget *widget, Browser *self);
 static void browser_insert_entry (Browser *self, Entry *entry);
 static void browser_deinsert_entry (Browser *self, Entry *entry);
 
+static void browser_on_drop (Browser *self, GdkDragContext *drag_context, gint x,
+    gint y, GtkSelectionData *data, guint info, guint time, GtkWidget *widget);
+
 // Interface methods
 static Entry *browser_get_next (TrackSource *self);
 static Entry *browser_get_prev (TrackSource *self);
@@ -355,6 +358,11 @@ browser_new (Shell *shell,
 
     shell_register_track_source (self->priv->shell, TRACK_SOURCE (self));
     shell_register_media_store (self->priv->shell, MEDIA_STORE (self));
+
+    GtkTargetEntry te = { "text/uri-list", 0, 80 };
+    gtk_drag_dest_set (self->priv->widget, GTK_DEST_DEFAULT_ALL, &te, 1, GDK_ACTION_COPY);
+    g_signal_connect_swapped (self->priv->widget, "drag_data_received",
+        G_CALLBACK (browser_on_drop), self);
 
     gtk_widget_show_all (self->priv->widget);
 
@@ -1423,4 +1431,23 @@ on_info_completed (Browser *self, GPtrArray *changes, TagDialog *td)
     }
 
     g_free (entries);
+}
+
+static void
+browser_on_drop (Browser *self, GdkDragContext *drag_context, gint x,
+    gint y, GtkSelectionData *data, guint info, guint time, GtkWidget *widget)
+{
+    gchar **uris = g_strsplit (data->data, "\r\n", -1);
+
+    if (uris) {
+        gint i;
+        for (i = 0; uris[i]; i++) {
+            gchar *ustr = g_uri_unescape_string (uris[i]+7, "");
+            g_print ("INFO(%d) MTYPE(%s) URI(%s) UURI(%s)\n", info, self->priv->media_type, uris[i]+7, ustr);
+            shell_import_path (self->priv->shell, ustr, self->priv->media_type);
+            g_free (ustr);
+        }
+
+        g_strfreev (uris);
+    }
 }
