@@ -744,12 +744,18 @@ main (int argc, char *argv[])
 
     shell_run (shell);
 
-    player_close (shell->priv->player);
     g_object_unref (shell->priv->player);
+    if (shell->priv->playing_source) {
+        g_object_unref (shell->priv->playing_source);
+        shell->priv->playing_source = NULL;
+    }
+
     g_object_unref (shell->priv->music);
     g_object_unref (shell->priv->movies);
     g_object_unref (shell->priv->music_videos);
     g_object_unref (shell->priv->shows);
+
+    return 0;
 }
 
 static void
