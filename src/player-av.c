@@ -145,6 +145,8 @@ player_av_finalize (GObject *object)
 {
     PlayerAV *self = PLAYER_AV (object);
 
+    player_close (PLAYER (self));
+
     G_OBJECT_CLASS (player_av_parent_class)->finalize (object);
 }
 
