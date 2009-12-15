@@ -90,6 +90,7 @@ static void pane3_row_activated (GtkTreeView *view, GtkTreePath *path,
 static gboolean on_pane1_click (GtkWidget *view, GdkEventButton *event, Browser *self);
 static gboolean on_pane2_click (GtkWidget *view, GdkEventButton *event, Browser *self);
 static gboolean on_pane3_click (GtkWidget *view, GdkEventButton *event, Browser *self);
+static gboolean on_pane3_released (GtkWidget *view, GdkEventButton *event, Browser *self);
 
 static void on_pane3_remove (GtkWidget *item, Browser *self);
 static void on_pane3_info (GtkWidget *item, Browser *self);
@@ -109,6 +110,10 @@ static void browser_deinsert_entry (Browser *self, Entry *entry);
 
 static void browser_on_drop (Browser *self, GdkDragContext *drag_context, gint x,
     gint y, GtkSelectionData *data, guint info, guint time, GtkWidget *widget);
+void browser_source_get_data (Browser *self, GdkDragContext *drag_context,
+    GtkSelectionData *data, guint info, guint time, GtkWidget *widget);
+void browser_source_drag_begin (GtkWidget *widget, GdkDragContext *drag_context, Browser *self);
+void browser_source_drag_end (Browser *self, GdkDragContext *drag_context, GtkWidget *widget);
 
 // Interface methods
 static Entry *browser_get_next (TrackSource *self);
@@ -351,6 +356,7 @@ browser_new (Shell *shell,
     g_signal_connect (self->priv->pane1, "button-press-event", G_CALLBACK (on_pane1_click), self);
     g_signal_connect (self->priv->pane2, "button-press-event", G_CALLBACK (on_pane2_click), self);
     g_signal_connect (self->priv->pane3, "button-press-event", G_CALLBACK (on_pane3_click), self);
+    g_signal_connect (self->priv->pane3, "button-release-event", G_CALLBACK (on_pane3_released), self);
 
     g_signal_connect (self->priv->db, "add-entry", G_CALLBACK (browser_gmediadb_add), self);
     g_signal_connect (self->priv->db, "remove-entry", G_CALLBACK (browser_gmediadb_remove), self);
@@ -359,10 +365,25 @@ browser_new (Shell *shell,
     shell_register_track_source (self->priv->shell, TRACK_SOURCE (self));
     shell_register_media_store (self->priv->shell, MEDIA_STORE (self));
 
-    GtkTargetEntry te = { "text/uri-list", 0, 80 };
-    gtk_drag_dest_set (self->priv->widget, GTK_DEST_DEFAULT_ALL, &te, 1, GDK_ACTION_COPY);
+    // Setup main widget as a drag destination for filenames and entries
+    GtkTargetEntry dest_te[] = { { "text/uri-list", 0, 1 }, { "text/entry-list", 0, 2 } };
+    gtk_drag_dest_set (self->priv->widget, GTK_DEST_DEFAULT_ALL, dest_te, 2,
+        GDK_ACTION_COPY | GDK_ACTION_MOVE);
     g_signal_connect_swapped (self->priv->widget, "drag_data_received",
         G_CALLBACK (browser_on_drop), self);
+
+    // Setup pane3 as drag source of entries
+    GtkTargetEntry source_te = { "text/entry-list", 0, 2 };
+//    gtk_tree_view_enable_model_drag_source (GTK_TREE_VIEW (self->priv->pane3),
+//        GDK_BUTTON1_MASK, &source_te, 1, GDK_ACTION_COPY | GDK_ACTION_MOVE);
+    gtk_drag_source_set (self->priv->pane3, GDK_BUTTON1_MASK, &source_te, 1,
+        GDK_ACTION_COPY | GDK_ACTION_MOVE);
+    g_signal_connect_swapped (self->priv->pane3, "drag_data_get",
+        G_CALLBACK (browser_source_get_data), self);
+    g_signal_connect_after (self->priv->pane3, "drag_begin",
+        G_CALLBACK (browser_source_drag_begin), self);
+    g_signal_connect_swapped (self->priv->pane3, "drag_end",
+        G_CALLBACK (browser_source_drag_end), self);
 
     gtk_widget_show_all (self->priv->widget);
 
@@ -1287,7 +1308,30 @@ on_pane3_click (GtkWidget *view, GdkEventButton *event, Browser *self)
                         event->button, event->time);
 
         return retval;
+    } else if (event->button == 1) {
+        GtkTreePath *cpath;
+        gboolean retval = TRUE;
+
+        gtk_tree_view_get_path_at_pos (GTK_TREE_VIEW (view), event->x, event->y,
+            &cpath, NULL, NULL, NULL);
+
+        if (cpath) {
+            if (!gtk_tree_selection_path_is_selected (self->priv->p3_sel, cpath)) {
+                retval = FALSE;
+            }
+
+            gtk_tree_path_free (cpath);
+        }
+
+        return retval;
     }
+
+    return FALSE;
+}
+
+static gboolean
+on_pane3_released (GtkWidget *view, GdkEventButton *event, Browser *self)
+{
 
     return FALSE;
 }
@@ -1437,17 +1481,44 @@ static void
 browser_on_drop (Browser *self, GdkDragContext *drag_context, gint x,
     gint y, GtkSelectionData *data, guint info, guint time, GtkWidget *widget)
 {
-    gchar **uris = g_strsplit (data->data, "\r\n", -1);
+    if (info == 1) {
+        gchar **uris = g_strsplit (data->data, "\r\n", -1);
 
-    if (uris) {
-        gint i;
-        for (i = 0; uris[i]; i++) {
-            gchar *ustr = g_uri_unescape_string (uris[i]+7, "");
-            g_print ("INFO(%d) MTYPE(%s) URI(%s) UURI(%s)\n", info, self->priv->media_type, uris[i]+7, ustr);
-            shell_import_path (self->priv->shell, ustr, self->priv->media_type);
-            g_free (ustr);
+        if (uris) {
+            gint i;
+            for (i = 0; uris[i]; i++) {
+                gchar *ustr = g_uri_unescape_string (uris[i]+7, "");
+                g_print ("INFO(%d) MTYPE(%s) URI(%s) UURI(%s)\n", info, self->priv->media_type, uris[i]+7, ustr);
+//                shell_import_path (self->priv->shell, ustr, self->priv->media_type);
+                g_free (ustr);
+            }
+
+            g_strfreev (uris);
         }
-
-        g_strfreev (uris);
+    } else {
+        g_print ("Unknown info %d\n", info);
     }
+}
+
+void
+browser_source_drag_begin (GtkWidget *widget,
+                           GdkDragContext *drag_context,
+                           Browser *self)
+{
+    g_print ("Drag Begin\n");
+}
+
+void
+browser_source_drag_end (Browser *self,
+                           GdkDragContext *drag_context,
+                           GtkWidget *widget)
+{
+    g_print ("Drag End\n");
+}
+
+void
+browser_source_get_data (Browser *self, GdkDragContext *drag_context,
+    GtkSelectionData *data, guint info, guint time, GtkWidget *widget)
+{
+    g_print ("Need data for %d move\n", info);
 }
