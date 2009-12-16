@@ -21,15 +21,15 @@
 
 #include <gtk/gtk.h>
 
-#include "shell.h"
-#include "player.h"
-#include "progress.h"
-#include "playlist.h"
 #include "browser.h"
-
+#include "device-manager.h"
+#include "mini-pane.h"
+#include "player.h"
+#include "playlist.h"
+#include "progress.h"
+#include "shell.h"
 #include "tag-reader.h"
 #include "tray.h"
-#include "mini-pane.h"
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
@@ -41,6 +41,7 @@ struct _ShellPrivate {
     Playlist *playlist;
     Tray *tray;
     TagReader *tag_reader;
+    DeviceManager *device_manager;
 
     GtkBuilder *builder;
 
@@ -316,6 +317,10 @@ shell_new ()
     self->priv->tray = tray_new (self);
     self->priv->mini_pane = mini_pane_new (self);
     self->priv->playlist = playlist_new (self);
+
+    shell_add_widget (self, gtk_label_new ("Library"), "Library", NULL);
+
+    self->priv->device_manager = device_manager_new (self);
 
     g_signal_connect (self->priv->player, "play", G_CALLBACK (play_cb), self);
     g_signal_connect (self->priv->player, "pause", G_CALLBACK (pause_cb), self);
@@ -694,8 +699,6 @@ main (int argc, char *argv[])
     gtk_init (&argc, &argv);
 
     Shell *shell = shell_new ();
-
-    shell_add_widget (shell, gtk_label_new ("Library"), "Library", NULL);
 
     shell->priv->music = browser_new (shell, "Music", MEDIA_SONG, "Artist", "Album", FALSE,
         (BrowserCompareFunc) music_entry_cmp,

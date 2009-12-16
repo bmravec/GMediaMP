@@ -1,27 +1,35 @@
 INCLUDES = $(PROG_CFLAGS) $(GTK_CFLAGS) $(GLIB_FLAGS) $(AVCODEC_CFLAGS) \
-    $(PULSE_CFLAGS) $(GST_CFLAGS) -DSHARE_DIR=\"$(pkgdatadir)\"
+    $(PULSE_CFLAGS) $(GST_CFLAGS) $(GPOD_CFLAGS) -DSHARE_DIR=\"$(pkgdatadir)\"
 
 bin_PROGRAMS = gmediamp
 
 gmediamp_LDADD = $(PROG_LIBS) $(GTK_LIBS) $(GLIB_LIBS) $(AVCODEC_LIBS) \
-    $(PULSE_LIBS) $(GST_LIBS)
+    $(PULSE_LIBS) $(GST_LIBS) $(GPOD_LIBS)
 
 if PLAYERGSTREAMER
-    gstreamer_sources = player-gst.c player-gst.h
+    gstplayer_sources = player-gst.c player-gst.h
 else
-    gstreamer_sources =
+    gstplayer_sources =
 endif
 
 if PLAYERAVCODEC
-    avcodec_sources = player-av.c player-av.h
+    avplayer_sources = player-av.c player-av.h
 else
-    avcodec_sources =
+    avplayer_sources =
+endif
+
+if ENABLEIPOD
+    ipod_sources = device-ipod.c device-ipod.h
+else
+    ipod_sources =
 endif
 
 gmediamp_SOURCES = \
     shell.c shell.h \
     plugin-manager.c plugin-manager.h \
     player.c player.h \
+    $(gstplayer_sources) \
+    $(avplayer_sources) \
     entry.c entry.h \
     tray.c tray.h \
     mini-pane.c mini-pane.h \
@@ -31,8 +39,10 @@ gmediamp_SOURCES = \
     media-store.c media-store.h \
     tag-dialog.c tag-dialog.h \
     browser.c browser.h \
-    $(gstreamer_sources) $(avcodec_sources) \
-    tag-reader.c tag-reader.h
+    tag-reader.c tag-reader.h \
+    device.c device.h \
+    $(ipod_sources) \
+    device-manager.c device-manager.h
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=
