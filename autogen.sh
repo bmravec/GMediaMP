@@ -1,3 +1,3 @@
 #!/bin/sh
 
-aclocal && automake --add-missing && autoconf
+aclocal && autoconf && autoheader && automake --add-missing
