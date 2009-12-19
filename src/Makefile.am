@@ -37,6 +37,7 @@ gmediamp_SOURCES = \
     playlist.c playlist.h \
     track-source.c track-source.h \
     media-store.c media-store.h \
+    gmediadb-store.c gmediadb-store.h \
     tag-dialog.c tag-dialog.h \
     browser.c browser.h \
     tag-reader.c tag-reader.h \

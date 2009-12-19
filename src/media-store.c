@@ -21,8 +21,6 @@
 
 #include "media-store.h"
 
-static guint signal_move;
-
 static void
 media_store_base_init (gpointer g_iface)
 {
@@ -30,10 +28,6 @@ media_store_base_init (gpointer g_iface)
 
     if (!initialized) {
         initialized = TRUE;
-
-        signal_move = g_signal_new ("entry-move", MEDIA_STORE_TYPE,
-            G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
-            G_TYPE_NONE, 1, G_TYPE_POINTER);
     }
 }
 
@@ -99,8 +93,26 @@ media_store_get_name (MediaStore *self)
     }
 }
 
-void
-media_store_emit_move (MediaStore *self, Entry *entry)
+Entry**
+media_store_get_all_entries (MediaStore *self)
 {
-    g_signal_emit (G_OBJECT (self), signal_move, 0, entry);
+    MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
+
+    if (iface->get_all_entries) {
+        return iface->get_all_entries (self);
+    } else {
+        return NULL;
+    }
+}
+
+Entry*
+media_store_get_entry (MediaStore *self, guint id)
+{
+    MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
+
+    if (iface->get_name) {
+        return iface->get_entry (self, id);
+    } else {
+        return NULL;
+    }
 }

@@ -51,6 +51,7 @@ G_BEGIN_DECLS
 typedef struct _Entry Entry;
 typedef struct _EntryClass EntryClass;
 typedef struct _EntryPrivate EntryPrivate;
+typedef gint (*EntryCompareFunc) (Entry *e1, Entry *e2);
 
 struct _Entry {
     GObject parent;

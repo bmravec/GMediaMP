@@ -39,10 +39,13 @@ typedef struct _MediaStoreInterface MediaStoreInterface;
 struct _MediaStoreInterface {
     GTypeInterface parent;
 
-    void   (*add_entry) (MediaStore *self, gchar **entry);
-    void   (*rem_entry) (MediaStore *self, Entry *entry);
-    guint  (*get_mtype) (MediaStore *self);
-    gchar* (*get_name)  (MediaStore *self);
+    void    (*add_entry) (MediaStore *self, gchar **entry);
+    void    (*rem_entry) (MediaStore *self, Entry *entry);
+    guint   (*get_mtype) (MediaStore *self);
+    gchar*  (*get_name)  (MediaStore *self);
+
+    Entry** (*get_all_entries) (MediaStore *self);
+    Entry*  (*get_entry) (MediaStore *self, guint id);
 };
 
 GType media_store_get_type (void);
@@ -53,7 +56,8 @@ void media_store_remove_entry (MediaStore *self, Entry *entry);
 guint media_store_get_media_type (MediaStore *self);
 gchar *media_store_get_name (MediaStore *self);
 
-void media_store_emit_move (MediaStore *self, Entry *entry);
+Entry **media_store_get_all_entries (MediaStore *self);
+Entry *media_store_get_entry (MediaStore *self, guint id);
 
 G_END_DECLS
 

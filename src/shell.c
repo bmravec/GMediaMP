@@ -30,13 +30,15 @@
 #include "shell.h"
 #include "tag-reader.h"
 #include "tray.h"
+#include "gmediadb-store.h"
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
 struct _ShellPrivate {
     Player *player;
 
-    Browser *music, *movies, *shows, *music_videos;
+    Browser *musicb, *moviesb, *showsb, *music_videosb;
+    GMediaDBStore *musics, *moviess, *showss, *music_videoss;
 
     Playlist *playlist;
     Tray *tray;
@@ -700,6 +702,30 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
+    shell->priv->musics = gmediadb_store_new ("Music", MEDIA_SONG);
+//    shell->priv->moviess = gmediadb_store_new (shell, "Movies", MEDIA_MOVIE);
+//    shell->priv->music_videoss = gmediadb_store_new (shell, "MusicVideos", MEDIA_MUSIC_VIDEO);
+//    shell->priv->showss = gmediadb_store_new (shell, "TVShows", MEDIA_TVSHOW);
+
+    shell->priv->musicb = browser_new_with_model (shell, MEDIA_STORE (shell->priv->musics));
+
+    browser_add_column (shell->priv->musicb, "Track", "tracknumber",
+        FALSE, (GtkTreeCellDataFunc) int_column_func);
+    browser_add_column (shell->priv->musicb, "Title", "title",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->musicb, "Artist", "artist",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->musicb, "Album", "album",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->musicb, "Duration", "duration",
+        FALSE, (GtkTreeCellDataFunc) time_column_func);
+    browser_set_compare_func (shell->priv->musicb, music_entry_cmp);
+    browser_set_pane1_tag (shell->priv->musicb, "Artist", "artist");
+    browser_set_pane2_tag (shell->priv->musicb, "Album", "album");
+
+    shell_add_widget (shell, GTK_WIDGET (shell->priv->musicb), "Library/Music", NULL);
+
+/*
     shell->priv->music = browser_new (shell, "Music", MEDIA_SONG, "Artist", "Album", FALSE,
         (BrowserCompareFunc) music_entry_cmp,
         "Track", "tracknumber", FALSE, int_column_func,
@@ -738,6 +764,7 @@ main (int argc, char *argv[])
         NULL);
 
     shell_add_widget (shell, browser_get_widget (shell->priv->shows), "Library/TV Shows", NULL);
+*/
 
     gtk_widget_show (shell->priv->mini_pane);
 
@@ -753,10 +780,10 @@ main (int argc, char *argv[])
         shell->priv->playing_source = NULL;
     }
 
-    g_object_unref (shell->priv->music);
-    g_object_unref (shell->priv->movies);
-    g_object_unref (shell->priv->music_videos);
-    g_object_unref (shell->priv->shows);
+//    g_object_unref (shell->priv->music);
+//    g_object_unref (shell->priv->movies);
+//    g_object_unref (shell->priv->music_videos);
+//    g_object_unref (shell->priv->shows);
 
     return 0;
 }

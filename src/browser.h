@@ -22,10 +22,11 @@
 #ifndef __BROWSER_H__
 #define __BROWSER_H__
 
-#include <glib-object.h>
+#include <gtk/gtk.h>
 
 #include "shell.h"
 #include "entry.h"
+#include "media-store.h"
 
 #define BROWSER_TYPE (browser_get_type ())
 #define BROWSER(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), BROWSER_TYPE, Browser))
@@ -34,8 +35,6 @@
 #define IS_BROWSER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), BROWSER_TYPE))
 #define BROWSER_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), BROWSER_TYPE, BrowserClass))
 
-typedef gint (*BrowserCompareFunc) (gpointer a, gpointer b);
-
 G_BEGIN_DECLS
 
 typedef struct _Browser Browser;
@@ -43,26 +42,36 @@ typedef struct _BrowserClass BrowserClass;
 typedef struct _BrowserPrivate BrowserPrivate;
 
 struct _Browser {
-    GObject parent;
+    GtkVPaned parent;
 
     BrowserPrivate *priv;
 };
 
 struct _BrowserClass {
-    GObjectClass parent;
+    GtkVPanedClass parent;
 };
 
-Browser *browser_new (Shell *shell,
-                      gchar *media_type,
-                      gint mtype,
-                      gchar *p1_tag,
-                      gchar *p2_tag,
-                      gboolean p2_single,
-                      BrowserCompareFunc cmp_func,
-                      ...);
 GType browser_get_type (void);
 
-GtkWidget *browser_get_widget (Browser *self);
+Browser *browser_new (Shell *shell);
+Browser *browser_new_with_model (Shell *shell, MediaStore *store);
+
+void browser_set_model (Browser *self, MediaStore *store);
+MediaStore *browser_get_model (Browser *self);
+
+void browser_set_pane1_tag (Browser *self, const gchar *label, const gchar *tag);
+gchar *browser_get_pane1_tag (Browser *self);
+
+void browser_set_pane2_tag (Browser *self, const gchar *label, const gchar *tag);
+gchar *browser_get_pane2_tag (Browser *self);
+
+void browser_set_pane2_single_mode (Browser *self, gboolean single_mode);
+gboolean browser_get_pane2_single_mode (Browser *self);
+
+void browser_set_compare_func (Browser *self, EntryCompareFunc func);
+
+void browser_add_column (Browser *self, const gchar *label, const gchar *tag,
+    gboolean expand, GtkTreeCellDataFunc col_func);
 
 G_END_DECLS
 
