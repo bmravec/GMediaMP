@@ -566,6 +566,7 @@ str_column_func (GtkTreeViewColumn *column,
     gtk_tree_model_get (model, iter, 0, &entry, -1);
     if (entry) {
         g_object_set (G_OBJECT (cell), "text", entry_get_tag_str (entry, data), NULL);
+        g_object_unref (entry);
     } else {
         g_object_set (G_OBJECT (cell), "text", "", NULL);
     }
@@ -579,11 +580,15 @@ int_column_func (GtkTreeViewColumn *column,
                  gchar *data)
 {
     Entry *entry;
+    gint num = 0;
 
     gtk_tree_model_get (model, iter, 0, &entry, -1);
-    gint num = entry_get_tag_int (entry, data);
+    if (entry) {
+        num = entry_get_tag_int (entry, data);
+        g_object_unref (entry);
+    }
 
-    if (entry && num != 0) {
+    if (num != 0) {
         gchar *str = g_strdup_printf ("%d", num);
         g_object_set (G_OBJECT (cell), "text", str, NULL);
         g_free (str);
@@ -606,6 +611,7 @@ time_column_func (GtkTreeViewColumn *column,
         gchar *str = time_to_string ((gdouble) entry_get_tag_int (entry, data));
         g_object_set (G_OBJECT (cell), "text", str, NULL);
         g_free (str);
+        g_object_unref (entry);
     } else {
         g_object_set (G_OBJECT (cell), "text", "", NULL);
     }
@@ -702,11 +708,8 @@ main (int argc, char *argv[])
 
     Shell *shell = shell_new ();
 
+    // Create Music store/widget
     shell->priv->musics = gmediadb_store_new ("Music", MEDIA_SONG);
-//    shell->priv->moviess = gmediadb_store_new (shell, "Movies", MEDIA_MOVIE);
-//    shell->priv->music_videoss = gmediadb_store_new (shell, "MusicVideos", MEDIA_MUSIC_VIDEO);
-//    shell->priv->showss = gmediadb_store_new (shell, "TVShows", MEDIA_TVSHOW);
-
     shell->priv->musicb = browser_new_with_model (shell, MEDIA_STORE (shell->priv->musics));
 
     browser_add_column (shell->priv->musicb, "Track", "tracknumber",
@@ -725,46 +728,56 @@ main (int argc, char *argv[])
 
     shell_add_widget (shell, GTK_WIDGET (shell->priv->musicb), "Library/Music", NULL);
 
-/*
-    shell->priv->music = browser_new (shell, "Music", MEDIA_SONG, "Artist", "Album", FALSE,
-        (BrowserCompareFunc) music_entry_cmp,
-        "Track", "tracknumber", FALSE, int_column_func,
-        "Title", "title", TRUE, str_column_func,
-        "Artist", "artist", TRUE, str_column_func,
-        "Album", "album", TRUE, str_column_func,
-        "Duration", "duration", FALSE, time_column_func,
-        NULL);
+    // Create Movies store/widget
+    shell->priv->moviess = gmediadb_store_new ("Movies", MEDIA_MOVIE);
+    shell->priv->moviesb = browser_new_with_model (shell, MEDIA_STORE (shell->priv->moviess));
 
-    shell_add_widget (shell, browser_get_widget (shell->priv->music), "Library/Music", NULL);
+    browser_add_column (shell->priv->moviesb, "Title", "title",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->moviesb, "Duration", "duration",
+        FALSE, (GtkTreeCellDataFunc) time_column_func);
+    browser_set_compare_func (shell->priv->moviesb, movie_entry_cmp);
 
-    shell->priv->movies = browser_new (shell, "Movies", MEDIA_MOVIE, NULL, NULL, FALSE,
-        (BrowserCompareFunc) movie_entry_cmp,
-        "Title", "title", TRUE, str_column_func,
-        "Duration", "duration", FALSE, time_column_func,
-        NULL);
+    shell_add_widget (shell, GTK_WIDGET (shell->priv->moviesb), "Library/Movies", NULL);
 
-    shell_add_widget (shell, browser_get_widget (shell->priv->movies), "Library/Movies", NULL);
+    // Create MusicVideo store/widget
+    shell->priv->music_videoss = gmediadb_store_new ("MusicVideos", MEDIA_MUSIC_VIDEO);
+    shell->priv->music_videosb = browser_new_with_model (shell, MEDIA_STORE (shell->priv->music_videoss));
 
-    shell->priv->music_videos = browser_new (shell, "MusicVideos", MEDIA_MUSIC_VIDEO, "Artist", NULL, FALSE,
-        (BrowserCompareFunc) music_video_entry_cmp,
-        "Title", "title", TRUE, str_column_func,
-        "Artist", "artist", TRUE, str_column_func,
-        "Duration", "duration", FALSE, time_column_func,
-        NULL);
+    browser_add_column (shell->priv->music_videosb, "Title", "title",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->music_videosb, "Artist", "artist",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->music_videosb, "Duration", "duration",
+        FALSE, (GtkTreeCellDataFunc) time_column_func);
+    browser_set_compare_func (shell->priv->music_videosb, music_video_entry_cmp);
 
-    shell_add_widget (shell, browser_get_widget (shell->priv->music_videos), "Library/Music Videos", NULL);
+    browser_set_pane1_tag (shell->priv->music_videosb, "Artist", "artist");
 
-    shell->priv->shows = browser_new (shell, "TVShows", MEDIA_TVSHOW, "Show", "Season", TRUE,
-        (BrowserCompareFunc) tvshow_entry_cmp,
-        "Track", "tracknumber", FALSE, int_column_func,
-        "Title", "title", TRUE, str_column_func,
-        "Show", "show", TRUE, str_column_func,
-        "Season", "season", TRUE, str_column_func,
-        "Duration", "duration", FALSE, time_column_func,
-        NULL);
+    shell_add_widget (shell, GTK_WIDGET (shell->priv->music_videosb), "Library/MusicVideos", NULL);
 
-    shell_add_widget (shell, browser_get_widget (shell->priv->shows), "Library/TV Shows", NULL);
-*/
+    // Create TVShows store/widget
+    shell->priv->showss = gmediadb_store_new ("TVShows", MEDIA_TVSHOW);
+    shell->priv->showsb = browser_new_with_model (shell, MEDIA_STORE (shell->priv->showss));
+
+    browser_add_column (shell->priv->showsb, "Track", "tracknumber",
+        FALSE, (GtkTreeCellDataFunc) int_column_func);
+    browser_add_column (shell->priv->showsb, "Title", "title",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->showsb, "Show", "show",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->showsb, "Season", "season",
+        TRUE, (GtkTreeCellDataFunc) str_column_func);
+    browser_add_column (shell->priv->showsb, "Duration", "duration",
+        FALSE, (GtkTreeCellDataFunc) time_column_func);
+
+    browser_set_pane1_tag (shell->priv->showsb, "Show", "show");
+    browser_set_pane2_tag (shell->priv->showsb, "Season", "season");
+
+    browser_set_compare_func (shell->priv->showsb, tvshow_entry_cmp);
+    browser_set_pane2_single_mode (shell->priv->showsb, TRUE);
+
+    shell_add_widget (shell, GTK_WIDGET (shell->priv->showsb), "Library/TVShows", NULL);
 
     gtk_widget_show (shell->priv->mini_pane);
 
@@ -780,10 +793,15 @@ main (int argc, char *argv[])
         shell->priv->playing_source = NULL;
     }
 
-//    g_object_unref (shell->priv->music);
-//    g_object_unref (shell->priv->movies);
-//    g_object_unref (shell->priv->music_videos);
-//    g_object_unref (shell->priv->shows);
+    browser_set_model (shell->priv->musicb, NULL);
+    browser_set_model (shell->priv->moviesb, NULL);
+    browser_set_model (shell->priv->music_videosb, NULL);
+    browser_set_model (shell->priv->showsb, NULL);
+
+    g_object_unref (shell->priv->musics);
+    g_object_unref (shell->priv->moviess);
+    g_object_unref (shell->priv->music_videoss);
+    g_object_unref (shell->priv->showss);
 
     return 0;
 }
