@@ -21,9 +21,9 @@
 
 #include <gmediadb.h>
 
-#include "shell.h"
-#include "media-store.h"
 #include "gmediadb-store.h"
+#include "media-store.h"
+#include "shell.h"
 
 static void media_store_init (MediaStoreInterface *iface);
 G_DEFINE_TYPE_WITH_CODE (GMediaDBStore, gmediadb_store, G_TYPE_OBJECT,
@@ -122,11 +122,11 @@ gmediadb_store_new (gchar *media_type, gint mtype)
 
         *nid = entry[1] ? atoi (entry[1]) : 0;
 
-        Entry *e = entry_new (*nid);
-        entry_set_media_type (e, self->priv->mtype);
+        Entry *e = _entry_new (*nid);
+        _entry_set_media_type (e, self->priv->mtype);
 
         for (j = 2; entry[j]; j += 2) {
-            entry_set_tag_str (e, entry[j], entry[j + 1]);
+            _entry_set_tag_str (e, entry[j], entry[j + 1]);
         }
 
         g_hash_table_insert (self->priv->entries, nid, e);

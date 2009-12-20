@@ -28,11 +28,15 @@ G_DEFINE_TYPE(Entry, entry, G_TYPE_OBJECT)
 
 struct _EntryPrivate {
     GHashTable *table;
+
+    guint id;
     gchar *location;
-    guint id, state, type;
+
+    EntryType type;
+    EntryState state;
 };
 
-static guint signal_changed;
+static guint signal_state;
 
 static void
 entry_finalize (GObject *object)
@@ -54,9 +58,9 @@ entry_class_init (EntryClass *klass)
 
     object_class->finalize = entry_finalize;
 
-    signal_changed = g_signal_new ("entry-changed", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__VOID,
-        G_TYPE_NONE, 0);
+    signal_state = g_signal_new ("state-changed", G_TYPE_FROM_CLASS (klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__UINT,
+        G_TYPE_NONE, 0, G_TYPE_UINT);
 }
 
 static void
@@ -71,7 +75,7 @@ entry_init (Entry *self)
 }
 
 Entry*
-entry_new (guint id)
+_entry_new (guint id)
 {
     Entry *self = g_object_new (ENTRY_TYPE, NULL);
 
@@ -131,7 +135,7 @@ entry_get_art (Entry *self)
 void
 entry_set_location (Entry *self, const gchar *location)
 {
-    entry_set_tag_str (self, "location", location);
+    _entry_set_tag_str (self, "location", location);
 }
 
 guint
@@ -141,23 +145,23 @@ entry_get_id (Entry *self)
 }
 
 void
-entry_set_id (Entry *self, guint id)
+_entry_set_id (Entry *self, guint id)
 {
     self->priv->id = id;
 }
 
-guint
+EntryState
 entry_get_state (Entry *self)
 {
     return self->priv->state;
 }
 
 void
-entry_set_state (Entry *self, guint state)
+entry_set_state (Entry *self, EntryState state)
 {
     self->priv->state = state;
 
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
+    g_signal_emit (G_OBJECT (self), signal_state, 0);
 }
 
 gchar*
@@ -175,51 +179,18 @@ entry_get_state_string (Entry *self)
     }
 }
 
-gint
-entry_cmp (Entry *self, Entry *e)
-{
-    gint res;
-    if (self->priv->id == e->priv->id)
-        return 0;
-
-    res = g_strcmp0 (entry_get_tag_str (self, "artist"), entry_get_tag_str (e, "artist"));
-    if (res != 0)
-        return res;
-
-    res = g_strcmp0 (entry_get_tag_str (self, "album"), entry_get_tag_str (e, "album"));
-    if (res != 0)
-        return res;
-
-    if (entry_get_tag_int (e, "track") != entry_get_tag_int (self, "track"))
-        return entry_get_tag_int (self, "track") - entry_get_tag_int (e, "track");
-
-    res = g_strcmp0 (entry_get_tag_str (self, "title"), entry_get_tag_str (e, "title"));
-    if (res != 0)
-        return res;
-
-    return -1;
-}
-
 void
-entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
+_entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value)
 {
     g_hash_table_insert (self->priv->table, g_strdup (tag), value ? g_strdup (value) : g_strdup (""));
-
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 void
-entry_set_tag_int (Entry *self, const gchar *tag, gint value)
+_entry_set_tag_int (Entry *self, const gchar *tag, gint value)
 {
-/*
-    gint *val = g_new0 (gint, 1);
-    *val = value;
-*/
     gchar *val = g_strdup_printf ("%d", value);
 
     g_hash_table_insert (self->priv->table, g_strdup (tag), val);
-
-    g_signal_emit (G_OBJECT (self), signal_changed, 0);
 }
 
 const gchar*
@@ -231,25 +202,18 @@ entry_get_tag_str (Entry *self, const gchar *tag)
 gint
 entry_get_tag_int (Entry *self, const gchar *tag)
 {
-/*
-    gint *val = (gint*) g_hash_table_lookup (self->priv->table, tag);
-    if (val) {
-        return *(val);
-    }
-    return 0;
-*/
     gchar *val = (gchar*) g_hash_table_lookup (self->priv->table, tag);
     return val ? atoi (val) : 0;
 }
 
-guint
+EntryType
 entry_get_media_type (Entry *self)
 {
     return self->priv->type;
 }
 
 void
-entry_set_media_type (Entry *self, guint type)
+_entry_set_media_type (Entry *self, EntryType type)
 {
     self->priv->type = type;
 }

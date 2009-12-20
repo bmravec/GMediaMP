@@ -31,20 +31,20 @@
 #define IS_ENTRY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), ENTRY_TYPE))
 #define ENTRY_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), ENTRY_TYPE, EntryClass))
 
-enum {
+typedef enum {
     ENTRY_STATE_NONE = 0,
     ENTRY_STATE_PLAYING,
     ENTRY_STATE_PAUSED,
     ENTRY_STATE_MISSING,
-};
+} EntryState;
 
-enum {
+typedef enum {
     MEDIA_NONE = 0,
     MEDIA_SONG,
     MEDIA_MUSIC_VIDEO,
     MEDIA_MOVIE,
     MEDIA_TVSHOW,
-};
+} EntryType;
 
 G_BEGIN_DECLS
 
@@ -65,31 +65,30 @@ struct _EntryClass {
 
 GType entry_get_type (void);
 
-Entry *entry_new (guint id);
 guint entry_get_id (Entry *self);
-void entry_set_id (Entry *self, guint id);
-
-void entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value);
-void entry_set_tag_int (Entry *self, const gchar *tag, gint value);
 
 const gchar *entry_get_tag_str (Entry *self, const gchar *tag);
 gint entry_get_tag_int (Entry *self, const gchar *tag);
 
-gint entry_cmp (Entry *self, Entry *e);
-
 const gchar *entry_get_location (Entry *self);
-void entry_set_location (Entry *self, const gchar *location);
 
 gchar *entry_get_art (Entry *self);
 
-guint entry_get_state (Entry *self);
-void entry_set_state (Entry *self, guint state);
+EntryState entry_get_state (Entry *self);
+void entry_set_state (Entry *self, EntryState state);
 gchar *entry_get_state_image (Entry *self);
 
-guint entry_get_media_type (Entry *self);
-void entry_set_media_type (Entry *self, guint type);
+EntryType entry_get_media_type (Entry *self);
 
 guint entry_get_key_value_pairs (Entry *self, gchar ***keys, gchar ***vals);
+
+// These functions should only be used inside the MediaStore object
+Entry *_entry_new (guint id);
+void   _entry_set_id (Entry *self, guint id);
+void   _entry_set_tag_str (Entry *self, const gchar *tag, const gchar *value);
+void   _entry_set_tag_int (Entry *self, const gchar *tag, gint value);
+void   _entry_set_location (Entry *self, const gchar *location);
+void   _entry_set_media_type (Entry *self, guint type);
 
 G_END_DECLS
 
