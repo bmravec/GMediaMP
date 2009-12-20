@@ -40,8 +40,13 @@ struct _GMediaDBStorePrivate {
     GHashTable *entries;
 };
 
+static void gmediadb_store_class_init (GMediaDBStoreClass *klass);
+static void gmediadb_store_init (GMediaDBStore *self);
+static void gmediadb_store_finalize (GObject *object);
+
 // Interface methods
 static void gmediadb_store_add_entry (MediaStore *self, gchar **entry);
+static void gmediadb_store_update_entry (MediaStore *self, guint id, gchar **entry);
 static void gmediadb_store_remove_entry (MediaStore *self, Entry *entry);
 static guint gmediadb_store_get_mtype (MediaStore *self);
 static gchar *gmediadb_store_get_name (MediaStore *self);
@@ -49,9 +54,20 @@ static Entry **gmediadb_store_get_all_entries (MediaStore *self);
 static Entry *gmediadb_store_get_entry (MediaStore *self, guint id);
 
 // Signals from GMediaDB
-static void gmediadb_store_gmediadb_add (GMediaDB *db, guint id, GMediaDBStore *self);
-static void gmediadb_store_gmediadb_remove (GMediaDB *db, guint id, GMediaDBStore *self);
-static void gmediadb_store_gmediadb_update (GMediaDB *db, guint id, GMediaDBStore *self);
+static void gmediadb_store_gmediadb_add (GMediaDBStore *self, guint id, GMediaDB *db);
+static void gmediadb_store_gmediadb_remove (GMediaDBStore *self, guint id, GMediaDB *db);
+static void gmediadb_store_gmediadb_update (GMediaDBStore *self, guint id, GMediaDB *db);
+
+static void
+gmediadb_store_class_init (GMediaDBStoreClass *klass)
+{
+    GObjectClass *object_class;
+    object_class = G_OBJECT_CLASS (klass);
+
+    g_type_class_add_private ((gpointer) klass, sizeof (GMediaDBStorePrivate));
+
+    object_class->finalize = gmediadb_store_finalize;
+}
 
 static void
 media_store_init (MediaStoreInterface *iface)
@@ -63,6 +79,14 @@ media_store_init (MediaStoreInterface *iface)
 
     iface->get_all_entries = gmediadb_store_get_all_entries;
     iface->get_entry = gmediadb_store_get_entry;
+}
+
+static void
+gmediadb_store_init (GMediaDBStore *self)
+{
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), GMEDIADB_STORE_TYPE, GMediaDBStorePrivate);
+
+    self->priv->entries = g_hash_table_new_full (g_int_hash, g_int_equal, g_free, g_object_unref);
 }
 
 static void
@@ -81,25 +105,6 @@ gmediadb_store_finalize (GObject *object)
     }
 
     G_OBJECT_CLASS (gmediadb_store_parent_class)->finalize (object);
-}
-
-static void
-gmediadb_store_class_init (GMediaDBStoreClass *klass)
-{
-    GObjectClass *object_class;
-    object_class = G_OBJECT_CLASS (klass);
-
-    g_type_class_add_private ((gpointer) klass, sizeof (GMediaDBStorePrivate));
-
-    object_class->finalize = gmediadb_store_finalize;
-}
-
-static void
-gmediadb_store_init (GMediaDBStore *self)
-{
-    self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), GMEDIADB_STORE_TYPE, GMediaDBStorePrivate);
-
-    self->priv->entries = g_hash_table_new_full (g_int_hash, g_int_equal, g_free, g_object_unref);
 }
 
 GMediaDBStore*
@@ -132,6 +137,13 @@ gmediadb_store_new (gchar *media_type, gint mtype)
         g_hash_table_insert (self->priv->entries, nid, e);
     }
 
+    g_signal_connect_swapped (self->priv->db, "add-entry",
+        G_CALLBACK (gmediadb_store_gmediadb_add), self);
+    g_signal_connect_swapped (self->priv->db, "remove-entry",
+        G_CALLBACK (gmediadb_store_gmediadb_remove), self);
+    g_signal_connect_swapped (self->priv->db, "update-entry",
+        G_CALLBACK (gmediadb_store_gmediadb_update), self);
+
     return self;
 }
 
@@ -141,6 +153,14 @@ gmediadb_store_add_entry (MediaStore *self, gchar **entry)
     GMediaDBStorePrivate *priv = GMEDIADB_STORE (self)->priv;
 
     gmediadb_add_entry (priv->db, entry);
+}
+
+static void
+gmediadb_store_update_entry (MediaStore *self, guint id, gchar **entry)
+{
+    GMediaDBStorePrivate *priv = GMEDIADB_STORE (self)->priv;
+
+    gmediadb_update_entry (priv->db, id, entry);
 }
 
 static void
@@ -186,4 +206,44 @@ gmediadb_store_get_all_entries (MediaStore *self)
     }
 
     return le;
+}
+
+static void
+gmediadb_store_gmediadb_add (GMediaDBStore *self, guint id, GMediaDB *db)
+{
+    gchar **entry = gmediadb_get_entry (self->priv->db, id, NULL);
+
+    gint *nid = g_new0 (gint, 1);
+
+    *nid = entry[1] ? atoi (entry[1]) : 0;
+
+    Entry *e = _entry_new (*nid);
+    _entry_set_media_type (e, self->priv->mtype);
+
+    gint j;
+    for (j = 2; entry[j]; j += 2) {
+        _entry_set_tag_str (e, entry[j], entry[j + 1]);
+    }
+
+    g_hash_table_insert (self->priv->entries, nid, e);
+
+    _media_store_emit_add_entry (MEDIA_STORE (self), e);
+}
+
+static void
+gmediadb_store_gmediadb_remove (GMediaDBStore *self, guint id, GMediaDB *db)
+{
+    Entry *e = g_hash_table_lookup (self->priv->entries, &id);
+    if (e) {
+        g_hash_table_remove (self->priv->entries, &id);
+    }
+
+    _media_store_emit_remove_entry (MEDIA_STORE (self), e);
+}
+
+static void
+gmediadb_store_gmediadb_update (GMediaDBStore *self, guint id, GMediaDB *db)
+{
+    gmediadb_store_gmediadb_remove (self, id, db);
+    gmediadb_store_gmediadb_add (self, id, db);
 }

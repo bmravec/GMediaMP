@@ -133,7 +133,7 @@ entry_get_art (Entry *self)
 }
 
 void
-entry_set_location (Entry *self, const gchar *location)
+_entry_set_location (Entry *self, const gchar *location)
 {
     _entry_set_tag_str (self, "location", location);
 }

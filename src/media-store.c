@@ -21,6 +21,9 @@
 
 #include "media-store.h"
 
+static guint signal_add;
+static guint signal_remove;
+
 static void
 media_store_base_init (gpointer g_iface)
 {
@@ -28,6 +31,14 @@ media_store_base_init (gpointer g_iface)
 
     if (!initialized) {
         initialized = TRUE;
+
+        signal_add = g_signal_new ("add-entry", MEDIA_STORE_TYPE,
+            G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+            G_TYPE_NONE, 1, G_TYPE_POINTER);
+
+        signal_remove = g_signal_new ("remove-entry", MEDIA_STORE_TYPE,
+            G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_VOID__POINTER,
+            G_TYPE_NONE, 1, G_TYPE_POINTER);
     }
 }
 
@@ -56,6 +67,16 @@ media_store_add_entry (MediaStore *self, gchar **entry)
 
     if (iface->add_entry) {
         iface->add_entry (self, entry);
+    }
+}
+
+void
+media_store_update_entry (MediaStore *self, guint id, gchar **entry)
+{
+    MediaStoreInterface *iface = MEDIA_STORE_GET_IFACE (self);
+
+    if (iface->up_entry) {
+        iface->up_entry (self, id, entry);
     }
 }
 
@@ -115,4 +136,16 @@ media_store_get_entry (MediaStore *self, guint id)
     } else {
         return NULL;
     }
+}
+
+void
+_media_store_emit_add_entry (MediaStore *self, Entry *entry)
+{
+    g_signal_emit (self, signal_add, 0, entry);
+}
+
+void
+_media_store_emit_remove_entry (MediaStore *self, Entry *entry)
+{
+    g_signal_emit (self, signal_remove, 0, entry);
 }

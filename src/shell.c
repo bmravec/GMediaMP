@@ -727,6 +727,9 @@ main (int argc, char *argv[])
     browser_set_pane2_tag (shell->priv->musicb, "Album", "album");
 
     shell_add_widget (shell, GTK_WIDGET (shell->priv->musicb), "Library/Music", NULL);
+    shell_register_track_source (shell, TRACK_SOURCE (shell->priv->musicb));
+    shell_register_media_store (shell, MEDIA_STORE (shell->priv->musics));
+
 
     // Create Movies store/widget
     shell->priv->moviess = gmediadb_store_new ("Movies", MEDIA_MOVIE);
@@ -739,6 +742,8 @@ main (int argc, char *argv[])
     browser_set_compare_func (shell->priv->moviesb, movie_entry_cmp);
 
     shell_add_widget (shell, GTK_WIDGET (shell->priv->moviesb), "Library/Movies", NULL);
+    shell_register_track_source (shell, TRACK_SOURCE (shell->priv->moviesb));
+    shell_register_media_store (shell, MEDIA_STORE (shell->priv->moviess));
 
     // Create MusicVideo store/widget
     shell->priv->music_videoss = gmediadb_store_new ("MusicVideos", MEDIA_MUSIC_VIDEO);
@@ -755,6 +760,8 @@ main (int argc, char *argv[])
     browser_set_pane1_tag (shell->priv->music_videosb, "Artist", "artist");
 
     shell_add_widget (shell, GTK_WIDGET (shell->priv->music_videosb), "Library/MusicVideos", NULL);
+    shell_register_track_source (shell, TRACK_SOURCE (shell->priv->music_videosb));
+    shell_register_media_store (shell, MEDIA_STORE (shell->priv->music_videoss));
 
     // Create TVShows store/widget
     shell->priv->showss = gmediadb_store_new ("TVShows", MEDIA_TVSHOW);
@@ -778,6 +785,8 @@ main (int argc, char *argv[])
     browser_set_pane2_single_mode (shell->priv->showsb, TRUE);
 
     shell_add_widget (shell, GTK_WIDGET (shell->priv->showsb), "Library/TVShows", NULL);
+    shell_register_track_source (shell, TRACK_SOURCE (shell->priv->showsb));
+    shell_register_media_store (shell, MEDIA_STORE (shell->priv->showss));
 
     gtk_widget_show (shell->priv->mini_pane);
 
