@@ -19,7 +19,7 @@ else
 endif
 
 if ENABLEIPOD
-    ipod_sources = device-ipod.c device-ipod.h
+    ipod_sources = device-ipod.c device-ipod.h ipod-store.c ipod-store.h
 else
     ipod_sources =
 endif
