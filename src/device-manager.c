@@ -31,7 +31,19 @@
 #include "device-ipod.h"
 #endif
 
-typedef Device* DeviceNewFunc (Shell*, const gchar*);
+#include "shell.h"
+
+G_DEFINE_TYPE(DeviceManager, device_manager, G_TYPE_OBJECT)
+
+struct _DeviceManagerPrivate {
+    Shell *shell;
+
+    GPtrArray *devices;
+
+    GVolumeMonitor *monitor;
+};
+
+typedef Device* DeviceNewFunc (Shell*, GMount *mount);
 
 DeviceNewFunc *dev_new_funcs[] = {
 #ifdef ENABLE_IPOD
@@ -40,20 +52,25 @@ DeviceNewFunc *dev_new_funcs[] = {
     NULL
 };
 
-#include "shell.h"
-
-G_DEFINE_TYPE(DeviceManager, device_manager, G_TYPE_OBJECT)
-
-struct _DeviceManagerPrivate {
-    Shell *shell;
-
-    GVolumeMonitor *monitor;
-};
+static void on_mount_added (DeviceManager *self, GMount *mount, GVolumeMonitor *volume_monitor);
+static void on_mount_pre_unmount (DeviceManager *self, GMount *mount, GVolumeMonitor *volume_monitor);
+static void on_mount_removed (DeviceManager *self, GMount *mount, GVolumeMonitor *volume_monitor);
 
 static void
 device_manager_finalize (GObject *object)
 {
     DeviceManager *self = DEVICE_MANAGER (object);
+
+    if (self->priv->shell) {
+        g_object_unref (self->priv->shell);
+        self->priv->shell = NULL;
+    }
+
+    if (self->priv->devices) {
+        g_ptr_array_foreach (self->priv->devices, (GFunc) g_object_unref, NULL);
+        g_ptr_array_free (self->priv->devices, TRUE);
+        self->priv->devices = NULL;
+    }
 
     G_OBJECT_CLASS (device_manager_parent_class)->finalize (object);
 }
@@ -73,6 +90,8 @@ static void
 device_manager_init (DeviceManager *self)
 {
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), DEVICE_MANAGER_TYPE, DeviceManagerPrivate);
+
+    self->priv->devices = g_ptr_array_new ();
 }
 
 DeviceManager*
@@ -89,36 +108,62 @@ device_manager_new (Shell *shell)
 
     for (iter = mps; iter; iter = iter->next) {
         GMount *mp = G_MOUNT (iter->data);
-        gchar *mpname = g_mount_get_name (mp);
-        GFile *mproot = g_mount_get_root (mp);
-        gchar *rpath = g_file_get_path (mproot);
 
-        Device *new_dev = NULL;
-        gint i;
-        for (i = 0; dev_new_funcs[i] && !new_dev; i++) {
-            new_dev = dev_new_funcs[i] (self->priv->shell, rpath);
-        }
-
-//        g_print ("Mount at %s :: %s :: ", mpname, rpath);
-
-        if (new_dev) {
-//            g_print ("Is a %s device\n", device_get_name (new_dev));
-//            g_object_unref (new_dev);
-        } else {
-//            g_print ("Not a valid media device\n");
-        }
-
-        g_free (mpname);
-        g_free (rpath);
-
-        g_object_unref (mproot);
+        on_mount_added (self, mp, self->priv->monitor);
 
         g_object_unref (mp);
     }
 
     g_list_free (mps);
 
+    g_signal_connect_swapped (self->priv->monitor, "mount-added",
+        G_CALLBACK (on_mount_added), self);
+    g_signal_connect_swapped (self->priv->monitor, "mount-pre-unmount",
+        G_CALLBACK (on_mount_pre_unmount), self);
+    g_signal_connect_swapped (self->priv->monitor, "mount-removed",
+        G_CALLBACK (on_mount_removed), self);
+
     g_print ("Device manager ready %x\n", self->priv->monitor);
 
     return self;
+}
+
+static void
+on_mount_added (DeviceManager *self,
+                GMount *mount,
+                GVolumeMonitor *volume_monitor)
+{
+    gchar *name = g_mount_get_name (mount);
+    g_print ("Mount Added %s\n", name);
+    g_free (name);
+
+    Device *new_dev = NULL;
+    gint i;
+    for (i = 0; dev_new_funcs[i] && !new_dev; i++) {
+        new_dev = dev_new_funcs[i] (self->priv->shell, mount);
+    }
+
+    if (new_dev) {
+        g_ptr_array_add (self->priv->devices, new_dev);
+    }
+}
+
+static void
+on_mount_pre_unmount (DeviceManager *self,
+                      GMount *mount,
+                      GVolumeMonitor *volume_monitor)
+{
+    gchar *name = g_mount_get_name (mount);
+    g_print ("Pre-Unmount %s\n", name);
+    g_free (name);
+}
+
+static void
+on_mount_removed (DeviceManager *self,
+                  GMount *mount,
+                  GVolumeMonitor *volume_monitor)
+{
+    gchar *name = g_mount_get_name (mount);
+    g_print ("Mount Removed %s\n", name);
+    g_free (name);
 }

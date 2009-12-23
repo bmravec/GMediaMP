@@ -23,10 +23,10 @@
 #include <gpod/itdb.h>
 
 #include "browser.h"
-#include "device.h"
 #include "device-ipod.h"
 #include "ipod-store.h"
 #include "shell.h"
+#include "column-funcs.h"
 
 static void device_init (DeviceInterface *iface);
 G_DEFINE_TYPE_WITH_CODE (DeviceIPod, device_ipod, G_TYPE_OBJECT,
@@ -36,11 +36,17 @@ G_DEFINE_TYPE_WITH_CODE (DeviceIPod, device_ipod, G_TYPE_OBJECT,
 struct _DeviceIPodPrivate {
     Shell *shell;
 
+    GMount *mount;
+
+    GtkWidget *main_pane;
+
     IPodStore *audio, *movie, *podcast, *audiobook, *musicvideo, *tvshow;
     Browser *audiob, *movieb, *podcastb, *audiobookb, *musicvideob, *tvshowb;
 
     Itdb_iTunesDB *itdb;
 };
+
+static void device_ipod_build_main_view (DeviceIPod *self);
 
 // Device interface methods
 void device_ipod_add_entry (Device *self, gchar **entry);
@@ -63,6 +69,11 @@ device_ipod_finalize (GObject *object)
     if (self->priv->itdb) {
         itdb_free (self->priv->itdb);
         self->priv->itdb = NULL;
+    }
+
+    if (self->priv->mount) {
+        g_object_unref (self->priv->mount);
+        self->priv->mount = NULL;
     }
 
     G_OBJECT_CLASS (device_ipod_parent_class)->finalize (object);
@@ -93,53 +104,27 @@ device_ipod_init (DeviceIPod *self)
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), DEVICE_IPOD_TYPE, DeviceIPodPrivate);
 }
 
-static void
-str_column_func (GtkTreeViewColumn *column,
-                 GtkCellRenderer *cell,
-                 GtkTreeModel *model,
-                 GtkTreeIter *iter,
-                 gchar *data)
-{
-    Entry *entry;
-
-    gtk_tree_model_get (model, iter, 0, &entry, -1);
-    if (entry) {
-        g_object_set (G_OBJECT (cell), "text", entry_get_tag_str (entry, data), NULL);
-        g_object_unref (entry);
-    } else {
-        g_object_set (G_OBJECT (cell), "text", "", NULL);
-    }
-}
-
-static void
-time_column_func (GtkTreeViewColumn *column,
-                  GtkCellRenderer *cell,
-                  GtkTreeModel *model,
-                  GtkTreeIter *iter,
-                  gchar *data)
-{
-    Entry *entry;
-
-    gtk_tree_model_get (model, iter, 0, &entry, -1);
-    if (entry) {
-        gchar *str = time_to_string ((gdouble) entry_get_tag_int (entry, data));
-        g_object_set (G_OBJECT (cell), "text", str, NULL);
-        g_free (str);
-        g_object_unref (entry);
-    } else {
-        g_object_set (G_OBJECT (cell), "text", "", NULL);
-    }
-}
-
 Device*
-device_ipod_new (Shell *shell, const gchar *dev_root)
+device_ipod_new (Shell *shell, GMount *mount)
 {
+    if (!mount) {
+        return NULL;
+    }
+
     DeviceIPod *self = g_object_new (DEVICE_IPOD_TYPE, NULL);
 
     self->priv->shell = g_object_ref (shell);
+    self->priv->mount = g_object_ref (mount);
 
     GError *err = NULL;
+
+    GFile *mproot = g_mount_get_root (mount);
+    gchar *dev_root = g_file_get_path (mproot);
+    g_object_unref (mproot);
+
     self->priv->itdb = itdb_parse (dev_root, &err);
+
+    g_free (dev_root);
 
     if (err) {
         g_error_free (err);
@@ -151,8 +136,11 @@ device_ipod_new (Shell *shell, const gchar *dev_root)
         return NULL;
     }
 
-    GtkWidget *widget = gtk_label_new (dev_root);
-    shell_add_widget (shell, widget, "IPOD", NULL);
+//    GtkWidget *widget = gtk_label_new (dev_root);
+    device_ipod_build_main_view (self);
+
+    gchar *name = g_mount_get_name (mount);
+    shell_add_widget (shell, self->priv->main_pane, name, NULL);
 
     self->priv->audio = ipod_store_new (self->priv->itdb, ITDB_MEDIATYPE_AUDIO);
     self->priv->audiob = browser_new_with_model (shell, MEDIA_STORE (self->priv->audio));
@@ -160,7 +148,9 @@ device_ipod_new (Shell *shell, const gchar *dev_root)
         TRUE, (GtkTreeCellDataFunc) str_column_func);
     browser_add_column (self->priv->audiob, "Duration", "duration",
         FALSE, (GtkTreeCellDataFunc) time_column_func);
-    shell_add_widget (shell, GTK_WIDGET (self->priv->audiob), "IPOD/Music", NULL);
+    gchar *n2 = g_strdup_printf ("%s/Music", name);
+    shell_add_widget (shell, GTK_WIDGET (self->priv->audiob), n2, NULL);
+    g_free (n2);
     shell_register_track_source (shell, TRACK_SOURCE (self->priv->audiob));
 
     self->priv->movie = ipod_store_new (self->priv->itdb, ITDB_MEDIATYPE_MOVIE);
@@ -169,7 +159,9 @@ device_ipod_new (Shell *shell, const gchar *dev_root)
         TRUE, (GtkTreeCellDataFunc) str_column_func);
     browser_add_column (self->priv->movieb, "Duration", "duration",
         FALSE, (GtkTreeCellDataFunc) time_column_func);
-    shell_add_widget (shell, GTK_WIDGET (self->priv->movieb), "IPOD/Movies", NULL);
+    n2 = g_strdup_printf ("%s/Movies", name);
+    shell_add_widget (shell, GTK_WIDGET (self->priv->movieb), n2, NULL);
+    g_free (n2);
     shell_register_track_source (shell, TRACK_SOURCE (self->priv->movieb));
 
     self->priv->podcast = ipod_store_new (self->priv->itdb, ITDB_MEDIATYPE_PODCAST);
@@ -178,7 +170,9 @@ device_ipod_new (Shell *shell, const gchar *dev_root)
         TRUE, (GtkTreeCellDataFunc) str_column_func);
     browser_add_column (self->priv->podcastb, "Duration", "duration",
         FALSE, (GtkTreeCellDataFunc) time_column_func);
-    shell_add_widget (shell, GTK_WIDGET (self->priv->podcastb), "IPOD/Podcasts", NULL);
+    n2 = g_strdup_printf ("%s/Podcasts", name);
+    shell_add_widget (shell, GTK_WIDGET (self->priv->podcastb), n2, NULL);
+    g_free (n2);
     shell_register_track_source (shell, TRACK_SOURCE (self->priv->podcastb));
 
     self->priv->audiobook = ipod_store_new (self->priv->itdb, ITDB_MEDIATYPE_AUDIOBOOK);
@@ -187,7 +181,9 @@ device_ipod_new (Shell *shell, const gchar *dev_root)
         TRUE, (GtkTreeCellDataFunc) str_column_func);
     browser_add_column (self->priv->audiobookb, "Duration", "duration",
         FALSE, (GtkTreeCellDataFunc) time_column_func);
-    shell_add_widget (shell, GTK_WIDGET (self->priv->audiobookb), "IPOD/Audio Books", NULL);
+    n2 = g_strdup_printf ("%s/Audio Books", name);
+    shell_add_widget (shell, GTK_WIDGET (self->priv->audiobookb), n2, NULL);
+    g_free (n2);
     shell_register_track_source (shell, TRACK_SOURCE (self->priv->audiobookb));
 
     self->priv->musicvideo = ipod_store_new (self->priv->itdb, ITDB_MEDIATYPE_MUSICVIDEO);
@@ -196,7 +192,9 @@ device_ipod_new (Shell *shell, const gchar *dev_root)
         TRUE, (GtkTreeCellDataFunc) str_column_func);
     browser_add_column (self->priv->musicvideob, "Duration", "duration",
         FALSE, (GtkTreeCellDataFunc) time_column_func);
-    shell_add_widget (shell, GTK_WIDGET (self->priv->musicvideob), "IPOD/Music Videos", NULL);
+    n2 = g_strdup_printf ("%s/Music Videos", name);
+    shell_add_widget (shell, GTK_WIDGET (self->priv->musicvideob), n2, NULL);
+    g_free (n2);
     shell_register_track_source (shell, TRACK_SOURCE (self->priv->musicvideob));
 
     self->priv->tvshow = ipod_store_new (self->priv->itdb, ITDB_MEDIATYPE_TVSHOW);
@@ -205,8 +203,12 @@ device_ipod_new (Shell *shell, const gchar *dev_root)
         TRUE, (GtkTreeCellDataFunc) str_column_func);
     browser_add_column (self->priv->tvshowb, "Duration", "duration",
         FALSE, (GtkTreeCellDataFunc) time_column_func);
-    shell_add_widget (shell, GTK_WIDGET (self->priv->tvshowb), "IPOD/TV Shows", NULL);
+    n2 = g_strdup_printf ("%s/TV Shows", name);
+    shell_add_widget (shell, GTK_WIDGET (self->priv->tvshowb), n2, NULL);
+    g_free (n2);
     shell_register_track_source (shell, TRACK_SOURCE (self->priv->tvshowb));
+
+    g_free (name);
 
     return DEVICE (self);
 }
@@ -226,5 +228,21 @@ device_ipod_remove_entry (Device *self, Entry *entry)
 gchar*
 device_ipod_get_name (Device *self)
 {
-    return "IPod";
+    return g_mount_get_name (DEVICE_IPOD (self)->priv->mount);
+}
+
+static void
+device_ipod_build_main_view (DeviceIPod *self)
+{
+    gchar *name = g_mount_get_name (self->priv->mount);
+    const Itdb_IpodInfo *info = itdb_device_get_ipod_info (self->priv->itdb->device);
+
+    gchar *info_str = g_strdup_printf ("%s\nCapacity: %.2fGB\nGeneration: %s\nModel: %s",
+        name, info->capacity,
+        itdb_info_get_ipod_generation_string (info->ipod_generation),
+        itdb_info_get_ipod_model_name_string (info->ipod_model));
+    g_free (name);
+
+    self->priv->main_pane = gtk_label_new (info_str);
+    g_free (info_str);
 }

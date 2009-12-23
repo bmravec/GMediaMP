@@ -23,6 +23,8 @@
 #define __DEVICE_IPOD_H__
 
 #include <glib-object.h>
+#include <gio/gio.h>
+
 #include "device.h"
 
 #define DEVICE_IPOD_TYPE (device_ipod_get_type ())
@@ -48,7 +50,7 @@ struct _DeviceIPodClass {
     GObjectClass parent;
 };
 
-Device *device_ipod_new (Shell *shell, const gchar *dev_root);
+Device *device_ipod_new (Shell *shell, GMount *mount);
 GType device_ipod_get_type (void);
 
 G_END_DECLS

@@ -45,7 +45,6 @@ struct _DeviceInterface {
 };
 
 GType device_get_type (void);
-Device *device_new (Shell *shell);
 
 void device_add_entry (Device *self, gchar **entry);
 void device_remove_entry (Device *self, Entry *entry);

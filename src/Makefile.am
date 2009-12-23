@@ -26,6 +26,7 @@ endif
 
 gmediamp_SOURCES = \
     shell.c shell.h \
+    column-funcs.c column-funcs.h \
     plugin-manager.c plugin-manager.h \
     player.c player.h \
     $(gstplayer_sources) \
@@ -41,9 +42,9 @@ gmediamp_SOURCES = \
     tag-dialog.c tag-dialog.h \
     browser.c browser.h \
     tag-reader.c tag-reader.h \
+    device-manager.c device-manager.h \
     device.c device.h \
-    $(ipod_sources) \
-    device-manager.c device-manager.h
+    $(ipod_sources)
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=

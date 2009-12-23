@@ -31,6 +31,7 @@
 #include "tag-reader.h"
 #include "tray.h"
 #include "gmediadb-store.h"
+#include "column-funcs.h"
 
 G_DEFINE_TYPE(Shell, shell, G_TYPE_OBJECT)
 
@@ -109,6 +110,10 @@ on_ts_play (Shell *self, Entry *entry, TrackSource *ts)
 
     self->priv->playing_entry = entry;
     g_object_ref (self->priv->playing_entry);
+
+    if (entry) {
+        g_print ("Playing file: %s\n", entry_get_location (entry));
+    }
 
     player_load (self->priv->player, entry);
     player_play (self->priv->player);
@@ -552,69 +557,6 @@ lock_function () {
 void
 unlock_function () {
     g_static_rec_mutex_unlock (&rmutex);
-}
-
-static void
-str_column_func (GtkTreeViewColumn *column,
-                 GtkCellRenderer *cell,
-                 GtkTreeModel *model,
-                 GtkTreeIter *iter,
-                 gchar *data)
-{
-    Entry *entry;
-
-    gtk_tree_model_get (model, iter, 0, &entry, -1);
-    if (entry) {
-        g_object_set (G_OBJECT (cell), "text", entry_get_tag_str (entry, data), NULL);
-        g_object_unref (entry);
-    } else {
-        g_object_set (G_OBJECT (cell), "text", "", NULL);
-    }
-}
-
-static void
-int_column_func (GtkTreeViewColumn *column,
-                 GtkCellRenderer *cell,
-                 GtkTreeModel *model,
-                 GtkTreeIter *iter,
-                 gchar *data)
-{
-    Entry *entry;
-    gint num = 0;
-
-    gtk_tree_model_get (model, iter, 0, &entry, -1);
-    if (entry) {
-        num = entry_get_tag_int (entry, data);
-        g_object_unref (entry);
-    }
-
-    if (num != 0) {
-        gchar *str = g_strdup_printf ("%d", num);
-        g_object_set (G_OBJECT (cell), "text", str, NULL);
-        g_free (str);
-    } else {
-        g_object_set (G_OBJECT (cell), "text", "", NULL);
-    }
-}
-
-static void
-time_column_func (GtkTreeViewColumn *column,
-                  GtkCellRenderer *cell,
-                  GtkTreeModel *model,
-                  GtkTreeIter *iter,
-                  gchar *data)
-{
-    Entry *entry;
-
-    gtk_tree_model_get (model, iter, 0, &entry, -1);
-    if (entry) {
-        gchar *str = time_to_string ((gdouble) entry_get_tag_int (entry, data));
-        g_object_set (G_OBJECT (cell), "text", str, NULL);
-        g_free (str);
-        g_object_unref (entry);
-    } else {
-        g_object_set (G_OBJECT (cell), "text", "", NULL);
-    }
 }
 
 static gint
