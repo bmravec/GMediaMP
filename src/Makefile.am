@@ -44,7 +44,8 @@ gmediamp_SOURCES = \
     tag-reader.c tag-reader.h \
     device-manager.c device-manager.h \
     device.c device.h \
-    $(ipod_sources)
+    $(ipod_sources) \
+    catagory-display.c catagory-display.h
 
 EXTRA_DIST=gmediamp.schemas
 CLEANFILES=
