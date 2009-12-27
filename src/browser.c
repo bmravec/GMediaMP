@@ -68,8 +68,6 @@ struct _BrowserPrivate {
     gchar *p1_tag, *p1_label;
     gchar *p2_tag, *p2_label;
     gboolean p2_single;
-    gint mtype;
-    gchar *media_type;
     gchar **tags;
 };
 
@@ -97,13 +95,16 @@ static void pane2_row_activated (Browser *self, GtkTreePath *path,
 static void pane3_row_activated (Browser *self, GtkTreePath *path,
     GtkTreeViewColumn *column, GtkTreeView *view);
 
+static void on_drop (Browser *self, GdkDragContext *drag_context, gint x,
+    gint y, GtkSelectionData *data, guint info, guint time, GtkWidget *widget);
+
 // Interface methods
 static Entry *browser_get_next (TrackSource *self);
 static Entry *browser_get_prev (TrackSource *self);
 
 // Signals from media-store
-static void browser_store_add (Browser *self, Entry *entry, MediaStore *ms);
-static void browser_store_remove (Browser *self, Entry *entry, MediaStore *ms);
+static void on_store_add (Browser *self, Entry *entry, MediaStore *ms);
+static void on_store_remove (Browser *self, Entry *entry, MediaStore *ms);
 
 static void
 track_source_init (TrackSourceInterface *iface)
@@ -217,6 +218,12 @@ browser_init (Browser *self)
         G_CALLBACK (pane2_row_activated), self);
     g_signal_connect_swapped (self->priv->pane3, "row-activated",
         G_CALLBACK (pane3_row_activated), self);
+
+    // Setup main widget as a drag destination for filenames
+    GtkTargetEntry dest_te = { "text/uri-list", 0, 1 };
+    gtk_drag_dest_set (GTK_WIDGET (self), GTK_DEST_DEFAULT_ALL, &dest_te, 1,
+        GDK_ACTION_COPY | GDK_ACTION_MOVE);
+    g_signal_connect_swapped (self, "drag-data-received", G_CALLBACK (on_drop), self);
 }
 
 Browser*
@@ -255,11 +262,11 @@ browser_set_model (Browser *self, MediaStore *store)
         self->priv->store = g_object_ref (store);
 
         self->priv->ss_add = g_signal_connect_data (self->priv->store,
-            "add-entry", G_CALLBACK (browser_store_add), self,
+            "add-entry", G_CALLBACK (on_store_add), self,
             NULL, G_CONNECT_SWAPPED);
 
         self->priv->ss_remove = g_signal_connect_data (self->priv->store,
-            "remove-entry", G_CALLBACK (browser_store_remove), self,
+            "remove-entry", G_CALLBACK (on_store_remove), self,
             NULL, G_CONNECT_SWAPPED);
     }
 
@@ -1083,7 +1090,7 @@ pane3_row_activated (Browser *self,
 }
 
 static void
-browser_store_add (Browser *self, Entry *entry, MediaStore *ms)
+on_store_add (Browser *self, Entry *entry, MediaStore *ms)
 {
     GtkTreeIter first, iter;
     gint cnt;
@@ -1163,7 +1170,7 @@ browser_store_add (Browser *self, Entry *entry, MediaStore *ms)
 }
 
 static void
-browser_store_remove (Browser *self, Entry *entry, MediaStore *ms)
+on_store_remove (Browser *self, Entry *entry, MediaStore *ms)
 {
     GtkTreeIter first, iter;
     gint cnt;
@@ -1234,4 +1241,26 @@ browser_store_remove (Browser *self, Entry *entry, MediaStore *ms)
     gtk_list_store_remove (self->priv->p3_store, &iter);
 
     gdk_threads_leave ();
+}
+
+static void
+on_drop (Browser *self, GdkDragContext *drag_context, gint x, gint y,
+         GtkSelectionData *data, guint info, guint time, GtkWidget *widget)
+{
+    if (info == 1) {
+        gchar **uris = g_strsplit (data->data, "\r\n", -1);
+
+        if (uris) {
+            gint i;
+            for (i = 0; uris[i]; i++) {
+                gchar *ustr = g_uri_unescape_string (uris[i]+7, "");
+                shell_import_path (self->priv->shell, ustr, media_store_get_name (self->priv->store));
+                g_free (ustr);
+            }
+
+            g_strfreev (uris);
+        }
+    } else {
+        g_print ("Unknown info %d\n", info);
+    }
 }
