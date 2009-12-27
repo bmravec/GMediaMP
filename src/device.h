@@ -24,7 +24,7 @@
 
 #include <gtk/gtk.h>
 
-#include "shell.h"
+#include "entry.h"
 
 #define DEVICE_TYPE (device_get_type ())
 #define DEVICE(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), DEVICE_TYPE, Device))

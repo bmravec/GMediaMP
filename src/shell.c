@@ -55,7 +55,7 @@ struct _ShellPrivate {
     TrackSource *playing_source;
     Entry *playing_entry;
 
-    GPtrArray *stores;
+    GPtrArray *stores, *devices;
 
     gboolean visible;
 
@@ -246,6 +246,7 @@ shell_init (Shell *self)
     self->priv = G_TYPE_INSTANCE_GET_PRIVATE((self), SHELL_TYPE, ShellPrivate);
 
     self->priv->stores = g_ptr_array_new ();
+    self->priv->devices = g_ptr_array_new ();
 
     self->priv->builder = gtk_builder_new ();
 
@@ -359,6 +360,12 @@ shell_register_media_store (Shell *self, MediaStore *ms)
 //    g_signal_connect_swapped (ms, "entry-move", G_CALLBACK (on_entry_move), self);
 
     g_ptr_array_add (self->priv->stores, ms);
+}
+
+gboolean
+shell_register_device (Shell *self, Device *dev)
+{
+    g_ptr_array_add (self->priv->devices, dev);
 }
 
 Player*

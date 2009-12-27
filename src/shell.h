@@ -27,6 +27,7 @@
 #include "progress.h"
 #include "track-source.h"
 #include "media-store.h"
+#include "device.h"
 
 #define SHELL_TYPE (shell_get_type ())
 #define SHELL(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), SHELL_TYPE, Shell))
@@ -68,6 +69,7 @@ gboolean shell_remove_progress (Shell *self, Progress *p);
 
 gboolean shell_register_track_source (Shell *self, TrackSource *ts);
 gboolean shell_register_media_store (Shell *self, MediaStore *ms);
+gboolean shell_register_device (Shell *self, Device *dev);
 
 gboolean shell_import_path (Shell *self, const gchar *path, const gchar *media_type);
 
