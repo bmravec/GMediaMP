@@ -40,7 +40,7 @@ struct _CatagoryDisplayPrivate {
 
 static gdouble reds[10]   = { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 };
 static gdouble greens[10] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
-static gdouble blues[10] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+static gdouble blues[10]  = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
 
 static gboolean on_expose_event (CatagoryDisplay *self, GdkEventExpose *event, GtkWidget *widget);
 
@@ -184,7 +184,7 @@ on_expose_event (CatagoryDisplay *self, GdkEventExpose *event, GtkWidget *widget
             cairo_rectangle (cr, xpos, ypos, 10, 10);
             cairo_fill (cr);
 
-            cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 1.0);
+            cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 0.25);
             cairo_rectangle (cr, xpos, ypos, 10, 10);
             cairo_stroke (cr);
 
@@ -194,6 +194,7 @@ on_expose_event (CatagoryDisplay *self, GdkEventExpose *event, GtkWidget *widget
             gchar *str = g_strdup_printf ("%s (%s)", iter->name, num_str);
             g_free (num_str);
 
+            cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 1.0);
             cairo_move_to (cr, xpos, ypos + 10);
             cairo_show_text (cr, str);
 
@@ -215,7 +216,7 @@ on_expose_event (CatagoryDisplay *self, GdkEventExpose *event, GtkWidget *widget
         cairo_rectangle (cr, xpos, ypos, 10, 10);
         cairo_fill (cr);
 
-        cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 1.0);
+        cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 0.25);
         cairo_rectangle (cr, xpos, ypos, 10, 10);
         cairo_stroke (cr);
 
@@ -225,6 +226,7 @@ on_expose_event (CatagoryDisplay *self, GdkEventExpose *event, GtkWidget *widget
         gchar *str = g_strdup_printf ("%s (%s)", "Free Space", num_str);
         g_free (num_str);
 
+        cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 1.0);
         cairo_move_to (cr, xpos, ypos + 10);
         cairo_show_text (cr, str);
         g_free (str);
