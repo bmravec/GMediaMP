@@ -27,6 +27,7 @@
 #include "ipod-store.h"
 #include "shell.h"
 #include "column-funcs.h"
+#include "catagory-display.h"
 
 static void device_init (DeviceInterface *iface);
 G_DEFINE_TYPE_WITH_CODE (DeviceIPod, device_ipod, G_TYPE_OBJECT,
@@ -39,6 +40,7 @@ struct _DeviceIPodPrivate {
     GMount *mount;
 
     GtkWidget *main_pane;
+    GtkWidget *cat_display;
 
     IPodStore *audio, *movie, *podcast, *audiobook, *musicvideo, *tvshow;
     Browser *audiob, *movieb, *podcastb, *audiobookb, *musicvideob, *tvshowb;
@@ -235,14 +237,81 @@ static void
 device_ipod_build_main_view (DeviceIPod *self)
 {
     gchar *name = g_mount_get_name (self->priv->mount);
+    GFile *file = g_mount_get_root (self->priv->mount);
+
+    GFileInfo *fsize = g_file_query_filesystem_info (file, G_FILE_ATTRIBUTE_FILESYSTEM_SIZE, NULL, NULL);
+    GFileInfo *ffree = g_file_query_filesystem_info (file, G_FILE_ATTRIBUTE_FILESYSTEM_FREE, NULL, NULL);
+
+    guint64 fgsize = g_file_info_get_attribute_uint64 (fsize, G_FILE_ATTRIBUTE_FILESYSTEM_SIZE);
+    guint64 fgfree = g_file_info_get_attribute_uint64 (ffree, G_FILE_ATTRIBUTE_FILESYSTEM_FREE);
+
+    guint64 audiosize = 0, moviesize = 0, podcastsize = 0, audiobooksize = 0, musicvideosize = 0, tvshowsize = 0;
+    guint64 datasize = 0;
+    guint64 totsize = fgsize;
+
+    GList *iter;
+    for (iter = self->priv->itdb->tracks; iter; iter = iter->next) {
+        Itdb_Track *track = (Itdb_Track*) iter->data;
+
+        switch (track->mediatype) {
+            case ITDB_MEDIATYPE_AUDIO: audiosize += track->size; break;
+            case ITDB_MEDIATYPE_MOVIE: moviesize += track->size; break;
+            case ITDB_MEDIATYPE_PODCAST: podcastsize += track->size; break;
+            case ITDB_MEDIATYPE_AUDIOBOOK: audiobooksize += track->size; break;
+            case ITDB_MEDIATYPE_MUSICVIDEO: musicvideosize += track->size; break;
+            case ITDB_MEDIATYPE_TVSHOW: tvshowsize += track->size; break;
+        };
+    }
+
+    datasize = fgsize - fgfree - audiosize - moviesize - podcastsize - audiobooksize - musicvideosize - tvshowsize;
+
+    fgsize /= (1024 * 1024);
+    fgfree /= (1024 * 1024);
+
     const Itdb_IpodInfo *info = itdb_device_get_ipod_info (self->priv->itdb->device);
 
-    gchar *info_str = g_strdup_printf ("%s\nCapacity: %.2fGB\nGeneration: %s\nModel: %s",
-        name, info->capacity,
-        itdb_info_get_ipod_generation_string (info->ipod_generation),
-        itdb_info_get_ipod_model_name_string (info->ipod_model));
+    gchar *info_str = g_strdup_printf ("%s\nCapacity: %.2fGB\nGeneration: %s\nModel: %s\nFree: %d.%02d GB / %d.%02d GB"
+        "\nAudio: %ld Bytes (%.2f%%)\n"
+        "Movies: %ld Bytes (%.2f%%)\n"
+        "Podcasts: %ld Bytes (%.2f%%)\n"
+        "AudioBooks: %ld Bytes (%.2f%%)\n"
+        "Music Videos: %ld Bytes (%.2f%%)\n"
+        "TV Shows: %ld Bytes (%.2f%%)\n"
+        "Extra Data: %ld Bytes (%.2f%%)",
+        name, info->capacity, itdb_info_get_ipod_generation_string (info->ipod_generation),
+        itdb_info_get_ipod_model_name_string (info->ipod_model),
+        fgfree / 1024, (fgfree % 1024) / 10, fgsize / 1024, (fgsize % 1024) / 10,
+        audiosize, 100.0 * audiosize / totsize,
+        moviesize, 100.0 * moviesize / totsize,
+        podcastsize, 100.0 * podcastsize / totsize,
+        audiobooksize, 100.0 * audiobooksize / totsize,
+        musicvideosize, 100.0 * musicvideosize / totsize,
+        tvshowsize, 100.0 * tvshowsize / totsize,
+        datasize, 100.0 * datasize / totsize);
     g_free (name);
 
-    self->priv->main_pane = gtk_label_new (info_str);
+    g_object_unref (fsize);
+    g_object_unref (ffree);
+
+    GtkWidget *vbox = gtk_vbox_new (TRUE, 0);
+
+    gtk_box_pack_start (GTK_BOX (vbox), gtk_label_new (info_str), FALSE, FALSE, 0);
+
+    self->priv->cat_display = catagory_display_new ();
+
+    catagory_display_set_capacity (CATAGORY_DISPLAY (self->priv->cat_display), totsize);
+    catagory_display_set_catagory (CATAGORY_DISPLAY (self->priv->cat_display), "Music", audiosize);
+    catagory_display_set_catagory (CATAGORY_DISPLAY (self->priv->cat_display), "Movies", moviesize);
+    catagory_display_set_catagory (CATAGORY_DISPLAY (self->priv->cat_display), "Podcasts", podcastsize);
+    catagory_display_set_catagory (CATAGORY_DISPLAY (self->priv->cat_display), "Audio Books", audiobooksize);
+    catagory_display_set_catagory (CATAGORY_DISPLAY (self->priv->cat_display), "Music Videos", musicvideosize);
+    catagory_display_set_catagory (CATAGORY_DISPLAY (self->priv->cat_display), "TV Shows", tvshowsize);
+    catagory_display_set_catagory (CATAGORY_DISPLAY (self->priv->cat_display), "Extra Data", datasize);
+
+    gtk_box_pack_start (GTK_BOX (vbox), self->priv->cat_display, TRUE, TRUE, 0);
+
+    gtk_widget_show_all (vbox);
+
+    self->priv->main_pane = vbox;
     g_free (info_str);
 }
