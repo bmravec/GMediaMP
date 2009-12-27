@@ -50,7 +50,7 @@ struct _TagReaderClass {
 GType tag_reader_get_type (void);
 TagReader *tag_reader_new (Shell *shell);
 
-gchar **tag_reader_get_tags (TagReader *self, const gchar *location);
+gchar **tag_reader_get_tags (TagReader *self, const gchar *location, gboolean *has_video);
 void tag_reader_queue_entry (TagReader *self, const gchar *location, const gchar *media_type);
 
 G_END_DECLS

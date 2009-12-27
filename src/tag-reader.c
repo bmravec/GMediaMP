@@ -34,8 +34,6 @@ G_DEFINE_TYPE_WITH_CODE (TagReader, tag_reader, G_TYPE_OBJECT,
     G_IMPLEMENT_INTERFACE (MEDIA_STORE_TYPE, media_store_init)
 )
 
-#define TAG_READER_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), TAG_READER_TYPE, TagReaderPrivate))
-
 typedef struct {
     gchar *location;
     gchar *mtype;
@@ -69,14 +67,22 @@ tag_reader_finalize (GObject *object)
     self->priv->run = FALSE;
 
     while (g_async_queue_length (self->priv->job_queue) > 0) {
-        gchar *str = g_async_queue_try_pop (self->priv->job_queue);
-        if (str) {
-            //TODO: DO SOMETHING WITH QUEUED ITEMS
-            g_free (str);
+        QueueEntry *entry = g_async_queue_try_pop (self->priv->job_queue);
+
+        if (!entry) {
+            continue;
         }
+
+        if (entry->location) {
+            g_free (entry->location);
+        }
+        if (entry->mtype) {
+            g_free (entry->mtype);
+        }
+        g_free (entry);
     }
 
-    g_async_queue_push (self->priv->job_queue, "");
+    g_async_queue_push (self->priv->job_queue, NULL);
     g_thread_join (self->priv->job_thread);
 
     g_async_queue_unref (self->priv->job_queue);
@@ -100,7 +106,7 @@ tag_reader_class_init (TagReaderClass *klass)
 static void
 tag_reader_init (TagReader *self)
 {
-    self->priv = TAG_READER_GET_PRIVATE (self);
+    self->priv = G_TYPE_INSTANCE_GET_PRIVATE (self, TAG_READER_TYPE, TagReaderPrivate);
 
     self->priv->job_queue = g_async_queue_new ();
     self->priv->run = TRUE;
@@ -159,10 +165,19 @@ tag_reader_main (TagReader *self)
             g_free (new_str);
         }
 
-        gchar **kvs = tag_reader_get_tags (self, entry->location);
+        gboolean has_video;
+        gchar **kvs = tag_reader_get_tags (self, entry->location, &has_video);
 
         if (kvs) {
-            shell_move_to (self->priv->shell, kvs, entry->mtype);
+            if (entry->mtype) {
+                shell_move_to (self->priv->shell, kvs, entry->mtype);
+            } else {
+                if (has_video) {
+                    shell_move_to (self->priv->shell, kvs, "Movies");
+                } else {
+                    shell_move_to (self->priv->shell, kvs, "Music");
+                }
+            }
 
             g_strfreev (kvs);
             kvs = NULL;
@@ -171,12 +186,11 @@ tag_reader_main (TagReader *self)
         if (entry->location) {
             g_free (entry->location);
         }
-
         if (entry->mtype) {
             g_free (entry->mtype);
         }
-
         g_free (entry);
+
         self->priv->done++;
     }
 }
@@ -189,7 +203,9 @@ tag_reader_queue_entry (TagReader *self,
     QueueEntry *qe = g_new0 (QueueEntry, 1);
 
     qe->location = g_strdup (location);
-    qe->mtype = g_strdup (media_type);
+    if (media_type) {
+        qe->mtype = g_strdup (media_type);
+    }
 
     g_async_queue_push (self->priv->job_queue, qe);
 
@@ -204,21 +220,36 @@ struct AVMetadata {
 };
 
 gchar**
-tag_reader_av_get_tags (TagReader *self, const gchar *location)
+tag_reader_av_get_tags (TagReader *self, const gchar *location, gboolean *has_video)
 {
-    AVFormatContext *pFormatCtx;
+    AVFormatContext *fmt_ctx;
     gint i, j;
 
-    if (av_open_input_file (&pFormatCtx, location, NULL, 0, NULL) != 0) {
+    if (av_open_input_file (&fmt_ctx, location, NULL, 0, NULL) != 0) {
         return NULL;
     }
 
-    if (av_find_stream_info (pFormatCtx) < 0) {
-        av_close_input_file (pFormatCtx);
+    if (!g_strcmp0 (fmt_ctx->iformat->name, "image2")) {
+        av_close_input_file (fmt_ctx);
         return NULL;
     }
 
-    AVMetadata *md = pFormatCtx->metadata;
+    if (av_find_stream_info (fmt_ctx) < 0) {
+        av_close_input_file (fmt_ctx);
+        return NULL;
+    }
+
+    if (has_video) {
+        *has_video = FALSE;
+        for (i = 0; i < fmt_ctx->nb_streams; i++) {
+            if (fmt_ctx->streams[i]->codec->codec_type == CODEC_TYPE_VIDEO) {
+                *has_video = TRUE;
+                break;
+            }
+        }
+    }
+
+    AVMetadata *md = fmt_ctx->metadata;
     gint count = md ? 2 * md->count + 7 : 7;
 
     gchar **tags = g_new0 (gchar*, count);
@@ -238,7 +269,7 @@ tag_reader_av_get_tags (TagReader *self, const gchar *location)
     }
 
     tags[2*i] = g_strdup ("duration");
-    tags[2*i+1] = g_strdup_printf ("%d", (gint) (pFormatCtx->duration / AV_TIME_BASE));
+    tags[2*i+1] = g_strdup_printf ("%d", (gint) (fmt_ctx->duration / AV_TIME_BASE));
     tags[2*i+2] = g_strdup ("location");
     tags[2*i+3] = g_strdup (location);
 
@@ -263,10 +294,10 @@ tag_reader_av_get_tags (TagReader *self, const gchar *location)
 #endif
 
 gchar**
-tag_reader_get_tags (TagReader *self, const gchar *location)
+tag_reader_get_tags (TagReader *self, const gchar *location, gboolean *has_video)
 {
 #ifdef USE_TAG_READER_AVCODEC
-    return tag_reader_av_get_tags (self, location);
+    return tag_reader_av_get_tags (self, location, has_video);
 #else
     return NULL;
 #endif

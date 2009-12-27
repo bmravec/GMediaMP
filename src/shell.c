@@ -787,7 +787,7 @@ import_file_cb (GtkMenuItem *item, Shell *self)
 
         for (iter = fnames; iter; iter = iter->next) {
             g_print ("URI: %s\n", iter->data);
-            shell_import_path (self, iter->data, "Music");
+            shell_import_path (self, iter->data, NULL);
         }
 
 //        shell_import_path (self, filename, "Music");
@@ -813,7 +813,7 @@ import_dir_cb (GtkMenuItem *item, Shell *self)
 
         filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
 
-        shell_import_path (self, filename, "Music");
+        shell_import_path (self, filename, NULL);
 
         g_free (filename);
     }
@@ -855,7 +855,9 @@ shell_import_thread (struct SIData *d)
 
     g_object_unref (d->shell);
     g_free (d->path);
-    g_free (d->mtype);
+    if (d->mtype) {
+        g_free (d->mtype);
+    }
     g_free (d);
 }
 
@@ -867,7 +869,9 @@ shell_import_path (Shell *self, const gchar *path, const gchar *mtype)
 
     d->shell = g_object_ref (self);
     d->path = g_strdup (path);
-    d->mtype = g_strdup (mtype);
+    if (mtype) {
+        d->mtype = g_strdup (mtype);
+    }
 
     g_thread_create ((GThreadFunc) shell_import_thread, (gpointer) d, FALSE, NULL);
 }
