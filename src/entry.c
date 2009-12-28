@@ -241,3 +241,27 @@ entry_get_key_value_pairs (Entry *self, gchar ***keys, gchar ***vals)
 
     return size;
 }
+
+gchar**
+entry_get_kvs (Entry *self)
+{
+    GList *keys, *vals, *ki, *vi;
+    guint i, size;
+    gchar **kvs;
+
+    size = g_hash_table_size (self->priv->table);
+
+    kvs = g_new0 (gchar*, 2 * size + 1);
+
+    keys = g_hash_table_get_keys (self->priv->table);
+    vals = g_hash_table_get_values (self->priv->table);
+    for (ki = keys, vi = vals, i = 0; ki && vi; ki = ki->next, vi = vi->next) {
+        kvs[i++] = g_strdup ((gchar*) ki->data);
+        kvs[i++] = g_strdup ((gchar*) vi->data);
+    }
+
+    g_list_free (keys);
+    g_list_free (vals);
+
+    return kvs;
+}

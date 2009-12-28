@@ -81,6 +81,7 @@ gchar *entry_get_state_image (Entry *self);
 EntryType entry_get_media_type (Entry *self);
 
 guint entry_get_key_value_pairs (Entry *self, gchar ***keys, gchar ***vals);
+gchar **entry_get_kvs (Entry *self);
 
 // These functions should only be used inside the MediaStore object
 Entry *_entry_new (guint id);
