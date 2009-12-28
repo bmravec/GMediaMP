@@ -95,6 +95,15 @@ static void pane2_row_activated (Browser *self, GtkTreePath *path,
 static void pane3_row_activated (Browser *self, GtkTreePath *path,
     GtkTreeViewColumn *column, GtkTreeView *view);
 
+static gboolean on_pane1_click (Browser *self, GdkEventButton *event, GtkWidget *view);
+static gboolean on_pane2_click (Browser *self, GdkEventButton *event, GtkWidget *view);
+static gboolean on_pane3_click (Browser *self, GdkEventButton *event, GtkWidget *view);
+
+static void on_pane3_remove (Browser *self, GtkWidget *item);
+static void on_pane3_info (Browser *self, GtkWidget *item);
+static void on_pane3_move (Browser *self, GtkWidget *item);
+static void on_info_completed (Browser *self, GPtrArray *changes, TagDialog *td);
+
 static void on_drop (Browser *self, GdkDragContext *drag_context, gint x,
     gint y, GtkSelectionData *data, guint info, guint time, GtkWidget *widget);
 
@@ -218,6 +227,13 @@ browser_init (Browser *self)
         G_CALLBACK (pane2_row_activated), self);
     g_signal_connect_swapped (self->priv->pane3, "row-activated",
         G_CALLBACK (pane3_row_activated), self);
+
+    g_signal_connect_swapped (self->priv->pane1, "button-press-event",
+        G_CALLBACK (on_pane1_click), self);
+    g_signal_connect_swapped (self->priv->pane2, "button-press-event",
+        G_CALLBACK (on_pane2_click), self);
+    g_signal_connect_swapped (self->priv->pane3, "button-press-event",
+        G_CALLBACK (on_pane3_click), self);
 
     // Setup main widget as a drag destination for filenames
     GtkTargetEntry dest_te = { "text/uri-list", 0, 1 };
@@ -1263,4 +1279,221 @@ on_drop (Browser *self, GdkDragContext *drag_context, gint x, gint y,
     } else {
         g_print ("Unknown info %d\n", info);
     }
+}
+
+static gboolean
+on_pane1_click (Browser *self, GdkEventButton *event, GtkWidget *view)
+{
+    if (event->button == 3) {
+        g_print ("RBUTTON ARTIST\n");
+
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static gboolean
+on_pane2_click (Browser *self, GdkEventButton *event, GtkWidget *view)
+{
+    if (event->button == 3) {
+        g_print ("RBUTTON ALBUM\n");
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static GtkWidget*
+browser_get_move_submenu (Browser *self)
+{
+    GtkWidget *menu = gtk_menu_new ();
+
+    gchar **dests = shell_get_media_stores (self->priv->shell);
+
+    gint i;
+    for (i = 0; dests[i]; i++) {
+        if (g_strcmp0 (media_store_get_name (self->priv->store), dests[i])) {
+            GtkWidget *item = gtk_menu_item_new_with_label (dests[i]);
+            gtk_menu_append (GTK_MENU (menu), item);
+            g_signal_connect_swapped (item, "activate", G_CALLBACK (on_pane3_move), self);
+        }
+    }
+
+    return menu;
+}
+
+static gboolean
+on_pane3_click (Browser *self, GdkEventButton *event, GtkWidget *view)
+{
+    if (event->button == 3) {
+        GtkTreePath *cpath;
+        gboolean retval = TRUE;
+
+        gtk_tree_view_get_path_at_pos (GTK_TREE_VIEW (view), event->x, event->y,
+            &cpath, NULL, NULL, NULL);
+
+        if (cpath) {
+            if (!gtk_tree_selection_path_is_selected (self->priv->p3_sel, cpath)) {
+                retval = FALSE;
+            }
+
+            gtk_tree_path_free (cpath);
+        }
+
+        GtkWidget *menu = gtk_menu_new ();
+
+        GtkWidget *item = gtk_image_menu_item_new_from_stock (GTK_STOCK_INFO, NULL);
+        gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Get Info");
+        gtk_menu_append (GTK_MENU (menu), item);
+        g_signal_connect_swapped (item, "activate", G_CALLBACK (on_pane3_info), self);
+
+        gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_CONVERT, NULL);
+        gtk_menu_item_set_label (GTK_MENU_ITEM (item), "Move");
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_menu_item_set_submenu (GTK_MENU_ITEM (item),
+            browser_get_move_submenu (self));
+
+        gtk_menu_append (GTK_MENU (menu), gtk_separator_menu_item_new ());
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_REMOVE, NULL);
+        gtk_menu_append (GTK_MENU (menu), item);
+        g_signal_connect_swapped (item, "activate", G_CALLBACK (on_pane3_remove), self);
+
+        item = gtk_image_menu_item_new_from_stock (GTK_STOCK_DELETE, NULL);
+        gtk_menu_append (GTK_MENU (menu), item);
+
+        gtk_widget_show_all (menu);
+
+        gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL,
+                        event->button, event->time);
+
+        return retval;
+    }
+
+    return FALSE;
+}
+
+static void
+on_pane3_move (Browser *self, GtkWidget *item)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i;
+    GList *rows, *ri;
+
+    const gchar *label = gtk_menu_item_get_label (GTK_MENU_ITEM (item));
+
+    rows = gtk_tree_selection_get_selected_rows (self->priv->p3_sel, NULL);
+    size = g_list_length (rows);
+
+    entries = g_new0 (Entry*, size);
+    for (ri = rows, i = 0; ri; ri = ri->next, i++) {
+        gtk_tree_model_get_iter (self->priv->p3_filter, &iter, ri->data);
+        gtk_tree_model_get (self->priv->p3_filter, &iter, 0, &entries[i], -1);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    for (i = 0; i < size; i++) {
+        gchar **kvs = entry_get_kvs (entries[i]);
+
+        media_store_remove_entry (self->priv->store, entries[i]);
+
+        shell_move_to (self->priv->shell, kvs, label);
+
+        g_strfreev (kvs);
+
+        g_object_unref (entries[i]);
+    }
+
+    g_free (entries);
+}
+
+static void
+on_pane3_remove (Browser *self, GtkWidget *item)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i;
+    GList *rows, *ri;
+
+    rows = gtk_tree_selection_get_selected_rows (self->priv->p3_sel, NULL);
+    size = g_list_length (rows);
+
+    entries = g_new0 (Entry*, size);
+    for (ri = rows, i = 0; ri; ri = ri->next, i++) {
+        gtk_tree_model_get_iter (self->priv->p3_filter, &iter, ri->data);
+        gtk_tree_model_get (self->priv->p3_filter, &iter, 0, &entries[i], -1);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    for (i = 0; i < size; i++) {
+        media_store_remove_entry (self->priv->store, entries[i]);
+    }
+
+    g_free (entries);
+}
+
+static void
+on_pane3_info (Browser *self, GtkWidget *item)
+{
+    GList *rows, *ri;
+    Entry *e;
+    GtkTreeIter iter;
+
+    TagDialog *td = tag_dialog_new ();
+    g_signal_connect_swapped (td, "completed", G_CALLBACK (on_info_completed), self);
+
+    rows = gtk_tree_selection_get_selected_rows (self->priv->p3_sel, NULL);
+    for (ri = rows; ri; ri = ri->next) {
+        gtk_tree_model_get_iter (self->priv->p3_filter, &iter, ri->data);
+        gtk_tree_model_get (self->priv->p3_filter, &iter, 0, &e, -1);
+
+        gchar **kvs = entry_get_kvs (e);
+        tag_dialog_add_entry (td, kvs);
+        g_strfreev (kvs);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    tag_dialog_show (td);
+}
+
+static void
+on_info_completed (Browser *self, GPtrArray *changes, TagDialog *td)
+{
+    Entry **entries;
+    GtkTreeIter iter;
+    guint size, i, j;
+    GList *rows, *ri;
+
+    if (changes == NULL || changes->pdata[0] == NULL) {
+        return;
+    }
+
+    rows = gtk_tree_selection_get_selected_rows (self->priv->p3_sel, NULL);
+    size = g_list_length (rows);
+
+    entries = g_new0 (Entry*, size);
+    for (ri = rows, i = 0; ri; ri = ri->next, i++) {
+        gtk_tree_model_get_iter (self->priv->p3_filter, &iter, ri->data);
+        gtk_tree_model_get (self->priv->p3_filter, &iter, 0, &entries[i], -1);
+    }
+
+    g_list_foreach (rows, (GFunc) gtk_tree_path_free, NULL);
+    g_list_free (rows);
+
+    for (i = 0; i < size; i++) {
+        media_store_update_entry (self->priv->store,
+            entry_get_id (entries[i]), (gchar**) changes->pdata);
+        g_object_unref (entries[i]);
+    }
+
+    g_free (entries);
 }

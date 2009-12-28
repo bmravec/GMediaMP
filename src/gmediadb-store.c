@@ -73,6 +73,7 @@ static void
 media_store_init (MediaStoreInterface *iface)
 {
     iface->add_entry = gmediadb_store_add_entry;
+    iface->up_entry = gmediadb_store_update_entry;
     iface->rem_entry = gmediadb_store_remove_entry;
     iface->get_mtype = gmediadb_store_get_mtype;
     iface->get_name  = gmediadb_store_get_name;
