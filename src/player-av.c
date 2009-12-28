@@ -556,6 +556,8 @@ player_av_play (Player *self)
 
     player_av_set_state (PLAYER_AV (self), PLAYER_STATE_PLAYING);
 
+    player_set_video_destination (self, priv->video_dest);
+
     entry_set_state (priv->entry, ENTRY_STATE_PLAYING);
 
     g_timeout_add (500, (GSourceFunc) position_update, self);
@@ -1221,7 +1223,7 @@ on_timeout (PlayerAV *self)
             NULL);
     } else {
         self->priv->vt_id = g_timeout_add_full (
-            G_PRIORITY_HIGH,
+            G_PRIORITY_DEFAULT,
             1,
             (GSourceFunc) on_timeout,
             self,
