@@ -1144,11 +1144,11 @@ on_store_add (Browser *self, Entry *entry, MediaStore *ms)
         }
 
         if (self->priv->p2_tag) {
-            if ((!self->priv->p2_single && self->priv->s_p2 == NULL) || !g_strcmp0 (self->priv->s_p1, pane1)) {
-                const gchar *pane2 = entry_get_tag_str (entry, self->priv->p2_tag);
+            const gchar *pane2 = entry_get_tag_str (entry, self->priv->p2_tag);
 
-                tv &= (self->priv->s_p2 == NULL || !g_strcmp0 (self->priv->s_p2, pane2));
+            tv &= (self->priv->s_p2 == NULL || !g_strcmp0 (self->priv->s_p2, pane2));
 
+            if (tv && !(self->priv->p2_single && self->priv->s_p2 == NULL)) {
                 // Add pane2 to view
                 res = browser_insert_iter (self->priv->p2_store, &iter, (gpointer) pane2,
                     (EntryCompareFunc) g_strcmp0, 1, FALSE, g_free);
