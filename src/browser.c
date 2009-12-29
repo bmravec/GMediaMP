@@ -1191,6 +1191,7 @@ on_store_remove (Browser *self, Entry *entry, MediaStore *ms)
     GtkTreeIter first, iter;
     gint cnt;
     gchar *new_str;
+    gboolean last_p1 = FALSE, last_p2 = FALSE;
 
     gdk_threads_enter ();
 
@@ -1203,6 +1204,8 @@ on_store_remove (Browser *self, Entry *entry, MediaStore *ms)
         gtk_tree_model_get (GTK_TREE_MODEL (self->priv->p1_store), &iter, 1, &cnt, -1);
 
         if (cnt == 1) {
+            last_p1 = TRUE;
+
             gtk_list_store_remove (self->priv->p1_store, &iter);
 
             gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->p1_store), &first);
@@ -1221,8 +1224,10 @@ on_store_remove (Browser *self, Entry *entry, MediaStore *ms)
         }
 
         if ( self->priv->p2_tag) {
-            if ((!self->priv->p2_single && self->priv->s_p2 == NULL) || !g_strcmp0 (self->priv->s_p1, pane1)) {
-                const gchar *pane2 = entry_get_tag_str (entry, self->priv->p2_tag);
+            const gchar *pane2 = entry_get_tag_str (entry, self->priv->p2_tag);
+
+            if ((self->priv->s_p1 == NULL || !g_strcmp0 (self->priv->s_p1, pane1)) &&
+                !(self->priv->p2_single && g_strcmp0 (self->priv->s_p1, pane1))) {
 
                 browser_insert_iter (self->priv->p2_store, &iter, (gpointer) pane2,
                          (EntryCompareFunc) g_strcmp0, 1, FALSE, g_free);
@@ -1230,6 +1235,8 @@ on_store_remove (Browser *self, Entry *entry, MediaStore *ms)
                 gtk_tree_model_get (GTK_TREE_MODEL (self->priv->p2_store), &iter, 1, &cnt, -1);
 
                 if (cnt == 1) {
+                    last_p2 = TRUE;
+
                     gtk_list_store_remove (self->priv->p2_store, &iter);
 
                     gtk_tree_model_get_iter_first (GTK_TREE_MODEL (self->priv->p2_store), &first);
@@ -1255,6 +1262,22 @@ on_store_remove (Browser *self, Entry *entry, MediaStore *ms)
                          self->priv->cmp_func, 0, FALSE, g_object_unref);
 
     gtk_list_store_remove (self->priv->p3_store, &iter);
+
+    if (last_p1) {
+        GtkTreePath *root = gtk_tree_path_new_from_string ("0");
+        gtk_tree_selection_select_path (gtk_tree_view_get_selection (
+            GTK_TREE_VIEW (self->priv->pane1)), root);
+        gtk_tree_path_free (root);
+
+        pane1_cursor_changed (self, GTK_TREE_VIEW (self->priv->pane1));
+    } else if (last_p2) {
+        GtkTreePath *root = gtk_tree_path_new_from_string ("0");
+        gtk_tree_selection_select_path (gtk_tree_view_get_selection (
+            GTK_TREE_VIEW (self->priv->pane2)), root);
+        gtk_tree_path_free (root);
+
+        pane2_cursor_changed (self, GTK_TREE_VIEW (self->priv->pane2));
+    }
 
     gdk_threads_leave ();
 }
